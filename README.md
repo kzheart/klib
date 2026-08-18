@@ -91,14 +91,20 @@ dependencies {
 ./gradlew centralDryRunBundle --no-configuration-cache
 ```
 
-Maven Central 正式候选需要将 ASCII-armored PGP 私钥和密码分别放入
-`MAVEN_SIGNING_KEY`、`MAVEN_SIGNING_PASSWORD`，再执行：
+Maven Central 正式候选需要发布签名和 Central token。普通模块与 Guard API 版本独立，分别执行：
 
 ```bash
-./gradlew prepareCentralBundle --no-configuration-cache
+./gradlew prepareKlibCentralBundle \
+  -PreleaseComponent=klib -PreleaseTag=klib-v<klib-version> \
+  --no-configuration-cache
+
+./gradlew prepareGuardApiCentralBundle \
+  -PreleaseComponent=guard-api -PreleaseTag=guard-api-v<guard-api-version> \
+  --no-configuration-cache
 ```
 
-候选 ZIP 输出在 `build/distributions/central/`。真实密钥、Token、证书和生产配置不得提交到仓库。
+候选 ZIP 输出在 `build/distributions/central/`。正式发布由
+[Maven Central 发布流程](docs/releasing.md)自动完成；真实密钥、Token、证书和生产配置不得提交到仓库。
 
 ## License
 

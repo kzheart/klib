@@ -1,0 +1,202 @@
+name: release-central
+
+on:
+  push:
+    tags:
+      - 'klib-v*'
+      - 'guard-api-v*'
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to publish'
+        required: true
+        type: choice
+        options:
+          - klib
+          - guard-api
+      release_tag:
+        description: 'Existing immutable tag to check out and publish'
+        required: true
+        type: string
+      version:
+        description: 'Exact component version, without the tag prefix'
+        required: true
+        type: string
+      confirm_publish:
+        description: 'Publish automatically after Central validation'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maven-central-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: verify, sign, and publish
+    runs-on: ubuntu-latest
+    environment: maven-central
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - name: Validate release gate before any Central request
+        id: gate
+        shell: bash
+        env:
+          DISPATCH_COMPONENT: ${{ inputs.component }}
+          DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DISPATCH_CONFIRMED: ${{ inputs.confirm_publish }}
+          MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
+          MAVEN_SIGNING_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+          MAVEN_CENTER_USERNAME: ${{ secrets.MAVEN_CENTER_USERNAME }}
+          MAVEN_CENTER_PASSWORD: ${{ secrets.MAVEN_CENTER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          klib_version="$(sed -n 's/^klibVersion=//p' gradle.properties)"
+          guard_api_version="$(sed -n 's/^klibGuardApiVersion=//p' gradle.properties)"
+
+          [[ "$klib_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$guard_api_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            requested_tag="$DISPATCH_RELEASE_TAG"
+          else
+            [[ "$GITHUB_REF_TYPE" == "tag" ]]
+            requested_tag="$GITHUB_REF_NAME"
+          fi
+
+          if [[ "$requested_tag" == "klib-v${klib_version}" ]]; then
+            component="klib"
+            version="$klib_version"
+            expected_tag="klib-v${klib_version}"
+            bundle="build/distributions/central/klib-${klib_version}.zip"
+            gradle_task="prepareKlibCentralBundle"
+          elif [[ "$requested_tag" == "guard-api-v${guard_api_version}" ]]; then
+            component="guard-api"
+            version="$guard_api_version"
+            expected_tag="guard-api-v${guard_api_version}"
+            bundle="build/distributions/central/klib-guard-api-${guard_api_version}.zip"
+            gradle_task="prepareGuardApiCentralBundle"
+          else
+            echo "Tag does not match a configured component version" >&2
+            exit 1
+          fi
+
+          git tag --points-at HEAD | grep -Fx -- "$expected_tag" >/dev/null
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$DISPATCH_CONFIRMED" == "true" ]]
+            [[ "$DISPATCH_COMPONENT" == "$component" ]]
+            [[ "$DISPATCH_VERSION" == "$version" ]]
+            [[ "$DISPATCH_RELEASE_TAG" == "$expected_tag" ]]
+          fi
+
+          [[ -n "${MAVEN_SIGNING_KEY:-}" ]]
+          [[ -n "${MAVEN_SIGNING_PASSWORD:-}" ]]
+          [[ -n "${MAVEN_CENTER_USERNAME:-}" ]]
+          [[ -n "${MAVEN_CENTER_PASSWORD:-}" ]]
+
+          echo "component=$component" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "expected_tag=$expected_tag" >> "$GITHUB_OUTPUT"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+          echo "gradle_task=$gradle_task" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run full verification and build selected signed bundle
+        env:
+          MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
+          MAVEN_SIGNING_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+          MAVEN_CENTER_USERNAME: ${{ secrets.MAVEN_CENTER_USERNAME }}
+          MAVEN_CENTER_PASSWORD: ${{ secrets.MAVEN_CENTER_PASSWORD }}
+          RELEASE_COMPONENT: ${{ steps.gate.outputs.component }}
+          RELEASE_TAG: ${{ steps.gate.outputs.expected_tag }}
+          RELEASE_TASK: ${{ steps.gate.outputs.gradle_task }}
+        run: |
+          set -euo pipefail
+          secure_tmp="$HOME/.klib-ci-tmp"
+          install -d -m 700 "$secure_tmp"
+          ./gradlew clean check publishToMavenLocal "$RELEASE_TASK" \
+            -PreleaseComponent="$RELEASE_COMPONENT" \
+            -PreleaseTag="$RELEASE_TAG" \
+            -Djava.io.tmpdir="$secure_tmp" \
+            --no-daemon --no-configuration-cache
+
+      - name: Upload and automatically publish through Central Portal API
+        id: central
+        shell: bash
+        env:
+          MAVEN_CENTER_USERNAME: ${{ secrets.MAVEN_CENTER_USERNAME }}
+          MAVEN_CENTER_PASSWORD: ${{ secrets.MAVEN_CENTER_PASSWORD }}
+          BUNDLE: ${{ steps.gate.outputs.bundle }}
+          COMPONENT: ${{ steps.gate.outputs.component }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          [[ -f "$BUNDLE" ]]
+          authorization="$(printf '%s:%s' \
+            "$MAVEN_CENTER_USERNAME" "$MAVEN_CENTER_PASSWORD" | base64 | tr -d '\n')"
+
+          response_file="$(mktemp)"
+          status_code="$(curl --silent --show-error \
+            --connect-timeout 15 --max-time 120 \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer ${authorization}" \
+            --form "bundle=@${BUNDLE};type=application/octet-stream" \
+            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=${COMPONENT}-${VERSION}")"
+          [[ "$status_code" == "201" ]]
+          deployment_id="$(tr -d '\r\n' < "$response_file")"
+          [[ "$deployment_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
+          echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
+
+          for _ in $(seq 1 90); do
+            status_file="$(mktemp)"
+            status_code="$(curl --silent --show-error \
+              --connect-timeout 15 --max-time 30 \
+              --output "$status_file" \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header "Authorization: Bearer ${authorization}" \
+              "https://central.sonatype.com/api/v1/publisher/status?id=${deployment_id}")"
+            [[ "$status_code" == "200" ]]
+            state="$(jq -r '.deploymentState // empty' "$status_file")"
+            echo "Central deployment state: $state"
+            case "$state" in
+              PUBLISHED) exit 0 ;;
+              FAILED)
+                jq '{deploymentId, deploymentState, errors}' "$status_file"
+                exit 1
+                ;;
+              PENDING|VALIDATING|VALIDATED|PUBLISHING) sleep 10 ;;
+              *) echo "Unexpected Central deployment state" >&2; exit 1 ;;
+            esac
+          done
+          echo "Timed out waiting for Maven Central publication" >&2
+          exit 1
+
+      - name: Preserve release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-${{ steps.gate.outputs.component }}-${{ steps.gate.outputs.version }}
+          path: |
+            build/distributions/central/*.zip
+          if-no-files-found: warn
+          retention-days: 30

@@ -128,6 +128,12 @@ val signingKey = providers.gradleProperty("signingKey")
     .orElse(providers.environmentVariable("MAVEN_SIGNING_KEY"))
 val signingPassword = providers.gradleProperty("signingPassword")
     .orElse(providers.environmentVariable("MAVEN_SIGNING_PASSWORD"))
+val centralTokenUsername = providers.environmentVariable("MAVEN_CENTER_USERNAME")
+val centralTokenPassword = providers.environmentVariable("MAVEN_CENTER_PASSWORD")
+val releaseTag = providers.gradleProperty("releaseTag")
+    .orElse(providers.environmentVariable("GITHUB_REF_NAME"))
+    .orElse("")
+val releaseComponent = providers.gradleProperty("releaseComponent").orElse("")
 
 fun publicationDescription(projectName: String): String = when (projectName) {
     "klib-guard-api" -> "Compile-time lifecycle API for products loaded by KlibGuard."
@@ -612,47 +618,202 @@ val verifyCentralChecksums = tasks.register("verifyCentralChecksums") {
     }
 }
 
-tasks.register<Zip>("centralDryRunBundle") {
+fun verifyCentralArchive(archive: File, expectedComponents: Set<String>) {
+    val components = mutableSetOf<String>()
+    ZipFile(archive).use { zip ->
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            if (entry.isDirectory) continue
+            val segments = entry.name.split('/')
+            if (segments.size < 6 || segments.take(3) != listOf("me", "kzheart", "klib")) {
+                throw GradleException("Unexpected Central bundle entry: ${entry.name}")
+            }
+            components.add(segments[3])
+        }
+    }
+    if (components != expectedComponents) {
+        throw GradleException(
+            "Central bundle component boundary mismatch: " +
+                "expected=$expectedComponents, actual=$components")
+    }
+}
+
+val klibArtifactIds = klibLibraryProjectPaths.map { project(it).name }.toSet()
+val guardApiArtifactIds = setOf("klib-guard-api")
+
+val klibCentralDryRunBundle = tasks.register<Zip>("klibCentralDryRunBundle") {
     group = "verification"
-    description = "Builds an unsigned local-only Maven Central candidate bundle."
+    description = "Builds an unsigned local-only Central bundle for ordinary Klib modules."
     dependsOn(verifyCentralChecksums)
     from(layout.buildDirectory.dir("repository-staging")) {
         include("**/*.jar", "**/*.pom")
         include("**/*.jar.md5", "**/*.jar.sha1")
         include("**/*.pom.md5", "**/*.pom.sha1")
+        exclude("**/klib-guard-api/**")
     }
     destinationDirectory.set(layout.buildDirectory.dir("distributions/central-dry-run"))
     archiveFileName.set("klib-$klibVersion-unsigned.zip")
+    includeEmptyDirs = false
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
+    doLast {
+        verifyCentralArchive(archiveFile.get().asFile, klibArtifactIds)
+    }
 }
 
-tasks.register<Zip>("prepareCentralBundle") {
-    group = "publishing"
-    description = "Builds the signed Maven Central upload bundle."
+val guardApiCentralDryRunBundle = tasks.register<Zip>("guardApiCentralDryRunBundle") {
+    group = "verification"
+    description = "Builds an unsigned local-only Central bundle for Klib Guard API."
     dependsOn(verifyCentralChecksums)
-    doFirst {
+    from(layout.buildDirectory.dir("repository-staging")) {
+        include("**/klib-guard-api/**/*.jar", "**/klib-guard-api/**/*.pom")
+        include("**/klib-guard-api/**/*.jar.md5", "**/klib-guard-api/**/*.jar.sha1")
+        include("**/klib-guard-api/**/*.pom.md5", "**/klib-guard-api/**/*.pom.sha1")
+    }
+    destinationDirectory.set(layout.buildDirectory.dir("distributions/central-dry-run"))
+    archiveFileName.set("klib-guard-api-$klibGuardApiVersion-unsigned.zip")
+    includeEmptyDirs = false
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    doLast {
+        verifyCentralArchive(archiveFile.get().asFile, guardApiArtifactIds)
+    }
+}
+
+tasks.register("centralDryRunBundle") {
+    group = "verification"
+    description = "Builds separate unsigned Central bundles for Klib and Guard API."
+    dependsOn(klibCentralDryRunBundle, guardApiCentralDryRunBundle)
+}
+
+val validateCentralRelease = tasks.register("validateCentralRelease") {
+    group = "publishing"
+    description = "Validates the selected component, immutable tag, and secrets before upload."
+    inputs.property("releaseTag", releaseTag)
+    inputs.property("releaseComponent", releaseComponent)
+    doLast {
+        val component = releaseComponent.get().trim()
+        val expectedTag = when (component) {
+            "klib" -> "klib-v$klibVersion"
+            "guard-api" -> "guard-api-v$klibGuardApiVersion"
+            else -> throw GradleException(
+                "releaseComponent must be klib or guard-api, got " +
+                    component.ifEmpty { "<empty>" })
+        }
+        val actualTag = releaseTag.get().trim()
+        if (actualTag != expectedTag) {
+            throw GradleException(
+                "Central release tag must be $expectedTag, got " +
+                    actualTag.ifEmpty { "<empty>" })
+        }
+        if (klibVersion.contains("SNAPSHOT", ignoreCase = true) ||
+            klibGuardApiVersion.contains("SNAPSHOT", ignoreCase = true)) {
+            throw GradleException("Maven Central release versions must not be SNAPSHOT versions")
+        }
         if (!signingKey.isPresent || !signingPassword.isPresent) {
             throw GradleException("MAVEN_SIGNING_KEY and MAVEN_SIGNING_PASSWORD are required")
         }
-        val stagingRoot = layout.buildDirectory.dir("repository-staging").get().asFile
-        val unsigned = stagingRoot.walkTopDown()
-            .filter { it.isFile && it.extension in setOf("jar", "pom") }
-            .firstOrNull { !it.resolveSibling("${it.name}.asc").isFile }
-        if (unsigned != null) {
-            throw GradleException("Missing PGP signature for ${unsigned.relativeTo(stagingRoot)}")
+        if (!centralTokenUsername.isPresent || !centralTokenPassword.isPresent) {
+            throw GradleException(
+                "MAVEN_CENTER_USERNAME and MAVEN_CENTER_PASSWORD are required")
+        }
+
+        fun git(vararg arguments: String): String {
+            val process = ProcessBuilder(
+                listOf("git", "-C", rootProject.projectDir.absolutePath) + arguments)
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            if (process.waitFor() != 0) {
+                throw GradleException("Could not validate release checkout: $output")
+            }
+            return output
+        }
+
+        val headTags = git("tag", "--points-at", "HEAD")
+            .lineSequence()
+            .filter(String::isNotBlank)
+            .toSet()
+        if (expectedTag !in headTags) {
+            throw GradleException("Release tag $expectedTag does not point at HEAD")
+        }
+        if (git("status", "--porcelain", "--untracked-files=all").isNotEmpty()) {
+            throw GradleException("Central release checkout must be clean")
         }
     }
+}
+
+fun configureSignedCentralBundle(
+    task: org.gradle.api.tasks.TaskProvider<Zip>,
+    expectedComponent: String,
+) {
+    task.configure {
+        group = "publishing"
+        dependsOn(validateCentralRelease, verifyCentralChecksums)
+        doFirst {
+            if (releaseComponent.get().trim() != expectedComponent) {
+                throw GradleException("This task requires -PreleaseComponent=$expectedComponent")
+            }
+            if (!signingKey.isPresent || !signingPassword.isPresent) {
+                throw GradleException("MAVEN_SIGNING_KEY and MAVEN_SIGNING_PASSWORD are required")
+            }
+            val stagingRoot = layout.buildDirectory.dir("repository-staging").get().asFile
+            val selectedRoot = if (expectedComponent == "klib") {
+                stagingRoot.resolve("me/kzheart/klib")
+            } else {
+                stagingRoot.resolve("me/kzheart/klib/klib-guard-api")
+            }
+            val unsigned = selectedRoot.walkTopDown()
+                .filter { it.isFile && it.extension in setOf("jar", "pom") }
+                .filter { expectedComponent != "klib" ||
+                    !it.invariantSeparatorsPath.contains("/klib-guard-api/") }
+                .firstOrNull { !it.resolveSibling("${it.name}.asc").isFile }
+            if (unsigned != null) {
+                throw GradleException(
+                    "Missing PGP signature for ${unsigned.relativeTo(stagingRoot)}")
+            }
+        }
+        doLast {
+            val expected = if (expectedComponent == "klib") {
+                klibArtifactIds
+            } else {
+                guardApiArtifactIds
+            }
+            verifyCentralArchive(archiveFile.get().asFile, expected)
+        }
+        destinationDirectory.set(layout.buildDirectory.dir("distributions/central"))
+        includeEmptyDirs = false
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
+    }
+}
+
+val prepareKlibCentralBundle = tasks.register<Zip>("prepareKlibCentralBundle") {
+    group = "publishing"
+    description = "Builds the signed Central upload bundle for ordinary Klib modules."
     from(layout.buildDirectory.dir("repository-staging")) {
         include("**/*.jar", "**/*.pom", "**/*.jar.asc", "**/*.pom.asc")
         include("**/*.jar.md5", "**/*.jar.sha1")
         include("**/*.pom.md5", "**/*.pom.sha1")
+        exclude("**/klib-guard-api/**")
     }
-    destinationDirectory.set(layout.buildDirectory.dir("distributions/central"))
     archiveFileName.set("klib-$klibVersion.zip")
-    isPreserveFileTimestamps = false
-    isReproducibleFileOrder = true
 }
+configureSignedCentralBundle(prepareKlibCentralBundle, "klib")
+
+val prepareGuardApiCentralBundle = tasks.register<Zip>("prepareGuardApiCentralBundle") {
+    group = "publishing"
+    description = "Builds the signed Central upload bundle for Klib Guard API."
+    from(layout.buildDirectory.dir("repository-staging")) {
+        include("**/klib-guard-api/**/*.jar", "**/klib-guard-api/**/*.pom")
+        include("**/klib-guard-api/**/*.jar.asc", "**/klib-guard-api/**/*.pom.asc")
+        include("**/klib-guard-api/**/*.jar.md5", "**/klib-guard-api/**/*.jar.sha1")
+        include("**/klib-guard-api/**/*.pom.md5", "**/klib-guard-api/**/*.pom.sha1")
+    }
+    archiveFileName.set("klib-guard-api-$klibGuardApiVersion.zip")
+}
+configureSignedCentralBundle(prepareGuardApiCentralBundle, "guard-api")
 
 val privatePublicationTasks = if (privateMavenUrl.isPresent) {
     publishableProjects.map { it.tasks.named("publishAllPublicationsToKlibPrivateRepository") }

@@ -30,5 +30,6 @@
 - [Remote 安全边界](remote-security.md)
 - [故障排查](troubleshooting.md)
 - [示例工程](../examples/README.md)
+- [Maven Central 发布](releasing.md)
 
 Guard runtime、Native、Collector、Remote 服务端和生产部署文档属于私有仓库，不在本公共源码仓库中。

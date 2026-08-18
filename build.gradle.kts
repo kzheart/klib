@@ -398,6 +398,7 @@ project(":klib-remote") {
         add("api", project(":klib-core"))
     }
     tasks.withType<Test>().configureEach {
+        systemProperty("java.io.tmpdir", System.getProperty("java.io.tmpdir"))
         systemProperty(
             "klib.remote.samplingVectors",
             layout.projectDirectory.file(

@@ -1,0 +1,1 @@
+all [ check player level > 1 perm "luckprems.vip" ]

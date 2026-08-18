@@ -1,0 +1,11 @@
+# event_id	sample_rate	accepted
+evt-1	0	false
+evt-1	100	true
+evt-1	50	true
+evt-3	50	false
+evt-a	99	false
+evt-a	100	true
+evt-b	1	false
+evt-b	2	true
+evt-0001	46	false
+evt-0001	47	true

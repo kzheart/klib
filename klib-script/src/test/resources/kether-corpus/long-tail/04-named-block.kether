@@ -1,0 +1,4 @@
+def main = {
+  tell "开始"
+  command inline "say 完成" as console
+}

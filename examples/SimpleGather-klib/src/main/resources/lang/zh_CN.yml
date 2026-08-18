@@ -1,0 +1,7 @@
+messages:
+  gather:
+    tool-given: "<green>采集工具已发放。</green>"
+    complete: "<green>采集完成。</green>"
+    progress: "<gray>采集进度已更新。</gray>"
+    wrong-tool: "<red>不能使用这个工具进行采集。</red>"
+    tool-break: "<red>你的工具耐久不足。</red>"

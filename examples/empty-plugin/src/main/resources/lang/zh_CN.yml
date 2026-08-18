@@ -1,0 +1,6 @@
+messages:
+  empty:
+    join: "<green>欢迎 {player}，klib 空插件已就绪。</green>"
+    status: "{prefix}<gray>debug=<white>{debug}</white></gray>"
+  common:
+    prefix: "<dark_gray>[</dark_gray><white>klib</white><dark_gray>] </dark_gray>"

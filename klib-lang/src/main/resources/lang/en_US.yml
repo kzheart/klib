@@ -1,0 +1,39 @@
+messages:
+  common:
+    # prefix feeds the {prefix} placeholder; uncomment and customize as needed:
+    # prefix: "<dark_gray>[</dark_gray><gold>MyPlugin</gold><dark_gray>]</dark_gray> "
+    no-permission: "<red>You do not have permission to do this</red>"
+    player-only: "<red>Only players can do this</red>"
+  command:
+    no-permission: "<red>You do not have permission to run this command</red>"
+    player-only: "<red>Only players can run this command</red>"
+    incomplete: "<red>Incomplete command</red>"
+    usage: "<yellow>Usage: {usage}</yellow>"
+    internal-error: "<red>The command failed; contact an administrator and check the console</red>"
+    unknown-argument: "<red>Unknown argument: {argument}</red>"
+    suggestion: "<gray>Did you mean {suggestion}?</gray>"
+    help:
+      header: "<gold>/{command} help {page}/{pages}</gold>"
+      previous: "<gold>[Previous]</gold>"
+      next: "<gold>[Next]</gold>"
+      open-page: "<gold>Open page {page}</gold>"
+    argument:
+      integer: "<red>An integer is required</red>"
+      integer-range: "<red>The integer must be within {minimum}..{maximum}</red>"
+      decimal: "<red>A decimal number is required</red>"
+      decimal-range: "<red>The decimal number must be within {range}</red>"
+      boolean: "<red>true/false, yes/no, on/off or 1/0 is required</red>"
+      choice: "<red>Allowed values: {choices}</red>"
+      player-offline: "<red>Player is offline: {player}</red>"
+      content-empty: "<red>Content must not be empty</red>"
+    builtin:
+      help:
+        description: "<gold>Show command help</gold>"
+      reload:
+        description: "<gold>Reload the plugin configuration</gold>"
+        success: "<green>Reload complete</green>"
+        failure: "<red>Reload failed: {reason}</red>"
+      debug:
+        description: "<gold>Toggle debug mode</gold>"
+        enabled: "<green>Debug mode enabled</green>"
+        disabled: "<yellow>Debug mode disabled</yellow>"

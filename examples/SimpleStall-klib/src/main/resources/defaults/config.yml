@@ -1,0 +1,4 @@
+debug: false
+moneyTax: 0.05
+pointsTax: 0.10
+defaultSlots: 5

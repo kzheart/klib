@@ -1,0 +1,13 @@
+debug: false
+toolMaterial: IRON_PICKAXE
+rewardMaterial: COBBLESTONE
+rewardAmount: 1
+toolDurability: 64
+gatherHealth: 3
+# 注意：endpoint/token 走 config.yml 仅为本地回环验收夹具的便利做法。
+# 生产接入不要这样做——收集端地址与插件接入令牌应由 Gradle 插件的 remote { } 常量注入，
+# 服主的 config.yml 里不出现这两项。参见 docs/modules/remote.md。
+diagnostics:
+  auto-report: true
+  endpoint: ""
+  token: ""

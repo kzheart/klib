@@ -1,0 +1,3 @@
+// 保留 Kether SimpleReader 使用的两个紧凑动作前缀。
+set selected to &target
+tell *selected

@@ -82,29 +82,13 @@ dependencies {
 
 完整说明见 [docs/README.md](docs/README.md)，示例见 [examples/README.md](examples/README.md)。
 
-## 构建与验证
+## 从源码构建
 
 构建使用 JDK 21 toolchain，但所有公共 Java 制品通过 `--release 8` 生成 Java 8 字节码：
 
 ```bash
-./gradlew clean check publishToMavenLocal --no-configuration-cache
-./gradlew centralDryRunBundle --no-configuration-cache
+./gradlew clean check --no-configuration-cache
 ```
-
-Maven Central 正式候选需要发布签名和 Central token。普通模块与 Guard API 版本独立，分别执行：
-
-```bash
-./gradlew prepareKlibCentralBundle \
-  -PreleaseComponent=klib -PreleaseTag=klib-v<klib-version> \
-  --no-configuration-cache
-
-./gradlew prepareGuardApiCentralBundle \
-  -PreleaseComponent=guard-api -PreleaseTag=guard-api-v<guard-api-version> \
-  --no-configuration-cache
-```
-
-候选 ZIP 输出在 `build/distributions/central/`。正式发布由
-[Maven Central 发布流程](docs/releasing.md)自动完成；真实密钥、Token、证书和生产配置不得提交到仓库。
 
 ## License
 

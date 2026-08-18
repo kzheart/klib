@@ -2,6 +2,8 @@ name: ci
 
 on:
   push:
+    branches:
+      - '**'
   pull_request:
 
 permissions:
@@ -25,9 +27,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Verify public libraries
-        run: >-
-          ./gradlew clean check publishToMavenLocal centralDryRunBundle
-          --no-configuration-cache
+        run: |
+          set -euo pipefail
+          secure_tmp="$HOME/.klib-ci-tmp"
+          install -d -m 700 "$secure_tmp"
+          ./gradlew clean check publishToMavenLocal centralDryRunBundle \
+            -Djava.io.tmpdir="$secure_tmp" \
+            --no-daemon --no-configuration-cache
 
       - name: Check shell scripts
         run: bash -n scripts/*.sh

@@ -15,11 +15,32 @@ cleanup() {
 }
 trap cleanup EXIT
 
+search_gradle_files() {
+    local pattern="$1"
+    local directory="$2"
+    if command -v rg >/dev/null 2>&1; then
+        rg --glob '*.gradle' --glob '*.gradle.kts' "$pattern" "$directory"
+    else
+        grep -R -E -n --include='*.gradle' --include='*.gradle.kts' \
+            "$pattern" "$directory"
+    fi
+}
+
+search_log() {
+    local pattern="$1"
+    local file="$2"
+    if command -v rg >/dev/null 2>&1; then
+        rg -q "$pattern" "$file"
+    else
+        grep -E -q "$pattern" "$file"
+    fi
+}
+
 reject_local_resolution() {
     local example_directory="$1"
-    local pattern='mavenLocal[[:space:]]*\(|includeBuild[[:space:]]*\(|flatDir[[:space:]]*\(|dependencySubstitution|\bproject[[:space:]]*\(|files[[:space:]]*\(|fileTree[[:space:]]*\('
+    local pattern='mavenLocal[[:space:]]*\(|includeBuild[[:space:]]*\(|flatDir[[:space:]]*\(|dependencySubstitution|(^|[^[:alnum:]_])project[[:space:]]*\(|files[[:space:]]*\(|fileTree[[:space:]]*\('
 
-    if rg --glob '*.gradle' --glob '*.gradle.kts' "$pattern" "$example_directory"; then
+    if search_gradle_files "$pattern" "$example_directory"; then
         echo "Local dependency resolution is not allowed in $example_directory" >&2
         return 1
     fi
@@ -55,7 +76,7 @@ verify_example() {
         --info \
         clean "$task" 2>&1 | tee "$audit_root/build.log"
 
-    if ! rg -q "$required_download" "$audit_root/build.log"; then
+    if ! search_log "$required_download" "$audit_root/build.log"; then
         echo "Expected remote download was not observed for $name" >&2
         return 1
     fi

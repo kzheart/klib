@@ -13,7 +13,7 @@ Native、Collector 和生产部署配置不在本仓库中。
 
 ```kotlin
 plugins {
-    id("me.kzheart.klib") version "0.5.0"
+    id("me.kzheart.klib") version "0.5.1"
 }
 
 klib {

@@ -335,7 +335,16 @@ project(":klib-command") {
     }
 }
 
-project(":klib-script") { dependencies { add("api", project(":klib-core")) } }
+project(":klib-script") {
+    dependencies {
+        add("api", project(":klib-core"))
+        add("compileOnly", project(":klib-guard-api"))
+        add("testImplementation", project(":klib-guard-api"))
+        val testSpigot = create(spigotApi.get()) as ModuleDependency
+        testSpigot.isTransitive = false
+        add("testImplementation", testSpigot)
+    }
+}
 
 project(":klib-hook") {
     dependencies {

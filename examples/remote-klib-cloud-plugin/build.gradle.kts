@@ -18,7 +18,7 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 dependencies {
-    compileOnly("me.kzheart.klib:klib-guard-api:0.1.0")
+    compileOnly("me.kzheart.klib:klib-guard-api:0.2.0")
     compileOnly("org.spigotmc:spigot-api:1.12.2-R0.1-20180712.012057-156") {
         isTransitive = false
     }

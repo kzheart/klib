@@ -185,6 +185,42 @@ KetherScriptEngine engine = new KetherScriptEngine(
 
 TabooLib 会回调业务 JAR 中与其 OpenContainer 约定一致的 `OpenAPI`。`klib-script` 已携带 `me.kzheart.klib.script.taboolib.common.OpenAPI` 与相应 `OpenResult` 形状；Klib Gradle 插件在打包时将它们和兼容主入口一起 relocation 到业务插件的私有路径，开发者不需要自己创建协议类。
 
+### Guard 云端商品
+
+Guard 商品没有独立 Bukkit 主类，不能生成商品自己的 `OpenAPI`。应改用门户级 Broker：
+
+```java
+GuardKetherInterop interop = GuardKetherInterop.install(
+        root,
+        statements,
+        host());
+
+statements.registerShared(root, "myproduct", "custom-action", parser);
+
+KetherScriptEngine engine = new KetherScriptEngine(
+        statements,
+        interop,
+        root.syncExecutor());
+```
+
+`GuardKetherInterop` 同样支持双向共享：`registerShared(...)` 发布商品 action，门户发现的外部
+TabooLib action 会导入商品注册表。差异在于 action 解析结果只以 `long` 句柄进入门户；商品私有的
+Kether parser、action 和 frame 始终留在商品类加载器内。商品 Scope 关闭会撤销全部发布与导入、
+清除句柄并取消未完成的 future，因此旧 generation 不能继续调用新版本商品。
+
+商品 action 的完成值也受类加载器边界约束：字符串、基础数值和安全的父加载器对象可直接返回，
+集合、Map 与数组会递归检查并复制；商品私有 DTO 会被拒绝，避免外部插件通过返回值长期持有已卸载
+商品的 ClassLoader。门户最多同时保留 4096 个待外部释放的解析句柄，并在 action facade 被回收或
+商品关闭时释放。
+
+新版 Klib OpenContainer 在撤销 action 时会携带 owner，门户只允许原发布者撤销。旧版两参数
+`kether_remove_action` 无法证明调用者身份，因此仅在 owner 容器消失后由发现循环清理，不允许一个
+仍在线的冲突插件借清理请求撤销别人的路由。
+
+构建时 `klib-script` 必须保持商品私有 relocation，`klib-guard-api` 与 `klib-core` 则由 Guard
+父加载器提供。启用 Gradle DSL `ketherInterop(true)` 的 Guard 商品应生成协议 marker，而不能包含
+`plugin.yml` 或商品级 TabooLib Bukkit 主类。
+
 共享 action 应使用插件独占 namespace，例如 `myplugin` 或 `myplugin.shop`。TabooLib 的移除协议不携带 owner；多个插件覆盖同一个 `namespace:name` 后，任一插件注销都可能删除当前生效项。因此不要默认发布到 `kether`、`global` 或统一的 `klib` namespace。
 
 互操作按 OpenContainer channel 能力工作，不锁定精确 TabooLib 构建版本。当前协议测试基线为 6.2.4 和 6.3.0。插件类加载器级热卸载仍受 TabooLib 容器缓存限制；配置和 Scope 重建受支持，替换插件 JAR 后应重启服务器。

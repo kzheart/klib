@@ -12,6 +12,12 @@ abstract class CheckGuardApiBoundary : DefaultTask() {
             "me/kzheart/klib/guard/KlibCloudPlugin.java",
             "me/kzheart/klib/guard/PluginHost.java",
             "me/kzheart/klib/guard/RemotePluginEntrypoint.java",
+            "me/kzheart/klib/guard/kether/KetherInteropBroker.java",
+            "me/kzheart/klib/guard/kether/KetherInteropEndpoint.java",
+            "me/kzheart/klib/guard/kether/KetherInteropPeer.java",
+            "me/kzheart/klib/guard/kether/KetherInteropProtocol.java",
+            "me/kzheart/klib/guard/kether/KetherInteropRegistration.java",
+            "me/kzheart/klib/guard/kether/KetherInteropResult.java",
         )
         val root = sourceRoot.get().asFile
         val actual = sources.files.map {
@@ -41,7 +47,7 @@ val guardApiSources = fileTree("src/main/java") {
 
 val checkGuardApiBoundary = tasks.register<CheckGuardApiBoundary>("checkGuardApiBoundary") {
     group = "verification"
-    description = "Ensures the published Guard API contains only its three lifecycle types."
+    description = "Ensures the published Guard API contains only its reviewed public boundary."
     sources.from(guardApiSources)
     sourceRoot.set(layout.projectDirectory.dir("src/main/java"))
 }

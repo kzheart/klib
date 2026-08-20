@@ -50,8 +50,8 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("me.kzheart.klib:klib-core:0.2.0")
-    implementation("me.kzheart.klib:klib-config:0.2.0")
+    implementation("me.kzheart.klib:klib-core:0.3.0")
+    implementation("me.kzheart.klib:klib-config:0.3.0")
 }
 ```
 
@@ -59,7 +59,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    compileOnly("me.kzheart.klib:klib-guard-api:0.1.0")
+    compileOnly("me.kzheart.klib:klib-guard-api:0.2.0")
 }
 ```
 
@@ -74,11 +74,11 @@ dependencies {
 | `klib-item` | 物品构建、标签和跨版本编解码 |
 | `klib-data` | JSON、SQLite、MySQL 与玩家数据缓存 |
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
-| `klib-script` | Kether 脚本与异步组合 |
+| `klib-script` | Kether 脚本、异步组合与 Guard 商品互操作适配 |
 | `klib-hook` | Vault、PlayerPoints、XConomy 和 PlaceholderAPI |
 | `klib-compat*` | Minecraft 版本能力与实现选择 |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 |
-| `klib-guard-api` | 受保护商品的最小编译期生命周期契约 |
+| `klib-guard-api` | 受保护商品的生命周期与门户级 Kether Broker 契约 |
 
 完整说明见 [docs/README.md](docs/README.md)，示例见 [examples/README.md](examples/README.md)。
 

@@ -276,11 +276,20 @@ public final class TabooLibKetherInterop
             return OpenResult.successful();
         }
         if (REMOVE_ACTION.equals(channel)) {
-            requireLength(values, 2, channel);
+            if (values.length != 2 && values.length != 3) {
+                throw new IllegalArgumentException(
+                        channel + " expected 2 or 3 arguments but got " + values.length);
+            }
             String namespace = String.valueOf(values[1]);
+            String owner = values.length == 3 ? String.valueOf(values[2]) : null;
             for (String action : strings(values[0])) {
-                ImportedRegistration registration = imports.remove(key(namespace, action));
-                if (registration != null) {
+                String key = key(namespace, action);
+                ImportedRegistration registration = imports.get(key);
+                if (registration != null
+                        && (owner != null
+                        ? registration.owner.equals(owner)
+                        : discovery.find(registration.owner) == null)) {
+                    imports.remove(key);
                     registration.registration.dispose();
                 }
             }
@@ -332,8 +341,12 @@ public final class TabooLibKetherInterop
         }
     }
 
-    private static void remove(OpenContainer container, String namespace, String name) {
-        container.call(REMOVE_ACTION, new String[] {name}, namespace);
+    private void remove(OpenContainer container, String namespace, String name) {
+        OpenResult result = container.call(
+                REMOVE_ACTION, new String[] {name}, namespace, providerName);
+        if (!result.isSuccessful()) {
+            container.call(REMOVE_ACTION, new String[] {name}, namespace);
+        }
     }
 
     private synchronized List<OpenContainer> snapshotContainers() {

@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.3.0 - 2026-08-20
+
+### 新功能
+
+- 新增 `GuardKetherInterop`，支持云端商品与门户插件双向共享 Kether Action。
+- 为跨 ClassLoader 调用增加值边界、句柄生命周期与作用域自动清理。
+- 扩展 TabooLib Kether OpenContainer 的 owner-aware Action 移除能力。
+
+### Guard API 0.2.0
+
+- 新增 `me.kzheart.klib.guard.kether` 公共 Broker 协议。
+- `PluginHost` 新增商品代次与 Kether Broker 能力。
+- 该版本对旧 `PluginHost` 实现不兼容，Guard runtime 与云端商品需要同步升级。
+
 ## 0.2.0 - 2026-08-18
 
 ### 破坏性变更

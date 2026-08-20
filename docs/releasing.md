@@ -17,8 +17,8 @@
 | 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 15 个普通模块，不含 Guard API |
 | Guard API | `klibGuardApiVersion` | `guard-api-v<klibGuardApiVersion>` | 只包含 `klib-guard-api` |
 
-当前 `klib:0.2.0` 已发布。`klib-guard-api:0.1.0` 必须通过独立的
-`guard-api-v0.1.0` tag 首次发布，不能重新上传 `klib:0.2.0`。
+当前版本为 `klib:0.3.0` 与 `klib-guard-api:0.2.0`。两个组件独立发布，不能在发布
+普通 Klib 时重复上传不可覆盖的 Guard API 版本。
 
 ## GitHub Environment 与 Secrets
 
@@ -38,18 +38,18 @@ Bearer credential；这里的 token 不是 Central 网站登录密码。
 
 ## Tag 发布
 
-发布 Guard API `0.1.0`：
+发布 Guard API `0.2.0`：
 
 ```bash
-git tag guard-api-v0.1.0
-git push origin guard-api-v0.1.0
+git tag guard-api-v0.2.0
+git push origin guard-api-v0.2.0
 ```
 
-以后发布普通 Klib 新版本，例如 `0.2.1`：
+发布普通 Klib `0.3.0`：
 
 ```bash
-git tag klib-v0.2.1
-git push origin klib-v0.2.1
+git tag klib-v0.3.0
+git push origin klib-v0.3.0
 ```
 
 发布工作流会在第一次 Central 网络请求之前检查：

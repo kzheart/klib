@@ -1,5 +1,16 @@
 # 更新日志
 
+## 0.4.0 - 2026-08-21
+
+### 破坏性变更
+
+- 将数据存储拆为 `klib-data`、`klib-data-json`、`klib-data-jdbc`、
+  `klib-data-sqlite` 和 `klib-data-mysql`。基础数据模块不再传递引入 Gson、SQLite、
+  MySQL Connector/J 或 Protobuf；JSON 与 SQLite 使用宿主运行时，MySQL 驱动必须显式选择。
+- `SQLiteStorageProvider` 移至 `me.kzheart.klib.data.sqlite`，`MySqlStorageProvider`
+  移至 `me.kzheart.klib.data.mysql`，JDBC 公共类型移至 `me.kzheart.klib.data.jdbc`。
+- `klib-item` 与 `klib-ui` 不再把 Spigot API 写入发布依赖元数据。
+
 ## 0.3.0 - 2026-08-20
 
 ### 新功能

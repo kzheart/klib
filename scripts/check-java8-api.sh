@@ -22,7 +22,8 @@ if rg -n --glob '*.java' "$forbidden_api" .; then
 fi
 
 publishable_projects=(
-  klib-core klib-command klib-config klib-lang klib-item klib-data klib-ui klib-script
+  klib-core klib-command klib-config klib-lang klib-item klib-data klib-data-json
+  klib-data-jdbc klib-data-sqlite klib-data-mysql klib-ui klib-script
   klib-hook klib-compat klib-compat-v1_12 klib-compat-v1_20 klib-compat-v1_21
   klib-compat-v26 klib-remote klib-guard-api
 )

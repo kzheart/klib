@@ -1,5 +1,5 @@
 plugins {
-    id("me.kzheart.klib") version "0.4.0"
+    id("me.kzheart.klib") version "0.5.0"
 }
 
 group = "me.kzheart.klib.example"
@@ -23,7 +23,9 @@ klib {
     modules {
         command()
         hook()
-        data()
+        data {
+            json()
+        }
         ui()
         script()
     }

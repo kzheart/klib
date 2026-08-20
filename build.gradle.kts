@@ -93,6 +93,10 @@ val klibLibraryProjectPaths = listOf(
     ":klib-lang",
     ":klib-item",
     ":klib-data",
+    ":klib-data-json",
+    ":klib-data-jdbc",
+    ":klib-data-sqlite",
+    ":klib-data-mysql",
     ":klib-ui",
     ":klib-script",
     ":klib-hook",
@@ -370,7 +374,7 @@ project(":klib-item") {
         val testSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false
         testSpigot.isTransitive = false
-        add("compileOnlyApi", compileSpigot)
+        add("compileOnly", compileSpigot)
         add("testImplementation", testSpigot)
         add("testImplementation", "com.google.guava:guava:21.0")
         add("runtimeOnly", itemNbtApi)
@@ -385,7 +389,7 @@ project(":klib-ui") {
         val testSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false
         testSpigot.isTransitive = false
-        add("compileOnlyApi", compileSpigot)
+        add("compileOnly", compileSpigot)
         add("testImplementation", testSpigot)
         add("testImplementation", "com.google.guava:guava:21.0")
     }
@@ -394,10 +398,34 @@ project(":klib-ui") {
 project(":klib-data") {
     dependencies {
         add("api", project(":klib-core"))
-        add("implementation", gson)
-        add("runtimeOnly", sqliteJdbc)
+    }
+}
+
+project(":klib-data-json") {
+    dependencies {
+        add("api", project(":klib-data"))
+        add("compileOnly", gson)
+        add("testImplementation", gson)
+    }
+}
+
+project(":klib-data-jdbc") {
+    dependencies {
+        add("api", project(":klib-data"))
+    }
+}
+
+project(":klib-data-sqlite") {
+    dependencies {
+        add("api", project(":klib-data-jdbc"))
+        add("testRuntimeOnly", sqliteJdbc)
+    }
+}
+
+project(":klib-data-mysql") {
+    dependencies {
+        add("api", project(":klib-data-jdbc"))
         add("runtimeOnly", mysqlConnector)
-        add("testImplementation", sqliteJdbc)
         add("testImplementation", h2)
     }
 }
@@ -539,6 +567,34 @@ val cleanMavenStaging = tasks.register<Delete>("cleanMavenStaging") {
 val stagingPublicationTasks = publishableProjects.map {
     it.tasks.named("publishAllPublicationsToStagingRepository")
 }
+
+val expectedDataPublicationDependencies = mapOf(
+    "klib-data" to setOf("me.kzheart.klib:klib-core:compile"),
+    "klib-data-json" to setOf(
+        "me.kzheart.klib:klib-data:compile",
+    ),
+    "klib-data-jdbc" to setOf("me.kzheart.klib:klib-data:compile"),
+    "klib-data-sqlite" to setOf(
+        "me.kzheart.klib:klib-data-jdbc:compile",
+    ),
+    "klib-data-mysql" to setOf(
+        "me.kzheart.klib:klib-data-jdbc:compile",
+        "com.mysql:mysql-connector-j:runtime",
+    ),
+)
+
+fun pomDependencies(pom: String): Set<String> = Regex(
+    """<dependency>\s*<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>\s*<version>[^<]+</version>\s*<scope>([^<]+)</scope>\s*</dependency>""",
+).findAll(pom).map { match ->
+    "${match.groupValues[1]}:${match.groupValues[2]}:${match.groupValues[3]}"
+}.toSet()
+
+fun moduleMetadataDependencies(metadata: String): Set<String> = Regex(
+    """"group"\s*:\s*"([^"]+)"\s*,\s*"module"\s*:\s*"([^"]+)"""",
+).findAll(metadata).map { match ->
+    "${match.groupValues[1]}:${match.groupValues[2]}"
+}.toSet()
+
 publishableProjects.forEach { module ->
     module.tasks.withType<PublishToMavenRepository>().configureEach {
         if (name.endsWith("ToStagingRepository")) {
@@ -579,6 +635,33 @@ tasks.register("verifyMavenStaging") {
                         throw GradleException("$baseName.pom lacks $element")
                     }
                 }
+            if (module.name in setOf("klib-item", "klib-ui") &&
+                pom.contains("<artifactId>spigot-api</artifactId>")) {
+                throw GradleException(
+                    "$baseName.pom must not publish the host-provided Spigot API")
+            }
+            expectedDataPublicationDependencies[module.name]?.let { expected ->
+                val actual = pomDependencies(pom)
+                if (actual != expected) {
+                    throw GradleException(
+                        "$baseName.pom dependency boundary mismatch: " +
+                            "expected=$expected, actual=$actual")
+                }
+                val metadata = directory.resolve("$baseName.module")
+                if (!metadata.isFile) {
+                    throw GradleException("Missing Gradle module metadata: $metadata")
+                }
+                val metadataActual = moduleMetadataDependencies(metadata.readText()) -
+                    "me.kzheart.klib:${module.name}"
+                val metadataExpected = expected.map { dependency ->
+                    dependency.substringBeforeLast(':')
+                }.toSet()
+                if (metadataActual != metadataExpected) {
+                    throw GradleException(
+                        "$baseName.module dependency boundary mismatch: " +
+                            "expected=$metadataExpected, actual=$metadataActual")
+                }
+            }
             listOf(
                 directory.resolve("$baseName.jar"),
                 directory.resolve("$baseName-sources.jar"),

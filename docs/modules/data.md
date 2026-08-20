@@ -1,6 +1,6 @@
 # klib-data
 
-`klib-data` 提供面向字节的异步键值存储、事务、结构迁移和玩家数据缓存。它把阻塞文件或 JDBC I/O 放到存储提供器自己的执行器中，适合插件配置以外的持久业务数据。
+Klib Data 提供面向字节的异步键值存储、事务、结构迁移和玩家数据缓存。基础模块不选择存储实现，阻塞文件或 JDBC I/O 由显式选择的提供器放到自己的执行器中。
 
 ## 接入模块
 
@@ -9,32 +9,45 @@
 ```kotlin
 klib {
     modules {
-        data()
+        data {
+            json()
+        }
     }
 }
 ```
 
-该方式会自动加入 klib 依赖，并把 Gson、SQLite JDBC 和 MySQL Connector/J 等运行时依赖放入最终产物。
+`data()` 只加入存储契约、迁移和缓存，不包含 Gson 或数据库驱动。需要生产存储时必须在 `data { }` 中显式选择 `json()`、`sqlite()` 或 `mysql()`；可以同时选择多个后端。JSON 与 SQLite 使用 Bukkit/Paper 宿主提供的 Gson 和 SQLite JDBC，不会把它们复制进插件制品。
 
 直接依赖时可按实际后端选择驱动：
 
 ```kotlin
 dependencies {
     implementation("me.kzheart.klib:klib-data:<klib-version>")
-    runtimeOnly("org.xerial:sqlite-jdbc:3.45.3.0")
-    runtimeOnly("com.mysql:mysql-connector-j:8.4.0")
+    implementation("me.kzheart.klib:klib-data-json:<klib-version>")
+    implementation("me.kzheart.klib:klib-data-sqlite:<klib-version>")
+    implementation("me.kzheart.klib:klib-data-mysql:<klib-version>")
 }
 ```
 
-只使用 JSON 后端时不需要 JDBC 驱动。直接依赖的调用方负责打包 `klib-data`、Gson 以及所选数据库驱动。
+只依赖实际使用的一个实现即可；每个实现会传递加入公共模块以及自身需要的运行时。模块边界如下：
+
+| 模块 | 内容 | 第三方运行时 |
+| --- | --- | --- |
+| `klib-data` | 契约、迁移、玩家数据缓存 | 无 |
+| `klib-data-json` | JSON 文件提供器 | 无；Gson 由宿主提供 |
+| `klib-data-jdbc` | JDBC 会话、事务与方言引擎 | 无 |
+| `klib-data-sqlite` | SQLite 提供器 | 无；SQLite JDBC 由宿主提供 |
+| `klib-data-mysql` | MySQL 提供器 | MySQL Connector/J 及其传递依赖 |
+
+SQLite JDBC 包含多平台 Native 库，因此 Klib 只编译和发布提供器代码，绝不把驱动复制进插件或 Guard 商品。运行环境必须由 Bukkit/Paper 宿主提供 Gson 与 SQLite JDBC；独立测试程序若没有宿主，需要自行在运行时加入对应依赖。MySQL Connector/J 不属于宿主能力，只在显式选择 MySQL 后端时加入。
 
 ## 选择存储后端
 
 三个生产入口实现同一个 `StorageProvider` 契约：
 
 - `JsonStorageProvider(Path)`：单文件、小规模数据和本地开发；事务先写临时文件，文件系统支持时使用原子移动，否则退回普通替换。该流程用于避免常规写入失败留下半成品，不会额外强制文件或目录元数据刷入物理存储，也不承诺突然断电或操作系统崩溃时的持久性。
-- `SQLiteStorageProvider(Path)` / `SQLiteStorageProvider(Path, KLogger)`：单服插件的关系型持久化。
-- `MySqlStorageProvider(jdbcUrl, username, password)` / `MySqlStorageProvider(jdbcUrl, username, password, KLogger)`：多实例访问的远端数据库。
+- `me.kzheart.klib.data.sqlite.SQLiteStorageProvider(Path)` / `SQLiteStorageProvider(Path, KLogger)`：单服插件的关系型持久化。
+- `me.kzheart.klib.data.mysql.MySqlStorageProvider(jdbcUrl, username, password)` / `MySqlStorageProvider(jdbcUrl, username, password, KLogger)`：多实例访问的远端数据库。
 
 JSON 后端为单文件本地存储设置固定资源预算：文件最多 8 MiB、JSON 嵌套最多 16 层、最多 128 个
 命名空间和 4096 个键值条目；命名空间及结构名最多 128 个 UTF-8 字节，键最多 512 个 UTF-8
@@ -47,7 +60,7 @@ JSON 后端为单文件本地存储设置固定资源预算：文件最多 8 MiB
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.data.StorageProvider;
 import me.kzheart.klib.data.StorageSession;
-import me.kzheart.klib.data.sql.SQLiteStorageProvider;
+import me.kzheart.klib.data.sqlite.SQLiteStorageProvider;
 import me.kzheart.klib.scope.Scope;
 
 import java.nio.charset.StandardCharsets;

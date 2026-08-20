@@ -13,7 +13,7 @@ Native、Collector 和生产部署配置不在本仓库中。
 
 ```kotlin
 plugins {
-    id("me.kzheart.klib") version "0.4.0"
+    id("me.kzheart.klib") version "0.5.0"
 }
 
 klib {
@@ -50,8 +50,8 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("me.kzheart.klib:klib-core:0.3.0")
-    implementation("me.kzheart.klib:klib-config:0.3.0")
+    implementation("me.kzheart.klib:klib-core:0.4.0")
+    implementation("me.kzheart.klib:klib-config:0.4.0")
 }
 ```
 
@@ -72,7 +72,11 @@ dependencies {
 | `klib-lang` | 多语言消息、占位符和富文本 |
 | `klib-command` | 类型化命令树、权限、建议与内置管理命令 |
 | `klib-item` | 物品构建、标签和跨版本编解码 |
-| `klib-data` | JSON、SQLite、MySQL 与玩家数据缓存 |
+| `klib-data` | 存储契约、迁移与玩家数据缓存，不包含存储实现或第三方运行时 |
+| `klib-data-json` | JSON 文件存储；使用宿主提供的 Gson |
+| `klib-data-jdbc` | JDBC 公共执行引擎，不包含数据库驱动 |
+| `klib-data-sqlite` | SQLite 存储；使用宿主提供的 SQLite JDBC |
+| `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
 | `klib-script` | Kether 脚本、异步组合与 Guard 商品互操作适配 |
 | `klib-hook` | Vault、PlayerPoints、XConomy 和 PlaceholderAPI |

@@ -14,10 +14,10 @@
 
 | 组件 | 版本源 | 正式 tag | bundle |
 | --- | --- | --- | --- |
-| 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 15 个普通模块，不含 Guard API |
+| 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 19 个普通模块，不含 Guard API |
 | Guard API | `klibGuardApiVersion` | `guard-api-v<klibGuardApiVersion>` | 只包含 `klib-guard-api` |
 
-当前版本为 `klib:0.3.0` 与 `klib-guard-api:0.2.0`。两个组件独立发布，不能在发布
+当前版本为 `klib:0.4.0` 与 `klib-guard-api:0.2.0`。两个组件独立发布，不能在发布
 普通 Klib 时重复上传不可覆盖的 Guard API 版本。
 
 ## GitHub Environment 与 Secrets
@@ -45,11 +45,11 @@ git tag guard-api-v0.2.0
 git push origin guard-api-v0.2.0
 ```
 
-发布普通 Klib `0.3.0`：
+发布普通 Klib `0.4.0`：
 
 ```bash
-git tag klib-v0.3.0
-git push origin klib-v0.3.0
+git tag -a klib-v0.4.0 -m "release: 发布 Klib 0.4.0"
+git push origin klib-v0.4.0
 ```
 
 发布工作流会在第一次 Central 网络请求之前检查：
@@ -71,7 +71,7 @@ git push origin klib-v0.3.0
 2. `component` 选择 `klib` 或 `guard-api`；
 3. `version` 填写与该组件版本源完全一致的版本；
 4. 勾选 `confirm_publish`；
-5. 通过 `maven-central` Environment 审批。
+5. 如果 `maven-central` Environment 配置了审批规则，通过对应审批。
 
 手动输入不能绕过 ref、tag、组件、版本、签名或 secret 门禁。Maven Central 版本不可覆盖，已经成功上传
 相同版本时不要重跑；需要修复时必须升级对应组件版本并创建新 tag。

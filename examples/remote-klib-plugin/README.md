@@ -1,7 +1,7 @@
 # Remote Klib Plugin
 
 这是一个独立的 Bukkit 插件项目，用于演示从 Gradle Plugin Portal 获取
-`me.kzheart.klib` 0.2.0，并由插件从 Maven Central 解析 Klib 模块。
+`me.kzheart.klib` 0.4.0，并由插件从 Maven Central 解析 Klib 0.3.0 模块。
 
 示例通过类型安全的 `modules { command() }` DSL 选择命令模块。Klib Gradle 插件会生成
 `plugin.yml`，并把 Klib 依赖重定位到最终 JAR 中。插件启动时创建一个由 `Scope` 管理的会话，

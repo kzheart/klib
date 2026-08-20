@@ -85,11 +85,11 @@ verify_example() {
 verify_example \
     "remote-klib-plugin" \
     "verifyPluginJar" \
-    'Downloading https://plugins\.gradle\.org/m2/me/kzheart/klib/me\.kzheart\.klib\.gradle\.plugin/0\.2\.0/'
+    'Downloading https://plugins\.gradle\.org/m2/me/kzheart/klib/me\.kzheart\.klib\.gradle\.plugin/0\.4\.0/'
 
 verify_example \
     "remote-klib-cloud-plugin" \
     "check" \
-    'Downloading https://repo\.maven\.apache\.org/maven2/me/kzheart/klib/klib-guard-api/0\.1\.0/'
+    'Downloading https://repo\.maven\.apache\.org/maven2/me/kzheart/klib/klib-guard-api/0\.2\.0/'
 
 echo "Remote-only examples resolved and built successfully with separate empty caches."

@@ -18,7 +18,7 @@
 - 症状：`id("me.kzheart.klib") version "..."` 或 `me.kzheart.klib:klib-core:...` 找不到。
 - 原因：`pluginManagement.repositories` 或 `dependencyResolutionManagement.repositories` 没有配置
   `mavenCentral()`；也可能把文档里的版本占位符当成了真实版本。
-- 修复：插件和普通模块都使用已发布的 `0.2.0`。在 `pluginManagement` 和
+- 修复：Gradle 插件使用已发布的 `0.4.0`，普通模块使用 `0.3.0`。在 `pluginManagement` 和
   `dependencyResolutionManagement` 中分别配置 `mavenCentral()`，不要依赖 `mavenLocal()`，见
   [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
 

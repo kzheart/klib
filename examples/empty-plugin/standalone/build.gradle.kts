@@ -1,5 +1,5 @@
 plugins {
-    id("me.kzheart.klib") version "0.2.0"
+    id("me.kzheart.klib") version "0.4.0"
 }
 
 group = "me.kzheart.klib.example"

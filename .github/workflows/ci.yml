@@ -37,3 +37,6 @@ jobs:
 
       - name: Check shell scripts
         run: bash -n scripts/*.sh
+
+      - name: Verify remote-only examples with empty caches
+        run: ./scripts/verify-remote-examples.sh

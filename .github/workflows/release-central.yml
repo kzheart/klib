@@ -40,7 +40,7 @@ jobs:
     name: verify, sign, and publish
     runs-on: ubuntu-latest
     environment: maven-central
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v6
         with:
@@ -166,7 +166,7 @@ jobs:
           [[ "$deployment_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
           echo "deployment_id=$deployment_id" >> "$GITHUB_OUTPUT"
 
-          for _ in $(seq 1 90); do
+          for _ in $(seq 1 240); do
             status_file="$(mktemp)"
             status_code="$(curl --silent --show-error \
               --connect-timeout 15 --max-time 30 \

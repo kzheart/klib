@@ -9,7 +9,7 @@
 | [`SimpleGather-klib`](SimpleGather-klib) | 命令、物品、外部插件挂钩和 Remote 客户端 |
 | [`SimpleStall-klib`](SimpleStall-klib) | 数据、UI、脚本和异步回主线程的完整组合 |
 | [`remote-klib-plugin`](remote-klib-plugin) | 仅从 Plugin Portal 与 Maven Central 构建的普通 Klib 插件 |
-| [`remote-klib-cloud-plugin`](remote-klib-cloud-plugin) | 仅从 Maven Central 编译的 Guard 云端商品业务 JAR |
+| [`remote-klib-cloud-plugin`](remote-klib-cloud-plugin) | 仅从 Plugin Portal 与 Maven Central 构建并校验的 Guard 云端商品 |
 
 以最小示例为例：
 
@@ -31,5 +31,5 @@
 ./scripts/verify-remote-examples.sh
 ```
 
-普通示例生成可直接放入 Paper/Spigot `plugins/` 目录的 `-all.jar`。云端示例生成未授权加工的业务
-JAR，只能作为 Guard/Collector 发布流程的输入，不能直接作为 Bukkit 插件运行。
+普通示例生成可直接放入 Paper/Spigot `plugins/` 目录的 `-all.jar`。云端示例生成通过 Collector
+同源边界校验的 `-guard.jar`，只能上传到 Guard/Collector，不能直接作为 Bukkit 插件运行。

@@ -89,7 +89,7 @@ verify_example \
 
 verify_example \
     "remote-klib-cloud-plugin" \
-    "check" \
-    'Downloading https://repo\.maven\.apache\.org/maven2/me/kzheart/klib/klib-guard-api/0\.2\.0/'
+    "guardProductJar" \
+    'Downloading https://plugins\.gradle\.org/m2/me/kzheart/klib/me\.kzheart\.klib\.gradle\.plugin/0\.5\.1/'
 
 echo "Remote-only examples resolved and built successfully with separate empty caches."

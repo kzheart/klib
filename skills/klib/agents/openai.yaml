@@ -1,0 +1,4 @@
+interface:
+  display_name: "Klib Wiki 指南"
+  short_description: "按官方 Wiki 接入 Klib、选择模块并排查 Minecraft 插件开发问题"
+  default_prompt: "使用 $klib，读取相关 Wiki 页面，按我的项目版本接入所需模块。"

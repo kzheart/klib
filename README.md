@@ -86,6 +86,18 @@ dependencies {
 
 完整说明见 [docs/README.md](docs/README.md)，示例见 [examples/README.md](examples/README.md)。
 
+## AI 编程助手技能
+
+[klib 技能](skills/klib/SKILL.md) 按需读取本仓库的 [Wiki](https://github.com/kzheart/klib/wiki)，不依赖本地源码路径。
+
+在 Codex 中可使用 `$skill-installer` 安装：
+
+```text
+$skill-installer 安装 https://github.com/kzheart/klib/tree/main/skills/klib
+```
+
+其他支持 `SKILL.md` 的工具可按各自的技能安装方式使用 `skills/klib` 目录。
+
 ## 从源码构建
 
 构建使用 JDK 21 toolchain，但所有公共 Java 制品通过 `--release 8` 生成 Java 8 字节码：

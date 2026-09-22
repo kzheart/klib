@@ -14,8 +14,13 @@ final class CommandNode {
     String descriptionKey;
     String permission;
     boolean playerOnly;
+    boolean handlerPlayerOnly;
+    Object suggestionOwner;
     boolean hasGreedyChild;
     CommandHandler handler;
+    java.util.function.Predicate<org.bukkit.command.CommandSender> branchAccess;
+    java.util.function.Predicate<org.bukkit.command.CommandSender> handlerAccess;
+
 
     CommandNode(String literal, Arg<?> argument) {
         this.literal = literal;

@@ -2,6 +2,14 @@
 
 `klib-ui` 用于构建物品栏菜单、分页、物品投放区和聊天输入流程。它把点击、拖拽、数字键、双击、关闭归还以及异步聊天事件集中在统一监听器中，业务代码只描述模型和动作。
 
+## 0.5.0：会话菜单注解（待发布）
+
+`Menus.install(plugin)` 创建绑定插件的服务；组件可使用 `Menus.install(context(), plugin)`。
+`menus.open(player, new Screen())` 读取 `@Menu`、`@Button`、`@Entries`、`@Click` 并通过现有 MenuCompiler 和 MenuRenderer 打开。
+每个菜单对象保存自己的页码和筛选状态；`MenuClick.refresh()` 重新计算模型，原会话、物品栏和任务归属不变。
+底层 `MenuHolder.refresh(MenuModel)` 同样允许在标题、尺寸不变且不覆盖投放区的条件下更新模型。
+完整签名、列表容量和关闭约束见 [组件与注解](../annotations.md)。
+
 ## 接入模块
 
 使用 klib Gradle 插件：

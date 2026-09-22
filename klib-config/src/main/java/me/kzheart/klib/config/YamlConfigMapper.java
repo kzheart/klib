@@ -1,5 +1,8 @@
 package me.kzheart.klib.config;
 
+import me.kzheart.klib.config.annotation.*;
+import me.kzheart.klib.reflect.Declarations;
+import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
@@ -171,13 +174,16 @@ public final class YamlConfigMapper {
         for (Field field : fields(type)) {
             // 保留 static/transient/合成字段的名字：它们虽然不参与映射，
             // 但同名 YAML 键属于“有意忽略”，不应被报成拼写错误。
-            declaredNames.add(field.getName());
+            Key alias = field.getAnnotation(Key.class);
+            String key = alias == null ? field.getName() : alias.value();
+            if (key.trim().isEmpty() || !declaredNames.add(key)) throw node.mappingError("blank or duplicate field key: " + key);
             int modifiers = field.getModifiers();
             if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isSynthetic()) {
                 continue;
             }
-            ConfigNode fieldNode = node.child(field.getName());
+            ConfigNode fieldNode = node.child(key);
             if (!fieldNode.exists()) {
+                validateRange(instance, field, fieldNode);
                 continue;
             }
             if (Modifier.isFinal(modifiers)) {
@@ -187,14 +193,41 @@ public final class YamlConfigMapper {
             try {
                 field.setAccessible(true);
                 field.set(instance, value);
+                validateRange(instance, field, fieldNode);
             } catch (IllegalAccessException failure) {
                 throw fieldNode.mappingError("cannot assign field " + field.getName(), failure);
             } catch (IllegalArgumentException failure) {
                 throw fieldNode.mappingError("invalid value for field " + field.getName(), failure);
             }
         }
+        for (Method method : Declarations.methods(type)) {
+            if (!method.isAnnotationPresent(Validate.class)) continue;
+            try {
+                Declarations.voidMethod(method, 0);
+                Declarations.invoke(instance, method);
+            } catch (RuntimeException failure) {
+                throw node.mappingError("validation failed at " + method.getName() + ": " + failure.getMessage(), failure);
+            }
+        }
         warnUnknownKeys(node, type, declaredNames);
         return instance;
+    }
+
+    private static void validateRange(Object instance, Field field, ConfigNode node) {
+        Range range = field.getAnnotation(Range.class);
+        if (range == null) return;
+        try {
+            field.setAccessible(true);
+            Object value = field.get(instance);
+            if (!(value instanceof Number) || !Double.isFinite(range.min()) || !Double.isFinite(range.max())
+                    || range.min() > range.max()) throw node.mappingError("@Range requires a number and finite ordered bounds");
+            double number = ((Number) value).doubleValue();
+            if (!Double.isFinite(number) || number < range.min() || number > range.max()) {
+                throw node.mappingError("value must be between " + range.min() + " and " + range.max());
+            }
+        } catch (IllegalAccessException failure) {
+            throw node.mappingError("cannot validate " + field.getName(), failure);
+        }
     }
 
     /**

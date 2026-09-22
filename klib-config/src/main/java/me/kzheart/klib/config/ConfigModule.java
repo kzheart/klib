@@ -16,6 +16,11 @@ import java.util.function.Function;
  * 之后通过 {@code root.config(Settings.class, "config.yml")} 取得类型化文档。
  */
 public final class ConfigModule {
+    public static ConfigCapability install(me.kzheart.klib.KPlugin plugin) {
+        return install(plugin.context().scope(), plugin.getDataFolder().toPath(),
+                plugin.getClass().getClassLoader(), "defaults");
+    }
+
     private ConfigModule() {
     }
 

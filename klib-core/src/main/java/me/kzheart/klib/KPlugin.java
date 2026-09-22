@@ -21,7 +21,24 @@ public abstract class KPlugin extends JavaPlugin {
     private volatile ScopeImpl rootScope;
     private KLogger klibLogger;
 
-    protected abstract void setup(Scope root);
+    private volatile me.kzheart.klib.component.KContext context;
+
+    protected void setup(Scope root) { setup(); }
+
+    /** Default-scope entry point. Override this or setup(Scope), not both. */
+    protected void setup() { }
+
+    public final me.kzheart.klib.component.KContext context() {
+        me.kzheart.klib.component.KContext current = context;
+        if (current == null || current.scope().isClosed()) throw new IllegalStateException("Plugin context is not active");
+        return current;
+    }
+    protected final me.kzheart.klib.command.api.Commands commands() { return context().commands(); }
+    protected final me.kzheart.klib.config.api.Configs configs() { return context().configs(); }
+    protected final me.kzheart.klib.event.Events events() { return context().events(); }
+    protected final me.kzheart.klib.scheduler.Tasks tasks() { return context().tasks(); }
+    protected final me.kzheart.klib.component.Components components() { return context().components(); }
+
 
     @Override
     public final void onEnable() {
@@ -40,6 +57,7 @@ public abstract class KPlugin extends JavaPlugin {
             rootScope = PluginScopeBootstrap.create(getName(), new Consumer<Scope>() {
                 @Override
                 public void accept(Scope root) {
+                    context = new me.kzheart.klib.component.KContext(root);
                     installCoreCapabilities(root);
                     setup(root);
                 }

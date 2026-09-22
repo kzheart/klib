@@ -63,6 +63,13 @@ public abstract class Arg<T> implements CommandArgument<T> {
         return Collections.emptyList();
     }
 
+    T parse(String input, PlayerResolver players, me.kzheart.klib.command.api.CommandContext context)
+            throws ArgumentException { return parse(input, players); }
+
+    List<String> suggest(SuggestionContext context, PlayerResolver players) {
+        return suggest(context.sender(), context.prefix(), players);
+    }
+
     final String usage() {
         if (optional) {
             return "[" + name + "]";

@@ -69,6 +69,11 @@ public final class CommandCapabilityImpl implements CommandCapability {
     }
 
     @Override
+    public Disposable registerAnnotated(Scope owner, Object... handlers) {
+        return AnnotatedCommands.register(this, owner, handlers);
+    }
+
+    @Override
     public CommandRegistration register(
             Scope owner,
             String name,
@@ -82,6 +87,10 @@ public final class CommandCapabilityImpl implements CommandCapability {
         }
         CommandSpecImpl spec = CommandSpecImpl.command(name);
         configure.accept(spec);
+        return registerCompiled(owner, spec);
+    }
+
+    CommandRegistration registerCompiled(Scope owner, CommandSpecImpl spec) {
         CommandDispatcher dispatcher = new CommandDispatcher(spec, players, output, messages, logger);
         Disposable bridgeRegistration = bridge.register(spec.name(), spec, dispatcher);
         CommandRegistrationImpl registration = new CommandRegistrationImpl(

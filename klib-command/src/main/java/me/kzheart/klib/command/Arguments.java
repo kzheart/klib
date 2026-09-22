@@ -220,6 +220,31 @@ public final class Arguments {
         };
     }
 
+    /** Custom parser and suggestions with the previously parsed path arguments. */
+    public static <T> Arg<T> contextual(String name, ContextualArgumentParser<T> parser,
+            ContextualSuggestionProvider suggestions) {
+        java.util.Objects.requireNonNull(parser, "parser");
+        java.util.Objects.requireNonNull(suggestions, "suggestions");
+        return new Arg<T>(name, false) {
+            @Override T parse(String input, PlayerResolver players) {
+                throw new IllegalStateException("Context is required");
+            }
+            @Override T parse(String input, PlayerResolver players,
+                    me.kzheart.klib.command.api.CommandContext context) throws ArgumentException {
+                try {
+                    T value = parser.parse(input, context);
+                    if (value != null) return value;
+                } catch (IllegalArgumentException failure) {
+                    throw new ArgumentException(CommandMessageKeys.UNKNOWN_ARGUMENT, "argument", input);
+                }
+                throw new ArgumentException(CommandMessageKeys.UNKNOWN_ARGUMENT, "argument", input);
+            }
+            @Override List<String> suggest(SuggestionContext context, PlayerResolver players) {
+                return safeSuggestions(suggestions.suggest(context), context.prefix());
+            }
+        };
+    }
+
     public static Arg<String> greedyString(String name) {
         return new Arg<String>(name, true) {
             @Override

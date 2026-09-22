@@ -6,6 +6,13 @@
 
 `klib-config` 将类路径中的默认 YAML 提取到插件数据目录，并映射为 Java 8 POJO。它支持默认值合并、注释保留、文件监听、原子重载、版本迁移和目录型配置注册表。
 
+## 0.5.0：配置声明与校验（待发布）
+
+`ConfigModule.install(plugin)` 简化默认模块安装；`configs().load(Settings.class)` 从 `@ConfigFile` 取得文件路径。
+支持 `@Key` 字段映射、`@Range` 数值范围、`@Validate` 跨字段校验；失败沿用原子重载流程，保留旧值。
+`@Comment` 用于显式 `ConfigDefaults.yaml(Settings.class)` 默认 YAML 生成，不会自动写入现有文件。
+配置仍通过 ConfigDocument 读取，不自动注入业务字段。完整规则见 [组件与注解](../annotations.md)。
+
 ## 何时使用
 
 适合以下场景：

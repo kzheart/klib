@@ -34,6 +34,33 @@ public final class CommandSpecImpl implements CommandSpec {
         return normalized;
     }
 
+    @Override
+    public CommandSpec route(String path) {
+        if (path == null || path.trim().isEmpty()) throw new IllegalArgumentException("route must not be blank");
+        CommandSpecImpl current = this;
+        for (String word : path.trim().split("\\s+")) {
+            String literal = requireSingleWord(word, "literal");
+            CommandSpecImpl next = null;
+            for (CommandNode child : current.node.children) {
+                if (literal.equals(child.literal)) next = new CommandSpecImpl(name, child);
+            }
+            if (next == null) {
+                final CommandSpec[] created = new CommandSpec[1];
+                current.literal(literal, child -> created[0] = child);
+                next = (CommandSpecImpl) created[0];
+            }
+            current = next;
+        }
+        return current;
+    }
+
+    @Override
+    public <T> CommandSpec argument(CommandArgument<T> argument) {
+        final CommandSpec[] created = new CommandSpec[1];
+        argument(argument, child -> created[0] = child);
+        return created[0];
+    }
+
     public String name() {
         return name;
     }
@@ -116,6 +143,8 @@ public final class CommandSpecImpl implements CommandSpec {
         configure.accept(new CommandSpecImpl(name, child));
         return this;
     }
+
+    CommandSpecImpl withName(String label) { return new CommandSpecImpl(requireSingleWord(label, "command name"), node); }
 
     CommandNode root() {
         return node;

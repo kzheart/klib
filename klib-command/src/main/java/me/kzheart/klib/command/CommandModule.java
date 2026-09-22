@@ -17,6 +17,10 @@ import me.kzheart.klib.scope.Scope;
  * <p>安装必须在服务器主线程完成。
  */
 public final class CommandModule {
+    public static CommandCapability install(me.kzheart.klib.KPlugin plugin) {
+        return install(plugin.context().scope(), BukkitCommandRegistrar.discover(plugin.getName().toLowerCase(java.util.Locale.ROOT)));
+    }
+
     private CommandModule() {
     }
 

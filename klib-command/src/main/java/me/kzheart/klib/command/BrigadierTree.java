@@ -13,6 +13,7 @@ final class BrigadierTree {
         ARGUMENT
     }
 
+    private final java.util.function.Predicate<org.bukkit.command.CommandSender> access;
     private final Kind kind;
     private final String token;
     private final String permission;
@@ -28,8 +29,10 @@ final class BrigadierTree {
             boolean playerOnly,
             boolean greedy,
             boolean handler,
-            List<BrigadierTree> children
+            List<BrigadierTree> children,
+            java.util.function.Predicate<org.bukkit.command.CommandSender> access
     ) {
+        this.access = access;
         this.kind = kind;
         this.token = token;
         this.permission = permission;
@@ -70,8 +73,10 @@ final class BrigadierTree {
                 node.playerOnly,
                 greedy,
                 node.handler != null,
-                children);
+                children, sender -> CommandDispatcher.isAccessible(sender, node));
     }
+
+    boolean accessible(org.bukkit.command.CommandSender sender) { return access.test(sender); }
 
     Kind kind() {
         return kind;

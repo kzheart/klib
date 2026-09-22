@@ -267,9 +267,7 @@ public final class BrigadierBridge implements CommandBridge {
                         return false;
                     }
                     CommandSender sender = (CommandSender) value;
-                    return (tree.permission() == null
-                            || sender.hasPermission(tree.permission()))
-                            && (!tree.playerOnly() || sender instanceof Player);
+                    return tree.accessible(sender);
                 }
             };
         }

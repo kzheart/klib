@@ -26,6 +26,8 @@
 
 ## 跨模块专题
 
+- [0.5.0 组件与注解 API（待发布）](annotations.md)
+
 - [Remote 协议 v1](remote-protocol.md)
 - [Remote 安全边界](remote-security.md)
 - [故障排查](troubleshooting.md)

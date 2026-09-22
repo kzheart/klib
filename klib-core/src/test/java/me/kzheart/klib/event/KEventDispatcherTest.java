@@ -19,6 +19,35 @@ import org.bukkit.plugin.PluginManager;
 import org.junit.jupiter.api.Test;
 
 class KEventDispatcherTest {
+    public static class AnnotatedListener implements Listener {
+        int calls;
+        @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.HIGH, ignoreCancelled=true)
+        public void handle(TestEvent event) { calls++; }
+    }
+
+    @Test
+    void annotatedRegistrationPreservesBukkitOptionsAndDisposes() throws EventException {
+        AtomicReference<Listener> listener = new AtomicReference<Listener>();
+        AtomicReference<EventExecutor> executor = new AtomicReference<EventExecutor>();
+        PluginManager manager = (PluginManager) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{PluginManager.class}, (target, method, arguments) -> {
+                    if (method.getName().equals("registerEvent")) {
+                        assertEquals(org.bukkit.event.EventPriority.HIGH, arguments[2]);
+                        assertEquals(Boolean.TRUE, arguments[5]);
+                        listener.set((Listener) arguments[1]); executor.set((EventExecutor) arguments[3]);
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        ScopeImpl scope = new ScopeImpl("annotations");
+        scope.registerCapability(KEventDispatcher.class, scope.install(new KEventDispatcher(
+                proxy(Plugin.class), manager, new KLogger(Logger.getLogger("test")))));
+        AnnotatedListener receiver = new AnnotatedListener();
+        me.kzheart.klib.scope.Disposable registration = new Events(scope).register(receiver);
+        executor.get().execute(listener.get(), new TestEvent()); assertEquals(1, receiver.calls);
+        registration.dispose(); executor.get().execute(listener.get(), new TestEvent());
+        assertEquals(1, receiver.calls); scope.close();
+    }
+
     @Test
     void oneBukkitRouteFansOutAndScopeCloseDetachesHandlers() throws EventException {
         AtomicInteger registrations = new AtomicInteger();

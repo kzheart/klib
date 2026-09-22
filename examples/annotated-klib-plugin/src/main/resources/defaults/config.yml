@@ -1,0 +1,2 @@
+# Valid range is 1..16. Invalid reloads retain the old snapshot.
+party-size: 4

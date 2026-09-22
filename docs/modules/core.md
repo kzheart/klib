@@ -6,6 +6,14 @@
 
 `klib-core` 是所有 Klib 插件的生命周期底座。它提供 `KPlugin`、可组合的 `Scope`、与作用域绑定的 Bukkit 事件和任务，以及统一日志。其他大多数模块都会间接引入它。
 
+## 0.5.0：默认作用域与组件（待发布）
+
+新插件可覆盖无参 `setup()`，使用绑定插件生命周期的 `commands()`、`configs()`、`events()`、`tasks()` 和 `components()`。
+`KComponent` 提供相同服务入口；`components().install(instance)` 返回可关闭的 ComponentHandle。
+普通对象可声明 public 无参 void 的 `@OnStart`、`@OnStop`；初始化失败回滚，关闭时先清理注册资源再执行 OnStop。
+事件通过 `events().register(Listener)` 复用 Bukkit `@EventHandler`，固定任务通过 `tasks().register(instance)` 读取 `@Every`。
+没有自动扫描、注入或隐式线程切换。完整签名、线程和释放规则见 [组件与注解](../annotations.md)。
+
 ## 何时使用
 
 以下情况应直接使用 Core：

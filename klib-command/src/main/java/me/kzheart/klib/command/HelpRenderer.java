@@ -189,7 +189,7 @@ public final class HelpRenderer {
             String usage = parentUsage + " " + child.usageToken();
             // argument 节点不延伸 literal 路径，同一 literal 路径只保留最短的一条帮助条目。
             String path = child.literal == null ? literalPath : literalPath + " " + child.literal;
-            if (child.handler != null && seenLiteralPaths.add(path)) {
+            if (child.handler != null && (child.handlerAccess == null || child.handlerAccess.test(sender)) && seenLiteralPaths.add(path)) {
                 String description = child.descriptionKey == null
                         ? child.description
                         : messages.resolve(

@@ -119,7 +119,7 @@ public final class CommandDispatcher implements DiagnosticSource {
             }
 
             // 无权限的 literal 不遮蔽同级 argument：先尝试参数解析，两者都失败再报限制。
-            ParsedArgument parsed = parseArgument(current, sender, args, index);
+            ParsedArgument parsed = parseArgument(current, sender, args, index, values);
             if (parsed.node != null) {
                 restriction = restriction(sender, parsed.node);
                 if (restriction == null) {
@@ -137,7 +137,7 @@ public final class CommandDispatcher implements DiagnosticSource {
                 return emit(sender, literalRestriction);
             }
 
-            List<String> suggestions = suggestions(current, sender, token);
+            List<String> suggestions = suggestions(current, sender, token, values);
             RichText detail = parsed.error == null
                     ? messages.resolve(
                             sender,
@@ -170,6 +170,9 @@ public final class CommandDispatcher implements DiagnosticSource {
                 } else {
                     current.handler.execute(context);
                 }
+            } catch (CommandRejectedException refusal) {
+                sender.sendMessage(refusal.getMessage());
+                return CommandResult.message(CommandResult.Status.FAILED, null);
             } catch (CommandFailure failure) {
                 Throwable cause = failure.getCause() == null ? failure : failure.getCause();
                 reportFailure(cause);
@@ -322,12 +325,13 @@ public final class CommandDispatcher implements DiagnosticSource {
     public List<String> complete(CommandSender sender, String[] rawArgs) {
         requireInvocation(sender, rawArgs);
         String[] args = stripEmptyTokens(rawArgs, true);
+        Map<CommandArgument<?>, Object> values = new LinkedHashMap<CommandArgument<?>, Object>();
         CommandNode current = spec.root();
         if (!isAccessible(sender, current)) {
             return Collections.emptyList();
         }
         if (args.length == 0) {
-            return suggestions(current, sender, "");
+            return suggestions(current, sender, "", values);
         }
 
         int index = 0;
@@ -340,17 +344,18 @@ public final class CommandDispatcher implements DiagnosticSource {
                 continue;
             }
             // 与 execute 一致：无权限的 literal 不遮蔽同级 argument。
-            ParsedArgument parsed = parseArgument(current, sender, args, index);
+            ParsedArgument parsed = parseArgument(current, sender, args, index, values);
             if (parsed.node == null || !isAccessible(sender, parsed.node)) {
                 return Collections.emptyList();
             }
+            values.put(parsed.node.argument, parsed.value);
             current = parsed.node;
             index = parsed.nextIndex;
             if (index >= args.length) {
                 return Collections.emptyList();
             }
         }
-        return suggestions(current, sender, args[args.length - 1]);
+        return suggestions(current, sender, args[args.length - 1], values);
     }
 
     public HelpPage renderHelp(CommandSender sender, int page, int pageSize) {
@@ -365,14 +370,16 @@ public final class CommandDispatcher implements DiagnosticSource {
 
     static boolean isAccessible(CommandSender sender, CommandNode node) {
         return (node.permission == null || sender.hasPermission(node.permission))
-                && (!node.playerOnly || sender instanceof Player);
+                && (!node.playerOnly || sender instanceof Player)
+                && (node.branchAccess == null || node.branchAccess.test(sender));
     }
 
     private ParsedArgument parseArgument(
             CommandNode current,
             CommandSender sender,
             String[] args,
-            int index
+            int index,
+            Map<CommandArgument<?>, Object> values
     ) {
         ArgumentException firstError = null;
         for (CommandNode child : current.children) {
@@ -381,7 +388,7 @@ public final class CommandDispatcher implements DiagnosticSource {
             }
             String input = child.argument.isGreedy() ? join(args, index) : args[index];
             try {
-                Object value = child.argument.parse(input, players);
+                Object value = child.argument.parse(input, players, new CommandContextImpl(sender, spec.name(), values));
                 return new ParsedArgument(
                         child,
                         value,
@@ -396,7 +403,8 @@ public final class CommandDispatcher implements DiagnosticSource {
         return new ParsedArgument(null, null, index, firstError);
     }
 
-    private List<String> suggestions(CommandNode current, CommandSender sender, String prefix) {
+    private List<String> suggestions(CommandNode current, CommandSender sender, String prefix,
+            Map<CommandArgument<?>, Object> values) {
         Set<String> suggestions = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
         String normalized = prefix.toLowerCase(Locale.ROOT);
         for (CommandNode child : current.children) {
@@ -406,7 +414,7 @@ public final class CommandDispatcher implements DiagnosticSource {
             if (child.literal != null && child.literal.startsWith(normalized)) {
                 suggestions.add(child.literal);
             } else if (child.argument != null) {
-                suggestions.addAll(child.argument.suggest(sender, prefix, players));
+                suggestions.addAll(child.argument.suggest(new SuggestionContext(new CommandContextImpl(sender, spec.name(), values), prefix), players));
             }
         }
         if (suggestions.isEmpty()) {
@@ -428,6 +436,10 @@ public final class CommandDispatcher implements DiagnosticSource {
             return CommandResult.message(
                     CommandResult.Status.PLAYER_ONLY,
                     message(sender, CommandMessageKeys.PLAYER_ONLY));
+        }
+        if (node.branchAccess != null && !node.branchAccess.test(sender)) {
+            return CommandResult.message(CommandResult.Status.NO_PERMISSION,
+                    message(sender, CommandMessageKeys.NO_PERMISSION));
         }
         return null;
     }

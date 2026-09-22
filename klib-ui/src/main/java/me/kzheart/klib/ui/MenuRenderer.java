@@ -145,6 +145,13 @@ public final class MenuRenderer implements Listener, Disposable {
     }
 
     /** 先应用不可变菜单条目，再应用权威投放区状态。 */
+    void update(MenuHolder holder, MenuModel model) {
+        ensureMainThread("刷新菜单");
+        ensureOwned(holder);
+        holder.session().updateModel(model);
+        render(holder);
+    }
+
     public void render(MenuHolder holder) {
         Objects.requireNonNull(holder, "holder");
         ensureMainThread("渲染菜单");

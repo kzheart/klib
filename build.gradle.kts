@@ -306,6 +306,9 @@ project(":klib-compat-v26") {
 
 project(":klib-config") {
     dependencies {
+        val compileSpigot = create(spigotApi.get()) as ModuleDependency
+        compileSpigot.isTransitive = false
+        add("compileOnly", compileSpigot)
         add("api", project(":klib-core"))
         add("implementation", snakeYaml)
     }

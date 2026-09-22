@@ -18,7 +18,7 @@ public final class MenuSession implements Disposable {
     private static final AtomicLong SESSION_IDS = new AtomicLong();
     private final Scope parent;
     private final Scope scope;
-    private final MenuModel model;
+    private volatile MenuModel model;
     private final ItemReturnTarget returnTarget;
     private final OverflowSink overflowSink;
     private final List<DropZoneController> dropZones = new ArrayList<DropZoneController>();
@@ -68,6 +68,18 @@ public final class MenuSession implements Disposable {
                 "menu:" + businessName + "#" + Long.toUnsignedString(SESSION_IDS.incrementAndGet()),
                 scope -> { });
         return parent.install(new MenuSession(parent, menuScope, model, returnTarget, overflowSink));
+    }
+
+    synchronized void updateModel(MenuModel replacement) {
+        ensureOpen();
+        Objects.requireNonNull(replacement, "replacement");
+        if (replacement.size() != model.size() || !replacement.title().equals(model.title())) {
+            throw new IllegalArgumentException("A refresh cannot change menu size or title");
+        }
+        for (DropZoneController zone : dropZones) for (Integer slot : zone.slots()) {
+            if (replacement.entry(slot).isPresent()) throw new IllegalArgumentException("Refresh overlaps a drop zone: " + slot);
+        }
+        model = replacement;
     }
 
     public MenuModel model() {

@@ -39,6 +39,10 @@ public final class MenuHolder implements InventoryHolder {
     }
 
     /** 重新渲染模型条目和当前投放区内容。 */
+    public void refresh(MenuModel model) {
+        renderer.update(this, model);
+    }
+
     public void refresh() {
         renderer.render(this);
     }

@@ -7,11 +7,11 @@ Klib 是面向 Bukkit/Paper 插件的 Java 8 模块化基础库，提供生命�
 [kzheart/klib-gradle-plugin](https://github.com/kzheart/klib-gradle-plugin) 独立维护；Guard runtime、
 Native、Collector 和生产部署配置不在本仓库中。
 
-## 0.5.0 开发版：组件与注解
+## 0.5.0：组件与注解
 
-当前源码版本为 **0.5.0（待发布）**，新增无参 `setup()`、实例绑定服务、功能组件，以及命令、配置、事件、任务和菜单的声明入口。
+当前源码版本为 **0.5.0**，新增无参 `setup()`、实例绑定服务、功能组件，以及命令、配置、事件、任务和菜单的声明入口。
 详见 [组件与注解 API](docs/annotations.md) 和 [可运行示例](examples/annotated-klib-plugin/README.md)。
-新 API 需从源码构建；下面正式制品的最小接入仍对应已发布的 0.4.0。
+0.5.0 已发布至 Maven Central。Gradle 插件 0.5.1 的默认库版本仍为 0.4.0，使用新 API 时请显式设置 `libraryVersion.set("0.5.0")`。
 
 ## 最小接入
 
@@ -23,6 +23,7 @@ plugins {
 }
 
 klib {
+    libraryVersion.set("0.5.0")
     name("ExamplePlugin")
     main("com.example.plugin.ExamplePlugin")
     version(project.version.toString())
@@ -56,8 +57,8 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("me.kzheart.klib:klib-core:0.4.0")
-    implementation("me.kzheart.klib:klib-config:0.4.0")
+    implementation("me.kzheart.klib:klib-core:0.5.0")
+    implementation("me.kzheart.klib:klib-config:0.5.0")
 }
 ```
 

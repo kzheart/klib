@@ -6,7 +6,7 @@
 
 `klib-core` 是所有 Klib 插件的生命周期底座。它提供 `KPlugin`、可组合的 `Scope`、与作用域绑定的 Bukkit 事件和任务，以及统一日志。其他大多数模块都会间接引入它。
 
-## 0.5.0：默认作用域与组件（待发布）
+## 0.5.0：默认作用域与组件
 
 新插件可覆盖无参 `setup()`，使用绑定插件生命周期的 `commands()`、`configs()`、`events()`、`tasks()` 和 `components()`。
 `KComponent` 提供相同服务入口；`components().install(instance)` 返回可关闭的 ComponentHandle。

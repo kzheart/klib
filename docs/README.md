@@ -5,7 +5,7 @@
 
 推荐使用独立的 [Klib Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 选择模块、生成
 `plugin.yml` 并打包重定位依赖。需要完全手工管理依赖时，可直接使用 Maven Central 上的
-`me.kzheart.klib:klib-*:0.4.0` 坐标。
+`me.kzheart.klib:klib-*:0.5.0` 坐标。
 
 ## 模块文档
 
@@ -26,7 +26,7 @@
 
 ## 跨模块专题
 
-- [0.5.0 组件与注解 API（待发布）](annotations.md)
+- [0.5.0 组件与注解 API](annotations.md)
 
 - [Remote 协议 v1](remote-protocol.md)
 - [Remote 安全边界](remote-security.md)

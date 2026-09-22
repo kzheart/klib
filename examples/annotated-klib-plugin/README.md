@@ -1,15 +1,15 @@
 # 组件与注解综合示例
 
-对应 Klib **0.5.0 开发源码**，没有依赖尚未发布的远程制品。Java 8 字节码，示例目标服务端 Paper 1.20.4。
+对应已发布至 Maven Central 的 Klib **0.5.0**。Java 8 字节码，示例目标服务端 Paper 1.20.4。
 
 在仓库根目录构建：
 
 ```bash
-./gradlew -p examples/annotated-klib-plugin -PklibSource check --no-configuration-cache
+./gradlew -p examples/annotated-klib-plugin check --no-configuration-cache
 ```
 
 产物：`build/libs/annotated-klib-plugin-1.0.0-all.jar`（相对于示例目录），已经通过 Klib Gradle 插件重定位。
-`-PklibSource` 明确将 Klib 模块替换为本仓库源码；将来 0.5.0 发布后可省略该参数从公共仓库解析。
+默认从 Maven Central 解析 0.5.0。需要验证本仓库源码时，额外传入 `-PklibSource` 启用复合构建。
 
 ## 验证入口
 

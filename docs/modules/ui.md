@@ -2,7 +2,7 @@
 
 `klib-ui` 用于构建物品栏菜单、分页、物品投放区和聊天输入流程。它把点击、拖拽、数字键、双击、关闭归还以及异步聊天事件集中在统一监听器中，业务代码只描述模型和动作。
 
-## 0.5.0：会话菜单注解（待发布）
+## 0.5.0：会话菜单注解
 
 `Menus.install(plugin)` 创建绑定插件的服务；组件可使用 `Menus.install(context(), plugin)`。
 `menus.open(player, new Screen())` 读取 `@Menu`、`@Button`、`@Entries`、`@Click` 并通过现有 MenuCompiler 和 MenuRenderer 打开。

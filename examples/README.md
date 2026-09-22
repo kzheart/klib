@@ -34,11 +34,11 @@
 普通示例生成可直接放入 Paper/Spigot `plugins/` 目录的 `-all.jar`。云端示例生成通过 Collector
 同源边界校验的 `-guard.jar`，只能上传到 Guard/Collector，不能直接作为 Bukkit 插件运行。
 
-## 0.5.0 组件与注解示例（待发布）
+## 0.5.0 组件与注解示例
 
 新增 [annotated-klib-plugin](annotated-klib-plugin/README.md)，覆盖默认作用域、组件、命令、配置、事件、定时任务和菜单注解。
-显式使用本仓库开发源码构建，无需尚未发布的远程 0.5.0 制品：
+从 Maven Central 解析正式 0.5.0 制品：
 
 ```bash
-./gradlew -p examples/annotated-klib-plugin -PklibSource check --no-configuration-cache
+./gradlew -p examples/annotated-klib-plugin check --no-configuration-cache
 ```

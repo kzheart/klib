@@ -6,7 +6,7 @@
 
 `klib-command` 用类型化树描述 Bukkit 命令，统一完成参数解析、补全、权限、玩家限制、帮助、错误定位和作用域注销。在支持的服务端上，它还会尽力同步 Brigadier 客户端命令树。
 
-## 0.5.0：注解与平铺声明（待发布）
+## 0.5.0：注解与平铺声明
 
 `commands().register(new PlayerCommands(), new AdminCommands())` 将 `@Command`、`@Route` 方法编译为同一套命令树。
 支持参数注入、Permission、Check、Greedy、带前置参数上下文的 Suggest/Suggestions，以及 CommandCall.await 主线程回调。

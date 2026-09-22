@@ -42,3 +42,17 @@ MC Pilot 0.16.0；独立 Paper 1.20.4 build 496 + Fabric 1.20.4 客户端，真�
 ```
 abb2d2a9dd53ae7e78c0b5524aa294e14938242d4c5a9d03ce8e10a8344d5db1
 ```
+
+## 2026-09-23 正式发布补充
+
+Klib 0.5.0 已通过 [正式发布流程](https://github.com/kzheart/klib/actions/runs/35766668624) 发布至 Maven Central，Central 最终状态为 `PUBLISHED`。标签 `klib-v0.5.0` 对应提交 `3cacd87b6d1d98ccd67cdb27bfcdf8d658f6eadc`；Guard API 保持 0.2.0。
+
+发布后省略 `-PklibSource`，执行以下命令，从 Maven Central 解析 0.5.0 后构建成功，并通过示例制品检查（Java 8 字节码、重定位及不包含 Bukkit）：
+
+```bash
+./gradlew -p examples/annotated-klib-plugin clean check --refresh-dependencies --no-configuration-cache
+```
+
+上方 2026-09-22 的记录保留当日验证范围；本次正式发布没有重复执行真实 Minecraft 场景。
+
+发布后逐个下载核对全部 19 个普通模块的 POM、JAR、sources、Javadoc 和 JAR 签名文件，所有 JAR 的 SHA-1 与 Central 公布值一致。

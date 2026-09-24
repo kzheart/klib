@@ -380,6 +380,7 @@ project(":klib-item") {
         add("compileOnly", compileSpigot)
         add("testImplementation", testSpigot)
         add("testImplementation", "com.google.guava:guava:21.0")
+        add("testRuntimeOnly", "commons-lang:commons-lang:2.6")
         add("runtimeOnly", itemNbtApi)
     }
 }

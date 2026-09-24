@@ -59,6 +59,29 @@ public final class ToolItems {
 
 名称和 lore 支持 `&` 颜色代码。数量必须处于材质可堆叠范围内；`Items.resolveMaterial(...)` 接受大小写差异、短横线以及带命名空间的材质名，未知材质会直接抛出异常。
 
+### 模型、光效与头颅
+
+> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
+
+```java
+ItemStack sword = Items.of("DIAMOND_SWORD")
+        .customModelData(1001)
+        .unbreakable(true)
+        .glow(true)
+        .build();
+
+Integer model = Items.customModelData(sword);   // 未设置或服务端不支持时为 null
+
+ItemStack head = Items.playerHead()
+        .skullOwner(player.getUniqueId())
+        .name("&b" + player.getName())
+        .build();
+```
+
+- `customModelData(...)` 在 1.14 以前的服务端没有对应属性，调用会被忽略；需要区分时先调用 `Items.supportsCustomModelData()`。传入 `null` 清除。
+- `glow(true)` 在 1.20.5 及以上使用原生光效覆盖；更早版本添加一级 `LURE` 附魔并隐藏附魔标记。`glow(false)` 只移除由 `glow(true)` 添加的这组附魔与标记。
+- `Items.playerHead()` 在 1.13+ 创建 `PLAYER_HEAD`，在 1.12 创建数据值为 3 的 `SKULL_ITEM`。`skullOwner(...)` 要求物品是玩家头颅，否则抛出 `IllegalArgumentException`；传入 `UUID` 时通过 `Bukkit.getOfflinePlayer` 解析。
+
 ## 读取和更新标签
 
 标签键必须采用 `namespace:path` 形式。内置类型包括字符串、整数、长整数、双精度数、布尔值和字节数组。
@@ -113,7 +136,45 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 
 ## 外部物品系统
 
-需要接入 MMOItems、NeigeItems、ItemsAdder 等系统时，实现 `ExternalItemProvider`，把“按提供器和 ID 创建物品”以及“识别已有物品”隔离在适配器中。klib 不会自动发现这些插件，也不会把具体第三方 API 泄漏到通用物品逻辑里。
+> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
+
+`ExternalItems` 用统一的 `prefix:id` 引用生成和识别外部物品。内置四个反射适配器，业务插件不需要在编译期依赖这些插件：
+
+| 前缀 | 插件 | ID 形式 | 识别已有物品 |
+| --- | --- | --- | --- |
+| `mi` | MMOItems 6.x | `TYPE:ID`，例如 `mi:SWORD:FLAME_BLADE` | 支持 |
+| `ni` | NeigeItems | 物品 ID，例如 `ni:heal_potion` | 支持 |
+| `ia` | ItemsAdder | `namespace:id`，例如 `ia:ruby:gem` | 支持 |
+| `mm` | MythicMobs 4.x / 5.x | 物品 ID | 仅 5.x 支持 |
+
+没有前缀或前缀为 `minecraft` 的引用视为原版材质，例如 `DIAMOND`、`minecraft:diamond`。
+
+探测是显式调用，不会在类加载时自动发生。应在目标插件启用之后调用，并在 `plugin.yml` 中把它们声明为 `softdepend`：
+
+```java
+import me.kzheart.klib.item.ExternalItems;
+
+ExternalItems items = ExternalItems.detect();
+items.report().forEach(state -> logger().info("外部物品：" + state));
+// mi(MMOItems)=AVAILABLE、ni(NeigeItems)=MISSING: 未安装或未启用、mm(MythicMobs)=FAILED: ...
+
+ItemStack potion = items.create("ni:heal_potion", 3).orElse(null);
+Optional<ItemRef> ref = items.identify(player.getInventory().getItemInMainHand());
+boolean isBlade = items.matches("mi:SWORD:FLAME_BLADE", item);
+Predicate<ItemStack> matcher = items.matcher("mi:MATERIAL:SOUL_GEM");   // 预先解析，可重复使用
+ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 ItemSpec 组合
+```
+
+行为边界：
+
+- `parse`、`matcher` 和 `spec` 在遇到未知前缀或不存在的材质时抛出 `IllegalArgumentException`，便于在加载配置时发现拼写错误。
+- 内置前缀对应的插件未安装时，`create` 返回空、`matches` 返回 `false`，不会抛出异常；`report()` 给出每个前缀的状态与失败原因。
+- 原版引用只匹配**不被任何已注册外部系统识别**的物品，因此 MMOItems 的钻石不会被当作普通钻石扣除。
+- 实例不可变。`with(source)` 返回追加了自定义 `ExternalItemSource` 的新实例；前缀 `minecraft` 保留给原版材质。
+- 生成与识别会调用外部插件，遵守这些插件自身的线程要求，通常应在主线程调用。
+
+接入其他物品系统时实现 `ExternalItemSource`（前缀、插件名、`create(id)`、`identify(item)`），再通过 `with(...)` 注册。
+`ExternalItems` 同时实现了旧的 `ExternalItemProvider`，可以直接传给 `ItemSpec.Builder.external(...)`。
 
 ## 生命周期与线程边界
 

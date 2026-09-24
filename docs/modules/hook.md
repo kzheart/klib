@@ -13,7 +13,8 @@ PlayerPoints 与 XConomy，并提供由 `Scope` 管理的 PlaceholderAPI 注册 
 - 需要接入 Vault、PlayerPoints 或 XConomy，但不希望第三方插件缺失时阻止自己的插件启动；
 - 需要把经济操作统一为 `BigDecimal` 余额、扣款、发放和格式化接口；
 - 需要按顺序组合多种货币，并得到失败补偿的明细；
-- 需要注册随 `Scope` 重建和关闭的 PlaceholderAPI 扩展。
+- 需要注册随 `Scope` 重建和关闭的 PlaceholderAPI 扩展；
+- 需要从配置字符串解析“金币 + 点券 + 道具 + 权限”这类消耗，失败时自动退还，并发放命令、物品、货币奖励。
 
 ## 接入
 
@@ -161,6 +162,98 @@ logger().info(registration.isAvailable()
 
 默认注册不会在 PlaceholderAPI 自身 reload 后持久保留。确有需要时可显式构造
 `new BukkitPapiRegistrar(plugin, true)` 并通过 `Papi.register(...)` 注册。
+
+## 消耗与奖励
+
+> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
+
+`me.kzheart.klib.hook.cost` 把配置里的消耗和奖励条目解析成可执行的计划。条目格式为 `类型:参数`，末尾可追加
+`" | 描述"` 覆盖面向玩家的描述。类型需要显式注册，Klib 不预设 `money` 对应哪种货币。
+
+```java
+import me.kzheart.klib.hook.cost.*;
+import me.kzheart.klib.item.ExternalItems;
+
+ExternalItems items = ExternalItems.detect();   // 来自 klib-item，可选
+Hook<Currency> vault = root.install(CurrencyHooks.vault(getServer()));
+Hook<Currency> points = root.install(CurrencyHooks.playerPoints(playerPointsApi));
+
+Costs costs = Costs.builder()
+        .defaults()                                               // perm、level
+        .type("money", CostTypes.currency(vault.value(), "金币"))
+        .type("points", CostTypes.currency(points.value(), "点券"))
+        .type("item", CostTypes.items(items::matcher))
+        .type("kether", CostTypes.condition((player, script) -> engine
+                .evalCondition(script, ScriptContext.builder().sender(player).build())
+                .toCompletableFuture().getNow(Boolean.FALSE)))
+        .build();
+
+Rewards rewards = Rewards.builder()
+        .defaults(getServer())                                    // console、player、op、msg
+        .type("money", RewardTypes.currency(vault.value(), "金币"))
+        .type("item", RewardTypes.items((ref, amount) -> items.create(ref, amount).orElse(null)))
+        .build();
+```
+
+```yaml
+cost:
+  - "money:500"
+  - "points:20"
+  - "item:mi:MATERIAL:SOUL_GEM*3 | 灵魂宝石 ×3"
+  - "perm:waypoint.vip | 需要 VIP"
+  - "kether:check player level >= 30 | 等级达到 30"
+reward:
+  - "console:give %player% diamond 1"
+  - "item:ni:heal_potion*2"
+  - "msg:&a传送点已解锁"
+```
+
+```java
+CostPlan cost = costs.parse(config.cost);        // 条目非法时抛出 IllegalArgumentException
+RewardPlan reward = rewards.parse(config.reward);
+
+for (CostLine line : cost.check(player)) {       // 渲染 lore：✔ 金币 500 / ✘ 灵魂宝石 ×3
+    lore.add((line.satisfied() ? "&a✔ " : "&c✘ ") + line.description());
+}
+
+CostResult result = cost.charge(player);
+if (!result.success()) {
+    player.sendMessage("条件不足：" + result.failedCost());
+    if (!result.compensated()) {
+        logger().error("退还失败，需要人工处理：" + result.refundFailures());
+    }
+    return;
+}
+RewardResult granted = reward.grant(player);
+if (!granted.success()) {
+    logger().warn("部分奖励发放失败：" + granted.failures());
+}
+```
+
+内置消耗类型：
+
+| 工厂 | 参数 | 行为 |
+| --- | --- | --- |
+| `CostTypes.currency(currency, label)` | 金额，例如 `500` | 扣款；退还时调用 `give` |
+| `CostTypes.items(matchers[, names])` | `引用*数量`，数量默认 1 | 整体扣除背包物品；退还时归还原物品，放不下则掉落 |
+| `CostTypes.level()` | 等级数 | 扣除经验等级 |
+| `CostTypes.permission()` | 权限节点 | 只检查 |
+| `CostTypes.condition(predicate)` | 原样交给谓词 | 只检查 |
+
+内置奖励类型：`RewardTypes.consoleCommand(server)`、`playerCommand()`、`opCommand()`、`message()`、
+`currency(currency, label)`、`items(creator[, names])`。命令与消息会替换 `%player%` 和 `%uuid%`；需要
+PlaceholderAPI 时使用接受 `BiFunction<Player, String, String>` 的重载。
+
+行为边界：
+
+- `charge` 先检查全部消耗，任一不满足时不修改任何状态；全部满足后依次扣除，某项扣除失败或抛出异常时逆序退还已扣部分。
+  退还失败记录在 `refundFailures()` 中，`compensated()` 为 `false`，需要人工处理。
+- 检查中抛出的异常视为“不满足”，异常信息在 `CostLine.error()` 与 `CostResult.message()` 中。
+- `condition` 的谓词应同步返回。上例中的 Kether 脚本若包含 `wait` 等异步动作，`getNow` 会返回 `false`。
+- `RewardPlan.grant` 在某项失败后继续发放其余奖励；控制台命令未被处理（`dispatchCommand` 返回 `false`）视为失败。
+- `opCommand` 临时授予 OP 并在 `finally` 中撤销，只应用于受信任的配置；能用 `console` 时优先使用 `console`。
+- 所有检查、扣除和发放都会访问玩家状态，应在 Bukkit 主线程调用。
+- 本包不依赖 `klib-item` 或 `klib-script`：物品通过 `Function<String, Predicate<ItemStack>>` 接入，脚本通过谓词接入。
 
 ## 线程、生命周期与边界
 

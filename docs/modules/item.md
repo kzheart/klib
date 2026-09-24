@@ -61,8 +61,6 @@ public final class ToolItems {
 
 ### 模型、光效与头颅
 
-> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
-
 ```java
 ItemStack sword = Items.of("DIAMOND_SWORD")
         .customModelData(1001)
@@ -135,8 +133,6 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 编码值包含 Minecraft 数据版本并可选用 GZIP。跨服务器版本解码时会记录数据版本不一致警告，Minecraft 仍可能升级或拒绝其中的物品。解码器限制输入和解压后的大小，并使用类白名单约束 Java 反序列化；即便如此，也应把编码值视为业务数据，不应把任意超大外部输入直接交给解码器。
 
 ## 外部物品系统
-
-> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
 
 `ExternalItems` 用统一的 `prefix:id` 引用生成和识别外部物品。内置四个反射适配器，业务插件不需要在编译期依赖这些插件：
 

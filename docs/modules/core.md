@@ -6,7 +6,7 @@
 
 `klib-core` 是所有 Klib 插件的生命周期底座。它提供 `KPlugin`、可组合的 `Scope`、与作用域绑定的 Bukkit 事件和任务，以及统一日志。其他大多数模块都会间接引入它。
 
-## 0.5.0：默认作用域与组件
+## 默认作用域与组件
 
 新插件可覆盖无参 `setup()`，使用绑定插件生命周期的 `commands()`、`configs()`、`events()`、`tasks()` 和 `components()`。
 `KComponent` 提供相同服务入口；`components().install(instance)` 返回可关闭的 ComponentHandle。
@@ -60,29 +60,37 @@ dependencies {
 
 ## 快速开始
 
-插件主类继承 `KPlugin`，只实现 `setup`。不要再覆盖 `onEnable` 或 `onDisable`，这两个入口由 Klib 固定管理。
+插件主类继承 `KPlugin`，覆盖无参 `setup()`。不要再覆盖 `onEnable` 或 `onDisable`，这两个入口由 Klib 固定管理。
 
 ```java
 package com.example.myplugin;
 
 import me.kzheart.klib.KPlugin;
 import me.kzheart.klib.scheduler.Ticks;
-import me.kzheart.klib.scope.Scope;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 
 public final class MyPlugin extends KPlugin {
     @Override
-    protected void setup(Scope root) {
-        root.on(PlayerJoinEvent.class, event ->
-                logger().info(event.getPlayer().getName() + " joined"));
-
-        root.every(Ticks.seconds(30), () ->
+    protected void setup() {
+        events().register(new JoinListener());
+        tasks().every(Ticks.seconds(30), () ->
                 logger().debug("heartbeat", "plugin is alive"));
+    }
+
+    private final class JoinListener implements Listener {
+        @EventHandler
+        public void onJoin(PlayerJoinEvent event) {
+            logger().info(event.getPlayer().getName() + " joined");
+        }
     }
 }
 ```
 
-`setup` 中注册的资源属于根作用域。插件关闭时，根作用域会自动关闭；如果初始化中途失败，已经安装的资源也会被清理，然后插件被禁用。
+`events()`、`tasks()`、`commands()`、`configs()` 和 `components()` 绑定插件生命周期，注册的资源都属于根作用域。
+下文示例中的 `root` 指根作用域，在无参 `setup()` 中通过 `context().scope()` 取得；也可以改为覆盖
+`setup(Scope root)`，两种入口不要同时覆盖。插件关闭时，根作用域会自动关闭；如果初始化中途失败，已经安装的资源也会被清理，然后插件被禁用。
 
 ## 组织功能生命周期
 
@@ -237,8 +245,6 @@ public void loadAndApply(final Player player) {
 
 ## 冷却
 
-> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
-
 `Cooldowns<K>` 按任意键记录冷却截止时间，线程安全。它实现 `Disposable`，安装进作用域后随作用域关闭清空：
 
 ```java
@@ -273,8 +279,6 @@ weaponCd.clearIf(k -> k.owner().equals(playerId));
 - `create(Clock)` 与 `perPlayer(scope, Clock)` 接受自定义时钟，便于测试。
 
 ## 加权随机、区间与概率
-
-> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
 
 `me.kzheart.klib.random` 包统一了抽奖、掉落和数值浮动中常见的随机逻辑。
 

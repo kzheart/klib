@@ -37,15 +37,18 @@
 内容边界：
 
 - 不提供示例工程，仓库中不得新增 `examples/` 或其他示例项目；用法说明只写在模块文档与 Wiki 中。
-- 根 `README.md` 不写具体版本号、版本专属章节或“当前版本”说明；代码片段中的版本用
-  `<klib-version>`、`<gradle-plugin-version>`、`<guard-api-version>` 等占位符，当前版本与兼容关系
-  只维护在 Wiki 首页和 `CHANGELOG.md`。
+- 根 `README.md`、模块文档和 Wiki 都只描述当前最新状态，不写具体版本号、版本专属章节、“适用于某版本”
+  说明或“未发布”标注；代码片段中的版本用 `<klib-version>`、`<gradle-plugin-version>`、
+  `<guard-api-version>` 等占位符。版本信息只维护在 `CHANGELOG.md` 与 `gradle.properties`。
+- 文档与 Wiki 的示例代码必须使用当前推荐的 API（例如 `KPlugin` 的无参 `setup()` 与
+  `commands()`/`configs()`/`events()`/`tasks()`），旧写法只在确有需要的高级场景中出现并说明原因；
+  API 变化后同步改写受影响的示例代码。
 
-版本标注规则：
+版本规则：
 
-- 已发布版本不包含的功能，在 CHANGELOG 中写入“未发布”段，不得写进已发布版本号下；
-  模块文档和 Wiki 的对应章节开头注明“未发布：<已发布版本> 不包含本节功能”。
-- 发布新版本时，把“未发布”段改为正式版本号，并同步去掉文档和 Wiki 中的未发布标注、更新 Wiki 首页版本。
+- 已发布版本不包含的功能写入 `CHANGELOG.md` 的“未发布”段，不得写进已发布版本号下。
+- 发布新版本时，更新 `gradle.properties` 中的版本，把“未发布”段改为正式版本号与日期，再按
+  `docs/releasing.md` 打 tag 发布。
 - 动手前先确认当前分支基于最新的 `origin/main`，并以最新 tag 判断哪个版本已经发布。
 
 ## Git

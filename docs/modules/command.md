@@ -6,7 +6,7 @@
 
 `klib-command` 用类型化树描述 Bukkit 命令，统一完成参数解析、补全、权限、玩家限制、帮助、错误定位和作用域注销。在支持的服务端上，它还会尽力同步 Brigadier 客户端命令树。
 
-## 0.5.0：注解与平铺声明
+## 注解与平铺声明
 
 `commands().register(new PlayerCommands(), new AdminCommands())` 将 `@Command`、`@Route` 方法编译为同一套命令树。
 支持参数注入、Permission、Check、Greedy、带前置参数上下文的 Suggest/Suggestions，以及 CommandCall.await 主线程回调。
@@ -52,11 +52,44 @@ dependencies {
 
 ## 快速开始
 
-先安装语言与命令能力，再通过 `Scope.command` 注册：
+最常用的写法是注解声明。安装命令能力后，用 `commands().register(...)` 注册处理类：
 
 ```java
 @Override
-protected void setup(Scope root) {
+protected void setup() {
+    CommandModule.install(this);
+    commands().register(new CoinCommands());
+}
+```
+
+```java
+import me.kzheart.klib.command.annotation.Command;
+import me.kzheart.klib.command.annotation.Param;
+import me.kzheart.klib.command.annotation.Permission;
+import me.kzheart.klib.command.annotation.Route;
+
+@Command("coins")
+@Permission("myplugin.coins")
+public final class CoinCommands {
+    @Route("give <target> <amount>")
+    @Permission("myplugin.coins.give")
+    public void give(CommandSender sender,
+            @Param("target") Player target,
+            @Param("amount") int amount) {
+        giveCoins(target, amount);
+    }
+}
+```
+
+`CommandModule.install(this)` 按插件名发现 `plugin.yml` 中的命令并使用默认命令消息。注解的完整规则见
+[组件与注解](../annotations.md)。
+
+需要让命令错误与帮助复用语言文件，或在运行时动态构建命令树时，先安装语言能力，再通过 `Scope.command` 注册：
+
+```java
+@Override
+protected void setup() {
+    Scope root = context().scope();
     LangRuntime lang = LangModule.install(
             root,
             getServer(),

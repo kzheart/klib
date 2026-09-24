@@ -9,8 +9,7 @@ Native、Collector 和生产部署配置不在本仓库中。
 
 ## 最小接入
 
-当前发布版本、Gradle 插件版本与兼容关系见 [Wiki 首页](https://github.com/kzheart/klib/wiki)，变更记录见
-[CHANGELOG.md](CHANGELOG.md)。下文中的 `<...-version>` 按 Wiki 填写。
+版本记录见 [CHANGELOG.md](CHANGELOG.md)，下文中的 `<...-version>` 填写 Maven Central 上已发布的版本。
 
 推荐通过 Klib Gradle 插件选择模块：
 

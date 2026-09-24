@@ -1,6 +1,5 @@
-# 组件与注解 API（0.5.0）
+# 组件与注解 API
 
-本页对应已发布至 Maven Central 的 Klib 0.5.0，发布标签为 `klib-v0.5.0`。使用 Gradle 插件 0.5.1 时须显式设置 `libraryVersion.set("0.5.0")`；0.4.0 不包含这些 API。
 
 ## 默认作用域
 
@@ -223,5 +222,5 @@ public final class DungeonMenu {
 
 ## 范围
 
-本次不引入全包扫描、自动注入、事务代理或通用 @Async。数据事务、物品 Builder、语言消息和外部插件能力继续使用现有显式 API。
-语言接口注解是可选后续方向，本版没有 @MessageKey 或 @Placeholder 接口代理。
+不引入全包扫描、自动注入、事务代理或通用 @Async。数据事务、物品 Builder、语言消息和外部插件能力继续使用现有显式 API。
+语言接口注解是可选后续方向，目前没有 @MessageKey 或 @Placeholder 接口代理。

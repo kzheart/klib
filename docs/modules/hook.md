@@ -165,8 +165,6 @@ logger().info(registration.isAvailable()
 
 ## 消耗与奖励
 
-> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
-
 `me.kzheart.klib.hook.cost` 把配置里的消耗和奖励条目解析成可执行的计划。条目格式为 `类型:参数`，末尾可追加
 `" | 描述"` 覆盖面向玩家的描述。类型需要显式注册，Klib 不预设 `money` 对应哪种货币。
 

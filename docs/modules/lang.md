@@ -60,7 +60,8 @@ messages:
 
 ```java
 @Override
-protected void setup(Scope root) {
+protected void setup() {
+    Scope root = context().scope();
     LangRuntime lang = LangModule.install(
             root,
             getServer(),

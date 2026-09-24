@@ -6,7 +6,7 @@
 
 `klib-config` 将类路径中的默认 YAML 提取到插件数据目录，并映射为 Java 8 POJO。它支持默认值合并、注释保留、文件监听、原子重载、版本迁移和目录型配置注册表。
 
-## 0.5.0：配置声明与校验
+## 配置声明与校验
 
 `ConfigModule.install(plugin)` 简化默认模块安装；`configs().load(Settings.class)` 从 `@ConfigFile` 取得文件路径。
 支持 `@Key` 字段映射、`@Range` 数值范围、`@Validate` 跨字段校验；失败沿用原子重载流程，保留旧值。
@@ -75,19 +75,21 @@ public final class Settings {
 }
 ```
 
-在插件的 `setup` 中安装能力并加载文档：
+给配置类型标注文件路径：
+
+```java
+@ConfigFile("config.yml")
+public final class Settings { /* 同上 */ }
+```
+
+在插件的 `setup()` 中安装能力并加载文档：
 
 ```java
 @Override
-protected void setup(Scope root) {
-    ConfigModule.install(
-            root,
-            getDataFolder().toPath(),
-            getClassLoader(),
-            "defaults");
+protected void setup() {
+    ConfigModule.install(this);
 
-    ConfigDocument<Settings> config =
-            root.config(Settings.class, "config.yml");
+    ConfigDocument<Settings> config = configs().load(Settings.class);
 
     logger().info("数据库地址："
             + config.value().database.host
@@ -95,6 +97,10 @@ protected void setup(Scope root) {
             + config.value().database.port);
 }
 ```
+
+`ConfigModule.install(this)` 使用插件数据目录、插件类加载器和资源目录 `defaults`；需要其他目录或迁移提供器时，
+改用接收 `Scope` 的重载，此时通过 `context().scope()` 取得根作用域。没有 `@ConfigFile` 时可调用
+`configs().load(Settings.class, "config.yml")`。
 
 首次加载时，`defaults/config.yml` 会提取为插件数据目录中的 `config.yml`。请求路径必须是数据目录内的非空相对路径，`../` 等越界路径会被拒绝。
 
@@ -106,7 +112,7 @@ protected void setup(Scope root) {
 - 大小写不敏感的枚举；
 - `Duration`，支持 ISO-8601 和 `ms`、`s`、`m`、`h`、`d` 组合，例如 `1m30s`；
 - Core 的 `IntRange` 与 `DoubleRange`，接受单个数字、`"1-5"`/`"1~5"`/`"-5~-1"` 文本，或带 `min`、`max`
-  的映射；上界小于下界时加载失败并报告位置（未发布，0.5.0 不包含）；
+  的映射；上界小于下界时加载失败并报告位置；
 - 普通数组；
 - 带泛型参数的 `List<T>`、`Set<T>` 等集合；
 - 键类型为 `String` 的 `Map<String, T>`；
@@ -154,7 +160,7 @@ YamlConfigMapper mapper = new YamlConfigMapper()
 ### 监听变化
 
 ```java
-ConfigDocument<Settings> config = root.config(Settings.class, "config.yml");
+ConfigDocument<Settings> config = configs().load(Settings.class);
 
 config.onChange(() -> {
     logger().info("配置已更新，debug=" + config.value().debug);

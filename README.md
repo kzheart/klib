@@ -74,11 +74,11 @@ dependencies {
 
 | 模块 | 用途 |
 | --- | --- |
-| `klib-core` | `KPlugin`、`Scope`、调度、事件与资源释放 |
+| `klib-core` | `KPlugin`、`Scope`、调度、事件、资源释放、冷却与加权随机 |
 | `klib-config` | YAML 配置映射、迁移与原子重载 |
 | `klib-lang` | 多语言消息、占位符和富文本 |
 | `klib-command` | 类型化命令树、权限、建议与内置管理命令 |
-| `klib-item` | 物品构建、标签和跨版本编解码 |
+| `klib-item` | 物品构建、标签、跨版本编解码与 MMOItems/NeigeItems/ItemsAdder/MythicMobs 物品适配 |
 | `klib-data` | 存储契约、迁移与玩家数据缓存，不包含存储实现或第三方运行时 |
 | `klib-data-json` | JSON 文件存储；使用宿主提供的 Gson |
 | `klib-data-jdbc` | JDBC 公共执行引擎，不包含数据库驱动 |
@@ -86,7 +86,7 @@ dependencies {
 | `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
 | `klib-script` | Kether 脚本、异步组合与 Guard 商品互操作适配 |
-| `klib-hook` | Vault、PlayerPoints、XConomy 和 PlaceholderAPI |
+| `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |
 | `klib-compat*` | Minecraft 版本能力与实现选择 |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 |
 | `klib-guard-api` | 受保护商品的生命周期与门户级 Kether Broker 契约 |

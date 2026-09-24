@@ -1,5 +1,22 @@
 # 更新日志
 
+## 未发布
+
+以下功能不包含在已发布的 0.5.0 中，将随下一个版本提供。
+
+### 新功能
+
+- `klib-core` 新增 `Cooldowns`：任意键的线程安全冷却表，支持原子获取、缩短、延长、按条件清除，
+  `perPlayer(scope)` 在玩家退出时自动移除。
+- `klib-core` 新增 `WeightedPool`、`IntRange`、`DoubleRange` 与 `Chance`；非法权重在构建时失败，
+  区间解析支持 `1-5`、`1~5` 与负数。`klib-config` 将两种区间注册为内置配置类型。
+- `ItemBuilder` 新增 `customModelData`、`unbreakable`、`glow`、`skullOwner`，`Items` 新增 `playerHead()`
+  与 `customModelData(item)`；低版本缺失的属性通过反射兼容。
+- `klib-item` 新增 `ExternalItems`，以 `prefix:id` 统一生成与识别 MMOItems、NeigeItems、ItemsAdder 和
+  MythicMobs 物品，全部通过反射适配，并提供挂钩状态报告。
+- `klib-hook` 新增 `me.kzheart.klib.hook.cost`：从配置字符串解析消耗与奖励，先检查后扣除，
+  中途失败自动逆序退还，并报告无法退还的部分。
+
 ## 0.4.0 - 2026-08-21
 
 ### 破坏性变更

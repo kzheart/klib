@@ -28,11 +28,18 @@
 
 每次改动完成后，在同一次任务内同步更新以下文档，不要留到之后：
 
-1. 仓库文档：受影响的 `docs/modules/*.md`、根 `README.md`（模块表、版本、接入方式）和 `CHANGELOG.md`。
+1. 仓库文档：受影响的 `docs/modules/*.md`、根 `README.md`（模块表、接入方式）和 `CHANGELOG.md`。
 2. GitHub Wiki（`https://github.com/kzheart/klib.wiki.git`）：Wiki 页面是 `docs/modules` 的改写版，
    例如 `docs/modules/core.md` 对应 Wiki 的 `Core.md`。按相同内容更新对应页面，把仓库内相对链接改成
    Wiki 页面链接（如 `../annotations.md` 写作 `Annotations`），新增页面时同步更新 `_Sidebar.md`。
    Wiki 需单独 clone 到临时目录修改，提交信息同样使用 Conventional Commits，然后推送。
+
+内容边界：
+
+- 不提供示例工程，仓库中不得新增 `examples/` 或其他示例项目；用法说明只写在模块文档与 Wiki 中。
+- 根 `README.md` 不写具体版本号、版本专属章节或“当前版本”说明；代码片段中的版本用
+  `<klib-version>`、`<gradle-plugin-version>`、`<guard-api-version>` 等占位符，当前版本与兼容关系
+  只维护在 Wiki 首页和 `CHANGELOG.md`。
 
 版本标注规则：
 

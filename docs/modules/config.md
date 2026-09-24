@@ -105,6 +105,8 @@ protected void setup(Scope root) {
 - 字符串、布尔、字符和 Java 数值类型；
 - 大小写不敏感的枚举；
 - `Duration`，支持 ISO-8601 和 `ms`、`s`、`m`、`h`、`d` 组合，例如 `1m30s`；
+- Core 的 `IntRange` 与 `DoubleRange`，接受单个数字、`"1-5"`/`"1~5"`/`"-5~-1"` 文本，或带 `min`、`max`
+  的映射；上界小于下界时加载失败并报告位置（未发布，0.5.0 不包含）；
 - 普通数组；
 - 带泛型参数的 `List<T>`、`Set<T>` 等集合；
 - 键类型为 `String` 的 `Map<String, T>`；

@@ -235,6 +235,81 @@ public void loadAndApply(final Player player) {
 
 需要多步组合又不想每步都传执行器时，用 `AsyncTasks.onSync(stage, scope)` 得到一个在主线程完成的等价阶段，之后的非 `Async` 回调即运行在主线程。
 
+## 冷却
+
+> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
+
+`Cooldowns<K>` 按任意键记录冷却截止时间，线程安全。它实现 `Disposable`，安装进作用域后随作用域关闭清空：
+
+```java
+import me.kzheart.klib.cooldown.Cooldowns;
+
+// 以玩家 UUID 为键：自动安装进作用域，玩家退出时移除其冷却
+Cooldowns<UUID> skillCd = Cooldowns.perPlayer(root);
+
+Cooldowns.Attempt attempt = skillCd.tryAcquire(player.getUniqueId(), Duration.ofSeconds(8));
+if (!attempt.acquired()) {
+    player.sendMessage("冷却中，还剩 " + attempt.remaining().getSeconds() + " 秒");
+    return;
+}
+```
+
+键可以是任意类型，按武器、按技能等场景用复合键即可，不需要拼字符串：
+
+```java
+Cooldowns<WeaponKey> weaponCd = root.install(Cooldowns.create());
+weaponCd.set(key, Duration.ofSeconds(5));       // 无条件设置
+weaponCd.reduce(key, Duration.ofSeconds(2));    // 缩短，缩到零即结束
+weaponCd.extend(key, Duration.ofSeconds(1));    // 延长，未冷却时从现在开始
+weaponCd.clearIf(k -> k.owner().equals(playerId));
+```
+
+行为边界：
+
+- `tryAcquire` 是原子操作：冷却结束时开始新冷却并返回成功；仍在冷却中时不修改，返回剩余时间。
+- 时长为零不会开始冷却；负时长抛出 `IllegalArgumentException`；超大时长饱和到 `Long.MAX_VALUE` 毫秒。
+- 过期条目在读取时移除，并在每 256 次写入时批量清理；需要立即清理时调用 `purgeExpired()`。
+- 冷却只保存在内存中，不跨重启。需要持久化时由调用方用 `klib-data` 保存截止时间。
+- `create(Clock)` 与 `perPlayer(scope, Clock)` 接受自定义时钟，便于测试。
+
+## 加权随机、区间与概率
+
+> 未发布：0.5.0 不包含本节功能，将随下一个版本提供。
+
+`me.kzheart.klib.random` 包统一了抽奖、掉落和数值浮动中常见的随机逻辑。
+
+`WeightedPool<T>` 是不可变的加权随机池，构建时就拒绝非法配置，而不是在抽取时各自猜测：
+
+```java
+import me.kzheart.klib.random.WeightedPool;
+
+WeightedPool<Drop> pool = WeightedPool.of(drops, Drop::weight);
+Drop one = pool.pick();                        // 或 pick(random)
+List<Drop> three = pool.pickDistinct(3);       // 不放回抽取
+double chance = pool.chance(0);                // 第 0 项被抽中的概率
+```
+
+- 负数、NaN 和无穷权重抛出 `IllegalArgumentException`；池非空但总权重为零同样失败。
+- 权重为零的条目保留但永远不会被抽中；`pickDistinct` 可抽条目不足时返回全部正权重条目。
+- 空池可以创建，`pick` 抛出 `IllegalStateException`，`pickDistinct` 返回空列表。
+
+`IntRange` 与 `DoubleRange` 是闭区间，`parse` 接受 `5`、`1-5`、`1~5`、`2 to 8`，并正确处理负数，例如
+`-5-3` 表示 -5 到 3、`-5~-1` 表示 -5 到 -1。上界小于下界时抛出异常。它们已注册为 Config 模块的内置类型，
+配置字段可直接声明：
+
+```java
+public final class DropConfig {
+    IntRange amount = IntRange.of(1, 1);
+    DoubleRange bonus = DoubleRange.of(0, 0);
+}
+
+int n = config.amount.random();       // 闭区间整数
+double b = config.bonus.random();     // [min, max) 内均匀取值
+```
+
+`Chance.percent(12.5)` 按百分比判定，`Chance.ratio(0.125)` 按比例判定；小于等于 0 永不命中，大于等于上限必定命中，
+NaN 或无穷抛出异常。所有随机方法都有接受 `java.util.Random` 的重载，便于复现与测试。
+
 ## 日志
 
 `KPlugin.logger()` 返回 `KLogger`：

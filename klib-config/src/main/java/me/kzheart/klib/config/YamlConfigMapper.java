@@ -1,6 +1,8 @@
 package me.kzheart.klib.config;
 
 import me.kzheart.klib.config.annotation.*;
+import me.kzheart.klib.random.DoubleRange;
+import me.kzheart.klib.random.IntRange;
 import me.kzheart.klib.reflect.Declarations;
 import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
@@ -120,6 +122,12 @@ public final class YamlConfigMapper {
                 throw node.mappingError("expected a duration string, got " + kind(raw));
             }
             return parseDuration(node, (String) raw);
+        }
+        if (type == IntRange.class) {
+            return convertIntRange(node, raw);
+        }
+        if (type == DoubleRange.class) {
+            return convertDoubleRange(node, raw);
         }
         if (type.isEnum()) {
             return convertEnum(node, raw, type);
@@ -454,6 +462,49 @@ public final class YamlConfigMapper {
         } catch (RuntimeException failure) {
             throw node.mappingError("invalid duration '" + value + "'", failure);
         }
+    }
+
+    /** 接受整数、{@code "1-5"}/{@code "1~5"} 文本，或带 {@code min}/{@code max} 的映射。 */
+    private static IntRange convertIntRange(ConfigNode node, Object raw) {
+        try {
+            if (raw instanceof String) {
+                return IntRange.parse((String) raw);
+            }
+            if (raw instanceof Number) {
+                return IntRange.exactly(((Integer) convertNumber(node, raw, Integer.class)).intValue());
+            }
+            if (raw instanceof Map<?, ?>) {
+                int min = ((Integer) convertNumber(node.child("min"), node.child("min").raw(), Integer.class)).intValue();
+                int max = ((Integer) convertNumber(node.child("max"), node.child("max").raw(), Integer.class)).intValue();
+                return IntRange.of(min, max);
+            }
+        } catch (ConfigException failure) {
+            throw failure;
+        } catch (IllegalArgumentException failure) {
+            throw node.mappingError(failure.getMessage(), failure);
+        }
+        throw node.mappingError("expected an integer range like 1-5, got " + kind(raw));
+    }
+
+    private static DoubleRange convertDoubleRange(ConfigNode node, Object raw) {
+        try {
+            if (raw instanceof String) {
+                return DoubleRange.parse((String) raw);
+            }
+            if (raw instanceof Number) {
+                return DoubleRange.exactly(((Number) raw).doubleValue());
+            }
+            if (raw instanceof Map<?, ?>) {
+                double min = ((Double) convertNumber(node.child("min"), node.child("min").raw(), Double.class)).doubleValue();
+                double max = ((Double) convertNumber(node.child("max"), node.child("max").raw(), Double.class)).doubleValue();
+                return DoubleRange.of(min, max);
+            }
+        } catch (ConfigException failure) {
+            throw failure;
+        } catch (IllegalArgumentException failure) {
+            throw node.mappingError(failure.getMessage(), failure);
+        }
+        throw node.mappingError("expected a number range like 0.5~2.5, got " + kind(raw));
     }
 
     private static boolean isNumeric(Class<?> type) {

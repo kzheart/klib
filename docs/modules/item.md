@@ -183,4 +183,3 @@ ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 It
 - `InventoryItems.give(...)` 在背包溢出时访问玩家世界并生成掉落物，只能用于在线玩家的同步流程。
 - `ItemCodec` 不是跨 Minecraft 数据版本的稳定数据库格式。长期保存时应保留迁移或无法解码时的降级策略。
 
-完整的标签、发放和编码组合用法见本页“完整示例”。

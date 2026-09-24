@@ -1,7 +1,6 @@
 # 组件与注解 API（0.5.0）
 
 本页对应已发布至 Maven Central 的 Klib 0.5.0，发布标签为 `klib-v0.5.0`。使用 Gradle 插件 0.5.1 时须显式设置 `libraryVersion.set("0.5.0")`；0.4.0 不包含这些 API。
-完整可编译示例见 [annotated-klib-plugin](../examples/annotated-klib-plugin/README.md)。
 
 ## 默认作用域
 

@@ -369,4 +369,4 @@ logger().warn("arena", "竞技场配置缺少出生点");
 - [Config](config.md)：类型化 YAML、热重载与迁移。
 - [Lang](lang.md)：可重载消息目录与 Bukkit 消息路由。
 - [Command](command.md)：由作用域持有的类型化命令树。
-- 完整接线方式见本页“快速开始”和“完整示例”。
+- 完整接线方式见本页“快速开始”。

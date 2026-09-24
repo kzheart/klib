@@ -14,7 +14,7 @@
 
 程序化声明可使用 `root.route("action start").argument(token).executes(handler)`，无需按层嵌套 lambda。
 领域参数解析用 `Arguments.contextual`；原有 Arguments.custom 保持两参数补全器语义。
-本页原有按树声明方式仍可用；新 API 的完整示例、权限合并和限制见 [组件与注解](../annotations.md)。
+本页原有按树声明方式仍可用；新 API 的完整用法、权限合并和限制见 [组件与注解](../annotations.md)。
 
 ## 何时使用
 
@@ -315,4 +315,4 @@ root.scope("arena", arena -> {
 - [Core](core.md)：命令注册的作用域和异步任务。
 - [Config](config.md)：可重载类型化配置。
 - [Lang](lang.md)：命令消息、帮助和富文本输出。
-- 完整命令树的组成方式见本页“构建命令树”和“完整示例”。
+- 完整命令树的组成方式见本页“构建命令树”。

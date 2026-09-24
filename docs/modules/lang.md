@@ -263,4 +263,4 @@ CommandModule.install(
 - [Config](config.md)：语言文件提取、监听和原子重载。
 - [Command](command.md)：复用语言管线显示错误与帮助。
 - [Hook](hook.md)：PlaceholderAPI 等可选插件集成。
-- 完整接线方式见本页“快速开始”和“完整示例”。
+- 完整接线方式见本页“快速开始”。

@@ -145,4 +145,3 @@ prompt.completionSync().thenAccept(outcome -> {
 - 点击动作抛出普通异常时，渲染器会记录错误并调用 `MenuErrorHandler`。可以在安装时提供统一的玩家提示，但错误处理器本身也应保持轻量。
 - 玩家在提示完成前可能下线；回调必须再次检查 `isOnline()`，且不要长期保存 `Player` 之外的可变菜单状态。
 
-分页菜单与聊天输入的完整组合方式见本页“完整示例”。

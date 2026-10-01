@@ -116,7 +116,7 @@ ScriptContext context = ScriptContext.builder()
 engine.eval("tell 任务已完成", context);
 ```
 
-可选宿主接口包括 `MessageSink`、`CommandSink`、`PlaceholderResolver`、`PlayerQuery` 和 `DelayScheduler`。只安装当前脚本确实需要的能力；脚本缺少服务时会以清晰异常失败，而不是静默跳过动作。
+可选宿主接口包括 `MessageSink`、`CommandSink`、`PlaceholderResolver`、`PlayerQuery`、`DelayScheduler`、`ScriptSenderQuery` 和 `ScriptPropertyAccess`。只安装当前脚本确实需要的能力；脚本缺少服务时会以清晰异常失败，而不是静默跳过动作。
 
 ## 注册业务语句
 
@@ -163,6 +163,56 @@ statements.registerKether(scope, "myplugin", "twice", QuestActionParser.of(reade
 ```
 
 这里的 `QuestActionParser`、`ParsedAction`、`QuestAction` 和 `QuestContext` 位于 `me.kzheart.klib.script.kether.core`。其中 `QuestActionParser` 与 `me.kzheart.klib.script.QuestActionParser`（`Statements` 系列使用的 `execute(StatementCall, ScriptContext)` 接口）同名而不同类型，`registerKether(...)` 只接受前者，写代码时不要依赖未限定名。这是需要完整 Kether 语法能力时的低层入口；普通固定参数业务语句仍优先使用 `Statements.combine()`。
+
+## 数值、赋值与发送者动作
+
+通用数值语句逐个执行嵌套动作，既有 `add/sub/mul/div` 仍保留：
+
+```text
+math add [ math div [ &size 5 ] 2 ]
+math 10 + 2 * 3
+set chooseA to round random 10
+permission admin
+sender
+```
+
+`math` 支持列表式 add/sub/mul/div（或 +、-、*、/）及中缀左结合，**不采用乘除优先级**。所有操作数可转换为 Int 时返回整数，整数除法截断；否则使用 Double。列表的操作数异常沿原动作规则打印错误并取 0；中缀首值错误向调用方传播，不复制原框架可能不结束的 Future。循环 break 状态尚未接入该动作，不能据此声明原框架循环动作兼容。
+
+`round` 返回饱和边界的 Int，半数向正无穷方向取整，NaN 抛错。`random N` 对 Int 返回 `[0,N)`；`random A to B` 的整数边界两端包含、自动排序，Double 使用半开区间，相等边界返回该值。集合和对象数组随机选元素，空集合/空数组返回 null；非空的 null 元素保留原错误行为。
+
+`set key to 动作` 顺序求值并将原始结果写入变量，动作自身返回 null；保留旧 `set key value` 的类型推断与返回值。支持 `set property key from 动作 to 动作` 与 `set &object[key] to 动作`，通过 `ScriptPropertyAccess` 明确适配对象，不自动反射任意字段。缺服务或不支持属性时抛错。属性服务的空对象或 unsupported 写入采用显式失败，原框架在这些分支仅输出警告；赋值值表达式保留打印错误并完成 null 的规则。尚未提供默认对象适配器、属性继承查找和读值 shorthand，不代表整个原对象属性模块已经提供。
+
+`permission` 接嵌套参数，使用 `ScriptSenderQuery.isPlayer` 确认玩家，再通过 `PlayerQuery.hasPermission` 查询；其他发送者失败。`sender` 对玩家使用 `ScriptSenderQuery.name`，对 null 及其他非玩家按原语义返回 `console`。原 `perm` 动作保留原有宿主查询行为，不因新动作改变。随机区间多行文本的 trimIndent 以及原随机动作非终止错误链不在当前兼容范围；这里传播异常，不返回永远不结束的 Future。
+
+## 原生动作与宿主变量
+
+原生 parser 中通过 `ScriptFrames.context(frame)` 访问 sender、locale、namespace 和已安装的服务；不用读取引擎内部变量。返回的 `ScriptContext` 是当前帧的实时视图，不是脱离执行上下文的副本。`setVariable` 依原生规则将非 `~` 变量写到根帧，`~` 局部变量留在当前帧；`removeVariable` 移除最近一层可见定义。`~klib:` 内部键不可读写。
+
+```java
+ScriptContext host = ScriptFrames.context(frame);
+host.setVariable("answer", Integer.valueOf(42));
+return ScriptFrames.eval(frame, "tell inline *\"answer={{ &answer }}\"")
+        .toCompletableFuture();
+```
+
+`ScriptFrames.variables(frame)` 返回父层在前、近层覆盖的只读原始变量快照，包含显式 null 或 `QuestFuture`；读取延迟变量的结果用 `host.variable(...)`，未就绪时保持原生错误，不阻塞。该优先级是通用的近层覆盖规则，业务需要其他历史枚举顺序时应明确自行组合帧。
+
+普通动作与原生动作即时共享同一帧变量；嵌套求值和整个脚本结束时将变量差量写回其调用上下文，包括失败前已经发生的修改。没有改变的键不会覆盖调用方同时新增或修改的值。宿主构建器可接收 null，原生显式 null 在快照与最终上下文保留；既有 `setVariable(name, null)` 仍表示删除，`variable(...)` 对 null 返回空 Optional。
+
+帧视图的线程和有效期与动作相同；不要留存到执行结束后，也不要把它当成线程安全的独立上下文。异步参数需要在引擎的 continuation executor 上继续访问帧和宿主服务。
+
+## 即时文本模板
+
+对于需要同步生成文本的调用方，使用显式的 `ScriptTemplates.renderImmediate`：
+
+```java
+String message = ScriptTemplates.renderImmediate(
+        "value={{ &value }}", source -> engine.eval(source, context));
+```
+
+它从最内层 `{{...}}` 向外执行，每段保持原有空白，反斜线转义的定界符仅还原为文字。每段读取 Future 的 `getNow(null)`，未完成或结果 null 时立即插入字符串 `null`，不会等待、取消或阻止异步动作继续发生；已完成的失败或取消会抛出。调用方决定是否捕获错误并返回业务默认文本。替换结果中产生的模板继续解析；遇到无法匹配起始符的第一个结束符时停止。
+
+此接口不采用 `inline` 的简单变量名捷径，也不改变 `inline` 原有的顺序等待行为。各段共享或隔离变量由传入的 evaluator 决定。
 
 ## 异步动作与续接线程
 

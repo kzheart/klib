@@ -23,7 +23,7 @@ final class BuiltInStatements {
         }
         literal(registry, "literal");
         StructuredScriptActions.install(registry);
-        registry.registerBuiltin("klib", "set", BuiltInStatements::set);
+        NativeValueActions.install(registry);
         registry.registerBuiltin("klib", "get", BuiltInStatements::get);
         registry.registerBuiltin("klib", "unset", BuiltInStatements::unset);
         registry.registerBuiltin("klib", "eq", compare(Comparison.EQUAL));
@@ -55,17 +55,6 @@ final class BuiltInStatements {
 
     private static void literal(StatementRegistry registry, String name) {
         registry.registerBuiltin("klib", name, (call, context) -> completed(call.text(0, context)));
-    }
-
-    private static CompletionStage<Object> set(StatementCall call, ScriptContext context) {
-        require(call, 2, context, "value");
-        int valueIndex = "to".equalsIgnoreCase(call.argument(1)) ? 2 : 1;
-        require(call, valueIndex + 1, context, "value");
-        Object value = call.arguments().size() == valueIndex + 1
-                ? call.value(valueIndex, context)
-                : call.text(valueIndex, context);
-        context.setVariable(call.argument(0), value);
-        return completed(value);
     }
 
     private static CompletionStage<Object> get(StatementCall call, ScriptContext context) {

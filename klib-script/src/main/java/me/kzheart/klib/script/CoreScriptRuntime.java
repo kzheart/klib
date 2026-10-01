@@ -3,6 +3,7 @@ package me.kzheart.klib.script;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +24,7 @@ import me.kzheart.klib.script.kether.core.Quest;
 import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestContext;
 import me.kzheart.klib.script.kether.core.QuestReader;
+import me.kzheart.klib.script.kether.core.QuestFuture;
 import me.kzheart.klib.script.kether.core.SimpleQuestContext;
 import me.kzheart.klib.script.kether.core.SimpleQuestService;
 
@@ -83,19 +85,36 @@ final class CoreScriptRuntime {
         final SimpleQuestService service = new SimpleQuestService(continuationExecutor);
         try {
             SimpleQuestContext context = service.newContext(quest);
-            for (Map.Entry<String, Object> variable : scriptContext.variables().entrySet()) {
-                context.rootFrame().variables().set(variable.getKey(), variable.getValue());
+            Map<String, Object> variablesBefore = scriptContext.variables();
+            Map<Object, Object> borrowedVariables = new IdentityHashMap<Object, Object>();
+            for (Map.Entry<String, Object> variable : variablesBefore.entrySet()) {
+                if (ScriptFrames.isInternal(variable.getKey())) continue;
+                context.rootFrame().variables().set(variable.getKey(),
+                        borrowVariable(variable.getValue(), borrowedVariables));
             }
             context.rootFrame().variables().set(CONTEXT_VARIABLE, scriptContext);
             context.rootFrame().variables().set(EVALUATION_STATE_VARIABLE, evaluationState);
             CompletableFuture<Object> result = new CompletableFuture<Object>();
             context.runActions().whenComplete((value, failure) -> {
-                service.close();
-                if (failure == null) {
-                    result.complete(value);
-                } else {
-                    result.completeExceptionally(failure);
+                Throwable completionFailure = failure;
+                try {
+                    // 原生动作直接修改 Frame；成功或失败前已发生的写入都回到调用方。
+                    Map<String, Object> variablesAfter = new LinkedHashMap<String, Object>(
+                            ScriptFrames.variables(context.rootFrame()));
+                    for (Map.Entry<String, Object> entry : variablesAfter.entrySet()) {
+                        if (borrowedVariables.containsKey(entry.getValue())) {
+                            entry.setValue(borrowedVariables.get(entry.getValue()));
+                        }
+                    }
+                    synchronizeHostVariables(scriptContext, variablesBefore, variablesAfter);
+                } catch (RuntimeException syncFailure) {
+                    if (failure != null) syncFailure.addSuppressed(failure);
+                    completionFailure = syncFailure;
+                } finally {
+                    service.close();
                 }
+                if (completionFailure == null) result.complete(value);
+                else result.completeExceptionally(completionFailure);
             });
             return result;
         } catch (RuntimeException failure) {
@@ -111,6 +130,18 @@ final class CoreScriptRuntime {
                     new StatementCall("kether", Collections.<String>emptyList(), 1, 1,
                             evaluationState::evalNested)));
         }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object borrowVariable(Object value, Map<Object, Object> borrowed) {
+        if (value instanceof QuestFuture && ((QuestFuture<?>) value).getFuture() != null) {
+            QuestFuture<?> original = (QuestFuture<?>) value;
+            // 借用运算结果，不重跑副作用，也不让嵌套帧 close 掉外层 holder。
+            QuestFuture<?> view = new QuestFuture(original.getAction(), original.getFuture());
+            borrowed.put(view, original);
+            return view;
+        }
+        return value;
     }
 
     private void installStatements(
@@ -322,7 +353,6 @@ final class CoreScriptRuntime {
                 @Override
                 public CompletableFuture<Object> process(QuestContext.Frame frame) {
                     ScriptContext context = context(frame);
-                    Map<String, Object> variablesBefore = context.variables();
                     SourcePosition position = sourcePosition(frame, lineOffset);
                     Optional<QuestActionParser> parser = registry.resolve(lookupName, namespaces);
                     if (!parser.isPresent()) {
@@ -351,19 +381,7 @@ final class CoreScriptRuntime {
                     CompletableFuture<Object> result = new CompletableFuture<Object>();
                     execution.whenComplete((value, failure) -> {
                         if (failure == null) {
-                            try {
-                                synchronizeFrameVariables(
-                                        frame.context().rootFrame(),
-                                        variablesBefore,
-                                        context.variables());
-                                result.complete(value);
-                            } catch (RuntimeException syncFailure) {
-                                result.completeExceptionally(actionFailure(
-                                        syncFailure, context, call));
-                            } catch (StackOverflowError syncFailure) {
-                                result.completeExceptionally(actionFailure(
-                                        syncFailure, context, call));
-                            }
+                            result.complete(value);
                         } else {
                             result.completeExceptionally(actionFailure(
                                     unwrap(failure), context, call));
@@ -435,8 +453,8 @@ final class CoreScriptRuntime {
         });
     }
 
-    private static void synchronizeFrameVariables(
-            QuestContext.Frame rootFrame,
+    private static void synchronizeHostVariables(
+            ScriptContext context,
             Map<String, Object> before,
             Map<String, Object> after
     ) {
@@ -444,12 +462,12 @@ final class CoreScriptRuntime {
             Object previous = before.get(variable.getKey());
             if (!before.containsKey(variable.getKey())
                     || !Objects.equals(previous, variable.getValue())) {
-                rootFrame.variables().set(variable.getKey(), variable.getValue());
+                context.writeVariable(variable.getKey(), variable.getValue());
             }
         }
         for (String name : before.keySet()) {
-            if (!after.containsKey(name)) {
-                rootFrame.variables().remove(name);
+            if (!ScriptFrames.isInternal(name) && !after.containsKey(name)) {
+                context.removeVariable(name);
             }
         }
     }
@@ -630,16 +648,12 @@ final class CoreScriptRuntime {
         if (context == null) {
             throw new IllegalStateException("Kether frame has no ScriptContext");
         }
-        return context;
+        return context.atFrame(frame);
     }
 
     static CompletionStage<Object> evalNested(QuestContext.Frame frame, String source) {
         ScriptContext context = context(frame);
-        Map<String, Object> before = context.variables();
-        return evaluationState(frame).evalNested(source, context).thenApply(value -> {
-            synchronizeFrameVariables(frame.context().rootFrame(), before, context.variables());
-            return value;
-        });
+        return evaluationState(frame).evalNested(source, context);
     }
 
     private static EvaluationState evaluationState(QuestContext.Frame frame) {

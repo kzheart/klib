@@ -365,7 +365,11 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
             return Collections.unmodifiableCollection(values.entrySet());
         }
         @Override public void initialize(Frame frame) {
-            for (Object value : values.values()) if (value instanceof QuestFuture) ((QuestFuture<?>) value).run(frame);
+            for (Object value : values.values()) {
+                if (value instanceof QuestFuture && ((QuestFuture<?>) value).getFuture() == null) {
+                    ((QuestFuture<?>) value).run(frame);
+                }
+            }
         }
         @Override public void close() {
             for (Object value : values.values()) {

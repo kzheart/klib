@@ -68,6 +68,29 @@ expressions using the behavior of the following MIT-licensed TabooLib sources:
   strict statement parsing, propagated failures, executor-bound asynchronous
   continuations, and no dependency on the TabooLib runtime.
 
+## Native value actions and immediate templates
+
+`NativeValueActions` and `ScriptTemplates` adapt semantics from the same fixed
+TabooLib revision `0e3a911fc55624075b5c9abd4368cb5b063b022b`:
+
+- `module/minecraft/minecraft-kether/src/main/kotlin/taboolib/module/kether/`:
+  `action/ActionSet.kt`, `action/transform/ActionRandom.kt`,
+  `action/transform/ActionMath.kt`, `action/transform/Actions.kt`,
+  `action/game/Actions.kt`, `KetherMath.kt`, `KetherFunction.kt`.
+- `common-util/src/main/kotlin/taboolib/common/util/VariableReader.kt` and `Random.kt`.
+- `common-platform-api/src/main/kotlin/taboolib/common/util/CommandSender.kt`.
+- Copyright (c) 2018 Bkm016; the MIT terms are reproduced above and in
+  `META-INF/LICENSE-TabooLib-Kether.txt`.
+- Changes: Java 8 translation; explicit host services; original Klib bare-set
+  syntax retained; executor-bound asynchronous continuations; independent
+  frame/context bridge; no TabooLib or Kotlin runtime dependency.
+
+The numeric sanitising/coercion algorithm also derives from
+`common-legacy-api/src/main/java/taboolib/common5/Coerce.java` at the same
+revision. Copyright (c) SpongePowered <https://www.spongepowered.org> and
+contributors, MIT; the full notice is included in
+`META-INF/LICENSE-Sponge-Coerce.txt`.
+
 ## Runtime libraries
 
 - Apache Commons JEXL 3.2.1 and Commons Logging 1.2 — Apache License 2.0.

@@ -11,19 +11,27 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import me.kzheart.klib.script.kether.core.QuestContext;
 
 /** 单次求值可见的发送者、变量、命名空间与宿主服务。 */
 public final class ScriptContext {
 
+    private static final Object NULL_VALUE = new Object();
+
     private final Object sender;
     private final ConcurrentMap<String, Object> variables;
+    private final QuestContext.Frame frame;
     private final List<String> namespaces;
     private final Locale locale;
     private final Map<Class<?>, Object> services;
 
     private ScriptContext(Builder builder) {
         sender = builder.sender;
-        variables = new ConcurrentHashMap<String, Object>(builder.variables);
+        variables = new ConcurrentHashMap<String, Object>();
+        for (Map.Entry<String, Object> entry : builder.variables.entrySet()) {
+            variables.put(entry.getKey(), entry.getValue() == null ? NULL_VALUE : entry.getValue());
+        }
+        frame = null;
         namespaces = Collections.unmodifiableList(new ArrayList<String>(builder.namespaces));
         locale = builder.locale;
         services = Collections.unmodifiableMap(new LinkedHashMap<Class<?>, Object>(builder.services));
@@ -32,9 +40,23 @@ public final class ScriptContext {
     private ScriptContext(ScriptContext source, List<String> selectedNamespaces) {
         sender = source.sender;
         variables = source.variables;
+        frame = source.frame;
         namespaces = Collections.unmodifiableList(new ArrayList<String>(selectedNamespaces));
         locale = source.locale;
         services = source.services;
+    }
+
+    private ScriptContext(ScriptContext source, QuestContext.Frame selectedFrame) {
+        sender = source.sender;
+        variables = source.variables;
+        frame = selectedFrame;
+        namespaces = source.namespaces;
+        locale = source.locale;
+        services = source.services;
+    }
+
+    ScriptContext atFrame(QuestContext.Frame selectedFrame) {
+        return new ScriptContext(this, selectedFrame);
     }
 
     public static Builder builder() {
@@ -46,28 +68,60 @@ public final class ScriptContext {
     }
 
     public Optional<Object> variable(String name) {
-        return Optional.ofNullable(variables.get(requireName(name)));
+        return Optional.ofNullable(variableOrNull(name));
     }
 
     public Object variableOrNull(String name) {
-        return variables.get(requireName(name));
+        String key = requireName(name);
+        if (frame != null) {
+            return ScriptFrames.isInternal(key) ? null : frame.variables().getOrNull(key);
+        }
+        Object value = variables.get(key);
+        return value == NULL_VALUE ? null : value;
     }
 
     public void setVariable(String name, Object value) {
         String normalized = requireName(name);
         if (value == null) {
-            variables.remove(normalized);
+            removeVariable(normalized);
         } else {
-            variables.put(normalized, value);
+            writeVariable(normalized, value);
         }
     }
 
     public Object removeVariable(String name) {
-        return variables.remove(requireName(name));
+        String key = requireName(name);
+        if (frame != null) {
+            ScriptFrames.checkWritable(key);
+            for (QuestContext.VarTable table = frame.variables(); table != null; table = table.parent()) {
+                if (table.keys().contains(key)) {
+                    Object previous = table.toMap().get(key);
+                    table.remove(key);
+                    return previous;
+                }
+            }
+            return null;
+        }
+        Object previous = variables.remove(key);
+        return previous == NULL_VALUE ? null : previous;
     }
 
     public Map<String, Object> variables() {
-        return Collections.unmodifiableMap(new LinkedHashMap<String, Object>(variables));
+        if (frame != null) return ScriptFrames.variables(frame);
+        Map<String, Object> snapshot = new LinkedHashMap<String, Object>();
+        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+            snapshot.put(entry.getKey(), entry.getValue() == NULL_VALUE ? null : entry.getValue());
+        }
+        return Collections.unmodifiableMap(snapshot);
+    }
+
+    /** 引擎写回原生变量时保留显式 null；公开 setVariable(null) 仍表示移除。 */
+    void writeVariable(String name, Object value) {
+        if (frame == null) variables.put(name, value == null ? NULL_VALUE : value);
+        else {
+            ScriptFrames.checkWritable(name);
+            frame.variables().set(name, value);
+        }
     }
 
     public List<String> namespaces() {
@@ -131,7 +185,7 @@ public final class ScriptContext {
         }
 
         public Builder variable(String name, Object value) {
-            variables.put(requireName(name), Objects.requireNonNull(value, "value"));
+            variables.put(requireName(name), value);
             return this;
         }
 

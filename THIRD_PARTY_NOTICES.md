@@ -100,3 +100,16 @@ contributors, MIT; the full notice is included in
 - MaxMind DB 测试数据库来自 [MaxMind-DB test-data](https://github.com/maxmind/MaxMind-DB/tree/main/test-data)，按 Apache-2.0 或 MIT 双许可使用。
 
 These libraries remain subject to their upstream copyright and license terms.
+
+## Native checks and host queries
+
+`NativeCheckActions` adapts the same fixed TabooLib revision and MIT terms above:
+
+- `module/minecraft/minecraft-kether/src/main/kotlin/taboolib/module/kether/`:
+  `action/transform/Actions.kt`, `action/transform/CheckType.kt`,
+  `action/supplier/Actions.kt`, `action/game/ActionPlayer.kt`,
+  `action/game/compat/ActionPlaceholder.kt`, `KetherConcurrent.kt`.
+- Changes: Java 8 translation, explicit host services, read-only player properties,
+  existing Klib equality alias retained, strict missing-argument validation and
+  executor-bound continuations. No TabooLib or Kotlin runtime dependency.
+- Numeric coercion uses the Sponge Coerce algorithm and license identified above.

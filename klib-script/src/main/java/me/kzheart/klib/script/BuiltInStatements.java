@@ -24,6 +24,7 @@ final class BuiltInStatements {
         literal(registry, "literal");
         StructuredScriptActions.install(registry);
         NativeValueActions.install(registry);
+        NativeCheckActions.install(registry);
         registry.registerBuiltin("klib", "get", BuiltInStatements::get);
         registry.registerBuiltin("klib", "unset", BuiltInStatements::unset);
         registry.registerBuiltin("klib", "eq", compare(Comparison.EQUAL));
@@ -42,8 +43,6 @@ final class BuiltInStatements {
         registry.registerBuiltin("klib", "if", BuiltInStatements::conditional);
         registry.registerBuiltin("klib", "namespace", BuiltInStatements::namespace);
         registry.registerBuiltin("klib", "command", COMMAND);
-        registry.registerBuiltin("klib", "papi", BuiltInStatements::papi);
-        registry.registerBuiltin("klib", "check", BuiltInStatements::check);
         registry.registerBuiltin("klib", "perm", BuiltInStatements::permission);
         registry.registerBuiltin("klib", "all", BuiltInStatements::all);
         registry.registerBuiltin("klib", "any", BuiltInStatements::any);
@@ -143,17 +142,6 @@ final class BuiltInStatements {
     static Object dispatchCommand(ScriptContext context, String command, boolean console) {
         return context.requireService(CommandSink.class).dispatch(
                 console ? null : context.sender().orElse(null), command);
-    }
-
-    private static CompletionStage<Object> papi(StatementCall call, ScriptContext context) {
-        require(call, 1, context, "text");
-        return completed(context.requireService(PlaceholderResolver.class).resolve(
-                context.sender().orElse(null),
-                call.text(0, context)));
-    }
-
-    private static CompletionStage<Object> check(StatementCall call, ScriptContext context) {
-        return completed(Boolean.valueOf(evaluateCheck(call.arguments(), context)));
     }
 
     private static CompletionStage<Object> permission(StatementCall call, ScriptContext context) {

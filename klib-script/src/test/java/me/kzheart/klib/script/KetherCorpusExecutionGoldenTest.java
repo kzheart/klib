@@ -17,7 +17,11 @@ class KetherCorpusExecutionGoldenTest {
 
     @Test
     void executesSimpleStallCondition() throws IOException {
-        ScriptContext context = base().service(
+        ScriptContext context = base().sender("player")
+                .service(ScriptSenderQuery.class, new ScriptSenderQuery() {
+                    @Override public boolean isPlayer(Object sender) { return "player".equals(sender); }
+                    @Override public String name(Object sender) { return "player"; }
+                }).service(
                 PlaceholderResolver.class,
                 (sender, text) -> text.replace("%wealth_level%", "7")).build();
 

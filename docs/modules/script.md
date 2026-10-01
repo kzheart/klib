@@ -184,6 +184,28 @@ sender
 
 `permission` 接嵌套参数，使用 `ScriptSenderQuery.isPlayer` 确认玩家，再通过 `PlayerQuery.hasPermission` 查询；其他发送者失败。`sender` 对玩家使用 `ScriptSenderQuery.name`，对 null 及其他非玩家按原语义返回 `console`。原 `perm` 动作保留原有宿主查询行为，不因新动作改变。随机区间多行文本的 trimIndent 以及原随机动作非终止错误链不在当前兼容范围；这里传播异常，不返回永远不结束的 Future。
 
+## 比较与只读宿主查询
+
+`check` 读取两个嵌套动作，按左、右顺序执行，再比较结果：
+
+```text
+check &game not null
+check &choose is null
+check player level < 10
+check papi "%wealth_level%" >= 5
+check math 2 + 3 == 5
+```
+
+比较符包括 `==/is`、`!=/!is/not`、`=!/is!`（不推断类型的相等）、`=!!/is!!`（对象身份）、`=?/is?`（文本忽略大小写）、`>/gt`、`>=/gte`、`</lt`、`<=/lte`、`contains/has` 和 `in`。保留既有 `=` 相等别名。普通相等按原算法推断字符串数字及布尔值，两个 Number 以 double 比较；排序比较使用原数值强制转换规则，不能当作 BigDecimal 精确比较或字典序排序。包含判断对集合/对象数组查元素、Map 查键，其余值转字符串；不自动展开原始类型数组。
+
+独立 `true` 和 `false` 保留原容错字面量的 String 结果，`null` 返回真实 null；不要把字面量文本的 Java 类型误写成 Boolean。
+
+`player 属性` 通过 `ScriptSenderQuery.isPlayer` 确认玩家，再调用 `PlayerQuery.property`，null 结果视为不可读。宿主决定支持哪些单词属性；此接口尚不实现原玩家动作的写入、多词属性和全部属性集合。写入关键字被拒绝；`=` 留给外围 `check`，独立 `player level = 5` 仍然解析失败，不会改变玩家。
+
+`papi` 与 `placeholder` 接一个完整嵌套动作，再调用 `PlaceholderResolver.resolve`；要求真实玩家语义的发送者查询服务。多词文本须使用引号，如 `papi "hi %name%"`。null 输入转换为空串，其他值使用原 trimIndent 规则。沿原字符串辅助算法，输入或首次展开失败时打印错误，再以空串展开一次；第二次失败传播。普通动作的参数消费、发送者要求因此与旧扁平 PAPI 实现有变化，控制台不能再直接展开。
+
+异步参数完成后通过 frame 的续接执行器调用宿主查询。宿主仍须负责 Bukkit 主线程检查和实际插件集成。既有 `all/any` 的扁平条件 helper 没有在本批换成原框架的组合动作，不能据此宣布完整条件语言兼容。
+
 ## 原生动作与宿主变量
 
 原生 parser 中通过 `ScriptFrames.context(frame)` 访问 sender、locale、namespace 和已安装的服务；不用读取引擎内部变量。返回的 `ScriptContext` 是当前帧的实时视图，不是脱离执行上下文的副本。`setVariable` 依原生规则将非 `~` 变量写到根帧，`~` 局部变量留在当前帧；`removeVariable` 移除最近一层可见定义。`~klib:` 内部键不可读写。

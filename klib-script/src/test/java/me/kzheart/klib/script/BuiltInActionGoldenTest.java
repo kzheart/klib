@@ -76,7 +76,14 @@ class BuiltInActionGoldenTest {
         assertEquals("Alex:1", eval(engine, "namespace quest { reward Alex }", context).toString());
         assertEquals("global", eval(engine,
                 "namespace quest { namespace global { reward } }", context).toString());
-        assertEquals("hi Alex", eval(engine, "papi hi %name%", context));
+        ScriptContext playerContext = ScriptContext.builder().sender("Alex")
+                .service(ScriptSenderQuery.class, new ScriptSenderQuery() {
+                    @Override public boolean isPlayer(Object sender) { return "Alex".equals(sender); }
+                    @Override public String name(Object sender) { return "Alex"; }
+                })
+                .service(PlaceholderResolver.class, (sender, value) -> value.replace("%name%", "Alex"))
+                .build();
+        assertEquals("hi Alex", eval(engine, "papi \"hi %name%\"", playerContext));
         assertEquals("hello", eval(engine, "tell hello", context));
         assertEquals("console:hello", messages.get(0));
         assertEquals(Boolean.TRUE, eval(engine, "command say ready", context));

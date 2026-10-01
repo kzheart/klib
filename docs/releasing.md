@@ -14,7 +14,7 @@
 
 | 组件 | 版本源 | 正式 tag | bundle |
 | --- | --- | --- | --- |
-| 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 19 个普通模块，不含 Guard API |
+| 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 20 个普通模块，不含 Guard API |
 | Guard API | `klibGuardApiVersion` | `guard-api-v<klibGuardApiVersion>` | 只包含 `klib-guard-api` |
 
 当前版本以 `gradle.properties` 中的 `klibVersion` 与 `klibGuardApiVersion` 为准。两个组件独立发布，不能在发布

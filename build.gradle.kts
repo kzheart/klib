@@ -97,6 +97,7 @@ val klibLibraryProjectPaths = listOf(
     ":klib-data-jdbc",
     ":klib-data-sqlite",
     ":klib-data-mysql",
+    ":klib-data-postgresql",
     ":klib-ui",
     ":klib-script",
     ":klib-hook",
@@ -121,6 +122,7 @@ val itemNbtApi = libs.item.nbt.api
 val placeholderApi = libs.placeholderapi
 val sqliteJdbc = libs.sqlite.jdbc
 val mysqlConnector = libs.mysql.connector
+val postgresqlDriver = libs.postgresql
 val h2 = libs.h2
 val gson = libs.gson
 val jexl = libs.jexl
@@ -436,6 +438,13 @@ project(":klib-data-mysql") {
     }
 }
 
+project(":klib-data-postgresql") {
+    dependencies {
+        add("api", project(":klib-data-jdbc"))
+        add("runtimeOnly", postgresqlDriver)
+    }
+}
+
 project(":klib-remote") {
     dependencies {
         add("api", project(":klib-core"))
@@ -582,6 +591,10 @@ val expectedDataPublicationDependencies = mapOf(
     "klib-data-jdbc" to setOf("me.kzheart.klib:klib-data:compile"),
     "klib-data-sqlite" to setOf(
         "me.kzheart.klib:klib-data-jdbc:compile",
+    ),
+    "klib-data-postgresql" to setOf(
+        "me.kzheart.klib:klib-data-jdbc:compile",
+        "org.postgresql:postgresql:runtime",
     ),
     "klib-data-mysql" to setOf(
         "me.kzheart.klib:klib-data-jdbc:compile",

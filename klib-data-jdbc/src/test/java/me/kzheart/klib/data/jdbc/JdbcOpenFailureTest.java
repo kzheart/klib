@@ -75,6 +75,16 @@ class JdbcOpenFailureTest {
                 SqlDialect.MYSQL.applyConnectTimeout("jdbc:h2:mem:contract;MODE=MySQL", 10_000));
     }
 
+    @Test
+    void postgresqlTimeoutUsesSecondsAndPreservesExplicitParameters() {
+        assertEquals("jdbc:postgresql://host/db?connectTimeout=10",
+                SqlDialect.POSTGRESQL.applyConnectTimeout("jdbc:postgresql://host/db", 10_000));
+        assertEquals("jdbc:postgresql://host/db?sslmode=require&connectTimeout=1",
+                SqlDialect.POSTGRESQL.applyConnectTimeout("jdbc:postgresql://host/db?sslmode=require", 1));
+        assertEquals("jdbc:postgresql://host/db?connectTimeout=3",
+                SqlDialect.POSTGRESQL.applyConnectTimeout("jdbc:postgresql://host/db?connectTimeout=3", 10_000));
+    }
+
     private static final class FailingProvider extends AbstractJdbcStorageProvider {
         private FailingProvider() {
             super("jdbc:klib-fail:schema", null, null, SqlDialect.SQLITE);

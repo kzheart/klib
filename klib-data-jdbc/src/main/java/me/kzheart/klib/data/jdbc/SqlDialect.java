@@ -1,6 +1,6 @@
 package me.kzheart.klib.data.jdbc;
 
-/** SQLite 与 MySQL 语法差异的唯一边界。 */
+/** SQLite、MySQL 与 PostgreSQL 语法差异的唯一边界。 */
 public enum SqlDialect {
     SQLITE(
             "CREATE TABLE IF NOT EXISTS klib_kv (namespace TEXT NOT NULL, entry_key TEXT NOT NULL, entry_value BLOB NOT NULL, PRIMARY KEY (namespace, entry_key))",
@@ -13,6 +13,14 @@ public enum SqlDialect {
     // entry_key 使用 VARCHAR(191)，使 utf8mb4 复合主键保持在 MySQL 的 767 字节索引限制内；
     // 旧版本创建的表仍保留 VARCHAR(512) 及原字符集，因为 CREATE TABLE IF NOT EXISTS
     // 不会修改现有表。
+    POSTGRESQL(
+            "CREATE TABLE IF NOT EXISTS klib_kv (namespace VARCHAR(191) NOT NULL, entry_key VARCHAR(191) NOT NULL, entry_value BYTEA NOT NULL, PRIMARY KEY (namespace, entry_key))",
+            "CREATE TABLE IF NOT EXISTS klib_schema (schema_name VARCHAR(191) PRIMARY KEY, schema_version INTEGER NOT NULL)",
+            "INSERT INTO klib_kv(namespace, entry_key, entry_value) VALUES (?, ?, ?) ON CONFLICT(namespace, entry_key) DO UPDATE SET entry_value = excluded.entry_value",
+            "INSERT INTO klib_schema(schema_name, schema_version) VALUES (?, ?) ON CONFLICT(schema_name) DO UPDATE SET schema_version = excluded.schema_version",
+            "SELECT schema_version FROM klib_schema WHERE schema_name = ? FOR UPDATE",
+            new String[0]
+    ),
     MYSQL(
             "CREATE TABLE IF NOT EXISTS klib_kv (namespace VARCHAR(191) NOT NULL, entry_key VARCHAR(191) NOT NULL, entry_value MEDIUMBLOB NOT NULL, PRIMARY KEY (namespace, entry_key)) DEFAULT CHARSET=utf8mb4",
             "CREATE TABLE IF NOT EXISTS klib_schema (schema_name VARCHAR(191) PRIMARY KEY, schema_version INTEGER NOT NULL) DEFAULT CHARSET=utf8mb4",
@@ -74,6 +82,8 @@ public enum SqlDialect {
     /** 面向服主日志的后端名称。 */
     String displayName() {
         switch (this) {
+            case POSTGRESQL:
+                return "PostgreSQL";
             case MYSQL:
                 return "MySQL";
             case SQLITE:
@@ -90,7 +100,15 @@ public enum SqlDialect {
      * 已在 URL 中显式写明 {@code connectTimeout} 时保持调用方设置不变。
      */
     String applyConnectTimeout(String jdbcUrl, int connectTimeoutMillis) {
-        if (this != MYSQL || jdbcUrl == null || jdbcUrl.contains("connectTimeout=")) {
+        if (jdbcUrl == null || jdbcUrl.matches(".*[?&]connectTimeout=.*")) {
+            return jdbcUrl;
+        }
+        if (this == POSTGRESQL && jdbcUrl.startsWith("jdbc:postgresql:")) {
+            // pgJDBC 的单位是秒，向上取整，避免小于一秒变成无限等待。
+            long seconds = Math.max(1L, (connectTimeoutMillis + 999L) / 1000L);
+            return jdbcUrl + (jdbcUrl.indexOf('?') >= 0 ? "&" : "?") + "connectTimeout=" + seconds;
+        }
+        if (this != MYSQL) {
             return jdbcUrl;
         }
         // 仅识别真实的 MySQL/MariaDB 驱动 URL；测试常用 H2 的 MODE=MySQL 模拟，其参数以分号分隔，追加 ? 参数会破坏 URL。

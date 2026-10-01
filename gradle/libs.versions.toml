@@ -7,12 +7,14 @@ item-nbt-api = "2.12.4"
 placeholderapi = "2.11.6"
 sqlite-jdbc = "3.45.3.0"
 mysql-connector = "8.4.0"
+postgresql = "42.7.13"
 h2 = "1.4.200"
 gson = "2.10.1"
 
 jexl = "3.2.1"
 
 [libraries]
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

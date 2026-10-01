@@ -16,7 +16,7 @@ klib {
 }
 ```
 
-`data()` 只加入存储契约、迁移和缓存，不包含 Gson 或数据库驱动。需要生产存储时必须在 `data { }` 中显式选择 `json()`、`sqlite()` 或 `mysql()`；可以同时选择多个后端。JSON 与 SQLite 使用 Bukkit/Paper 宿主提供的 Gson 和 SQLite JDBC，不会把它们复制进插件制品。
+`data()` 只加入存储契约、迁移和缓存，不包含 Gson 或数据库驱动。需要生产存储时必须在 `data { }` 中显式选择 `json()`、`sqlite()`、`mysql()` 或 `postgresql()`；可以同时选择多个后端。JSON 与 SQLite 使用 Bukkit/Paper 宿主提供的 Gson 和 SQLite JDBC，不会把它们复制进插件制品。
 
 直接依赖时可按实际后端选择驱动：
 
@@ -26,6 +26,7 @@ dependencies {
     implementation("me.kzheart.klib:klib-data-json:<klib-version>")
     implementation("me.kzheart.klib:klib-data-sqlite:<klib-version>")
     implementation("me.kzheart.klib:klib-data-mysql:<klib-version>")
+    implementation("me.kzheart.klib:klib-data-postgresql:<klib-version>")
 }
 ```
 
@@ -38,16 +39,23 @@ dependencies {
 | `klib-data-jdbc` | JDBC 会话、事务与方言引擎 | 无 |
 | `klib-data-sqlite` | SQLite 提供器 | 无；SQLite JDBC 由宿主提供 |
 | `klib-data-mysql` | MySQL 提供器 | MySQL Connector/J 及其传递依赖 |
+| `klib-data-postgresql` | PostgreSQL 提供器 | pgJDBC 及其传递依赖 |
 
 SQLite JDBC 包含多平台 Native 库，因此 Klib 只编译和发布提供器代码，绝不把驱动复制进插件或 Guard 商品。运行环境必须由 Bukkit/Paper 宿主提供 Gson 与 SQLite JDBC；独立测试程序若没有宿主，需要自行在运行时加入对应依赖。MySQL Connector/J 不属于宿主能力，只在显式选择 MySQL 后端时加入。
 
 ## 选择存储后端
 
-三个生产入口实现同一个 `StorageProvider` 契约：
+四个生产入口实现同一个 `StorageProvider` 契约：
 
 - `JsonStorageProvider(Path)`：单文件、小规模数据和本地开发；事务先写临时文件，文件系统支持时使用原子移动，否则退回普通替换。该流程用于避免常规写入失败留下半成品，不会额外强制文件或目录元数据刷入物理存储，也不承诺突然断电或操作系统崩溃时的持久性。
 - `me.kzheart.klib.data.sqlite.SQLiteStorageProvider(Path)` / `SQLiteStorageProvider(Path, KLogger)`：单服插件的关系型持久化。
 - `me.kzheart.klib.data.mysql.MySqlStorageProvider(jdbcUrl, username, password)` / `MySqlStorageProvider(jdbcUrl, username, password, KLogger)`：多实例访问的远端数据库。
+
+- `me.kzheart.klib.data.postgresql.PostgreSqlStorageProvider(jdbcUrl, username, password)` / `PostgreSqlStorageProvider(jdbcUrl, username, password, KLogger)`：PostgreSQL 后端，使用 `jdbc:postgresql://host:5432/database`，字节值保存为 `BYTEA`，事务和迁移与其他后端共用契约。默认连接超时十秒；显式 `connectTimeout` 参数以秒为单位。账号需要创建和读写 `klib_kv`、`klib_schema` 的权限。
+
+MySQL 与 PostgreSQL 驱动只随各自后端引入。使用 Gradle 插件时 PostgreSQL 驱动自动重定位；手动打包需同时处理 `org.postgresql` 类与 JDBC 服务描述文件。连接失败、事务失败均通过异步结果报告，失败的事务不会自动重放。
+
+网络后端的命名空间、键和结构名限定为 191 个字符。Klib 的键值表不是外部插件的历史业务表；需要兼容旧表时，应由插件自己的 Repository 持有 SQL，不将旧数据直接解释成 Klib 字节存储。
 
 JSON 后端为单文件本地存储设置固定资源预算：文件最多 8 MiB、JSON 嵌套最多 16 层、最多 128 个
 命名空间和 4096 个键值条目；命名空间及结构名最多 128 个 UTF-8 字节，键最多 512 个 UTF-8
@@ -218,3 +226,7 @@ CompletionStage<PlayerDataCache<PlayerProfile>> cacheStage =
 - MySQL URL、用户名和密码应来自配置或环境，不要写进源码或日志。
 
 JSON 存储的异步接线方式见本页“快速开始”和“线程边界”。
+
+## PostgreSQL 实库回归
+
+`check` 中的 PostgreSQL 集成用例使用真实 pgJDBC。CI 和发布门禁自动启动隔离 PostgreSQL 服务。独立本地执行时，设置 `KLIB_POSTGRESQL_TEST_URL`、`KLIB_POSTGRESQL_TEST_USER`、`KLIB_POSTGRESQL_TEST_PASSWORD` 后运行 `:klib-data-postgresql:test --rerun-tasks`。未设置 URL 的普通本地检查会跳过实库用例，不能据此声明数据库连接已验证。用例覆盖二进制与 Unicode、覆盖写、删除、迁移幂等、数据和版本号一起回滚、关闭再打开。

@@ -80,6 +80,7 @@ dependencies {
 | `klib-data-jdbc` | JDBC 公共执行引擎，不包含数据库驱动 |
 | `klib-data-sqlite` | SQLite 存储；使用宿主提供的 SQLite JDBC |
 | `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
+| `klib-data-postgresql` | PostgreSQL 存储、pgJDBC 与事务迁移 |
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
 | `klib-script` | Kether 嵌套动作、case 分支、JEXL 计算、异步组合与 Guard 商品互操作适配 |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |

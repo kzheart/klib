@@ -46,6 +46,7 @@ include(
     "klib-data-jdbc",
     "klib-data-sqlite",
     "klib-data-mysql",
+    "klib-data-postgresql",
     "klib-ui",
     "klib-script",
     "klib-hook",

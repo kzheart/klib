@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.8.0 - 2026-10-01
+
+- 新增 `klib-data-postgresql` 与 `PostgreSqlStorageProvider`，支持 PostgreSQL 字节存储、原子覆盖写和事务迁移，运行时引入 pgJDBC 42.7.13。
+- JDBC 方言补充 PostgreSQL `BYTEA`、`ON CONFLICT` 与秒级连接超时。
+- CI 与发布门禁使用真实 PostgreSQL 验证读写、迁移回滚和重新打开后的持久化。
+
 ## 0.7.0 - 2026-10-01
 
 ### 新功能

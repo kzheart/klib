@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.8.1 - 2026-10-02
+
+- 修复 `klib-script` 的 `command` 扁平词元读取错误：命令参数可求值 `inline *"..."`、变量及嵌套动作，保留已有无星号文本写法、多语句边界和自定义同名语句注册；异步参数完成后由宿主续接执行器派发命令。
+
 ## 0.8.0 - 2026-10-01
 
 - 新增 `klib-data-postgresql` 与 `PostgreSqlStorageProvider`，支持 PostgreSQL 字节存储、原子覆盖写和事务迁移，运行时引入 pgJDBC 42.7.13。

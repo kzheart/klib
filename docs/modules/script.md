@@ -79,6 +79,16 @@ case &level [
 
 `colored` 支持传统 `&` 颜色和格式代码、`&#RRGGBB` 与 `&x&R&R&G&G&B&B`。`inline` 顺序执行 `{{ 脚本 }}`，并保留 `${name}` 与 `{{ name }}` 变量简写。嵌套脚本共用求值深度限制；错误会向外传播。
 
+`command` 在调用 `CommandSink` 前求值命令参数，可接 `inline`、`&变量`、`*字面量`、引号文本、代码块或已注册动作：
+
+```text
+command inline *"scoreboard players add Alex rewards {{ &level }}" as console
+command &commandText
+command inline "say {{ calc 'level + 1' }}" as console
+```
+
+`as console` 向宿主传递空 sender，省略时使用上下文 sender。已有 `command say ready` 写法仍可使用；完整命令建议加引号，避免首词与脚本动作同名。异步命令参数完成后的 dispatch 和后续语句使用宿主续接执行器，换行、分号和代码块边界保留。
+
 `case` 只求值输入一次，按顺序选择第一个满足条件的分支；仅执行选中的分支体，无匹配且无 `else` 时返回 `null`。分支分隔符为 `->` 或 `then`，省略比较符时按推断类型后的相等判断。条件可写为 `[ 条件一 条件二 ]`，普通比较对各条件取“或”；`in` / `contains` 的多条件组成列表。支持 `==` / `is`、`!=` / `!is` / `not`、`=!` / `is!`（不转换类型）、`=!!` / `is!!`（同一对象）、`=?` / `is?`（忽略大小写）、`>` / `gt`、`>=` / `gte`、`<` / `lt`、`<=` / `lte`、`in` 和 `contains` / `has`。
 
 `calc` / `calculate` 使用 JEXL 表达式，`invoke` 使用 JEXL 脚本。静态表达式在解析阶段编译；`dynamic` 后接受嵌套动作，运行时将结果编译求值：

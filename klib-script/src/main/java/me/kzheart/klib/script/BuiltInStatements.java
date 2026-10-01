@@ -12,6 +12,8 @@ import java.util.concurrent.CompletionStage;
 
 final class BuiltInStatements {
 
+    static final QuestActionParser COMMAND = BuiltInStatements::command;
+
     private BuiltInStatements() {
     }
 
@@ -39,7 +41,7 @@ final class BuiltInStatements {
         registry.registerBuiltin("klib", "div", arithmetic(Arithmetic.DIVIDE));
         registry.registerBuiltin("klib", "if", BuiltInStatements::conditional);
         registry.registerBuiltin("klib", "namespace", BuiltInStatements::namespace);
-        registry.registerBuiltin("klib", "command", BuiltInStatements::command);
+        registry.registerBuiltin("klib", "command", COMMAND);
         registry.registerBuiltin("klib", "papi", BuiltInStatements::papi);
         registry.registerBuiltin("klib", "check", BuiltInStatements::check);
         registry.registerBuiltin("klib", "perm", BuiltInStatements::permission);
@@ -144,14 +146,14 @@ final class BuiltInStatements {
         int asIndex = indexOf(call.arguments(), "as", commandIndex + 1);
         int commandEnd = asIndex < 0 ? call.arguments().size() : asIndex;
         String command = text(call, commandIndex, commandEnd, context);
-        Object sender = context.sender().orElse(null);
-        if (asIndex >= 0 && asIndex + 1 < call.arguments().size()
-                && "console".equalsIgnoreCase(call.argument(asIndex + 1))) {
-            sender = null;
-        }
-        return completed(context.requireService(CommandSink.class).dispatch(
-                sender,
-                command));
+        boolean console = asIndex >= 0 && asIndex + 1 < call.arguments().size()
+                && "console".equalsIgnoreCase(call.argument(asIndex + 1));
+        return completed(dispatchCommand(context, command, console));
+    }
+
+    static Object dispatchCommand(ScriptContext context, String command, boolean console) {
+        return context.requireService(CommandSink.class).dispatch(
+                console ? null : context.sender().orElse(null), command);
     }
 
     private static CompletionStage<Object> papi(StatementCall call, ScriptContext context) {

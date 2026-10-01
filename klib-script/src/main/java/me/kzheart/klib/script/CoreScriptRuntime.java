@@ -132,7 +132,8 @@ final class CoreScriptRuntime {
                                 entry.namespace + ':' + entry.name,
                                 entry.name,
                                 namespaces,
-                                lineOffset));
+                                lineOffset,
+                                entry.parser == BuiltInStatements.COMMAND));
             }
         }
         if (unknownResolver instanceof KetherParserResolver) {
@@ -294,7 +295,8 @@ final class CoreScriptRuntime {
             final String lookupName,
             final String name,
             final List<String> namespaces,
-            final int lineOffset
+            final int lineOffset,
+            final boolean builtinCommand
     ) {
         if ("if".equals(name)) {
             return conditionalParser();
@@ -302,6 +304,18 @@ final class CoreScriptRuntime {
         if ("namespace".equals(name)) {
             return namespaceParser();
         }
+        if (builtinCommand) {
+            return commandParser(lookupName, name, namespaces, lineOffset);
+        }
+        return statementParser(lookupName, name, namespaces, lineOffset);
+    }
+
+    private me.kzheart.klib.script.kether.core.QuestActionParser statementParser(
+            final String lookupName,
+            final String name,
+            final List<String> namespaces,
+            final int lineOffset
+    ) {
         return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
             List<String> arguments = readArguments(name, reader);
             return new QuestAction<Object>() {
@@ -355,6 +369,66 @@ final class CoreScriptRuntime {
                                     unwrap(failure), context, call));
                         }
                     });
+                    return result;
+                }
+            };
+        });
+    }
+
+    private me.kzheart.klib.script.kether.core.QuestActionParser commandParser(
+            final String lookupName,
+            final String name,
+            final List<String> namespaces,
+            final int lineOffset
+    ) {
+        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+            if (!reader.hasNext() || reader.peek() == '}') {
+                throw new IllegalArgumentException("Expected command value");
+            }
+            int start = reader.getIndex();
+            char prefix = reader.peek();
+            String first = reader.nextToken();
+            reader.setIndex(start);
+            boolean expression = prefix == '*' || prefix == '&' || prefix == '{'
+                    || prefix == '\'' || prefix == '"'
+                    || containsEntry(registry.snapshot().entries(), first.toLowerCase(Locale.ROOT), namespaces);
+            if (!expression) {
+                // 保留已有 command say ready 写法；只读到当前语句的行尾。
+                return statementParser(lookupName, name, namespaces, lineOffset).resolve(reader);
+            }
+            ParsedAction<?> command = reader.nextValue();
+            boolean console = false;
+            if (!reader.hasLineBreakBeforeNextToken() && StructuredScriptActions.consume(reader, "as")) {
+                if (reader.hasLineBreakBeforeNextToken() || !reader.hasNext() || reader.peek() == '}') {
+                    throw new IllegalArgumentException("Expected command sender after as");
+                }
+                console = "console".equalsIgnoreCase(reader.nextToken());
+            }
+            final boolean asConsole = console;
+            return new QuestAction<Object>() {
+                @Override public CompletableFuture<Object> process(QuestContext.Frame frame) {
+                    ScriptContext context = context(frame);
+                    SourcePosition position = sourcePosition(frame, lineOffset);
+                    StatementCall call = new StatementCall(name, Collections.<String>emptyList(),
+                            position.line, position.column, evaluationState(frame)::evalNested);
+                    CompletableFuture<Object> result = new CompletableFuture<Object>();
+                    try {
+                        CompletableFuture<Object> value = frame.newFrame(command).run();
+                        java.util.function.Function<Object, Object> dispatch = input ->
+                                BuiltInStatements.dispatchCommand(context,
+                                        InlineValues.interpolate(String.valueOf(input), context), asConsole);
+                        CompletableFuture<Object> execution = value.isDone()
+                                ? value.thenApply(dispatch)
+                                : value.thenApplyAsync(dispatch, frame.context().getExecutor());
+                        execution.whenComplete((output, failure) -> {
+                            if (failure == null) result.complete(output);
+                            else result.completeExceptionally(actionFailure(unwrap(failure), context, call));
+                        });
+                    } catch (RuntimeException failure) {
+                        result.completeExceptionally(actionFailure(failure, context, call));
+                    } catch (StackOverflowError failure) {
+                        result.completeExceptionally(actionFailure(failure, context, call));
+                    }
                     return result;
                 }
             };
@@ -528,18 +602,6 @@ final class CoreScriptRuntime {
             reader.expect("]");
             arguments.add("]");
             return arguments;
-        }
-        if ("command".equals(name)) {
-            String first = reader.nextToken();
-            arguments.add(first);
-            if ("inline".equalsIgnoreCase(first)) {
-                arguments.add(reader.nextToken());
-                reader.expect("as");
-                arguments.add("as");
-                arguments.add(reader.nextToken());
-                return arguments;
-            }
-            return appendRemaining(arguments, reader);
         }
         if ("literal".equals(name)) {
             arguments.add(reader.nextToken());

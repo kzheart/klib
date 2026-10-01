@@ -103,8 +103,17 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
     @Override public <T> ParsedAction<T> nextAction() { return nextAction(null); }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T> ParsedAction<T> nextAction(String selectedNamespace) {
+        return readAction(selectedNamespace, false);
+    }
+
+    @Override
+    public <T> ParsedAction<T> nextValue() {
+        return readAction(null, true);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> ParsedAction<T> readAction(String selectedNamespace, boolean allowLiteral) {
         skipBlank();
         if (index >= content.length) throw LoadError.EOF.create();
         int actionStart = index;
@@ -129,7 +138,13 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
                 result = (ParsedAction<T>) wrap(new CoreActions.Literal<>(nextToken()));
                 break;
             default:
-                String element = nextToken();
+                TokenBlock token = nextTokenBlock();
+                String element = token.getToken();
+                if (allowLiteral && token.isBlock()) {
+                    beforeParse();
+                    result = (ParsedAction<T>) wrap(new CoreActions.Literal<>(element));
+                    break;
+                }
                 List<String> domains = selectedNamespaces(selectedNamespace);
                 Optional<QuestActionParser> parser = service.getRegistry().getParser(element, domains);
                 beforeParse();
@@ -137,7 +152,7 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
                     result = wrap(parser.get().resolve(this));
                     break;
                 }
-                if (service.isToleranceParser()) {
+                if (allowLiteral || service.isToleranceParser()) {
                     result = (ParsedAction<T>) wrap(new CoreActions.Literal<>(element, true));
                     break;
                 }

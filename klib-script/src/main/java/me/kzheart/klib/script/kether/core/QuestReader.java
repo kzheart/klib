@@ -16,6 +16,8 @@ public interface QuestReader {
     void reset();
     <T> ParsedAction<T> nextAction();
     <T> ParsedAction<T> nextAction(String namespace);
+    /** 读取动作参数；仅未注册的参数词元可作为字面量，动作内部的解析错误仍会抛出。 */
+    default <T> ParsedAction<T> nextValue() { return nextAction(); }
     void expect(String value);
 
     default int nextInt() { return next(ArgTypes.INT); }

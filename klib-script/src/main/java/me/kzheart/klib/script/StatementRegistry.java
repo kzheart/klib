@@ -130,6 +130,15 @@ public final class StatementRegistry {
         return new Registration(entry);
     }
 
+    StatementRegistration registerBuiltinKether(
+            String name,
+            me.kzheart.klib.script.kether.core.QuestActionParser parser
+    ) {
+        Entry entry = add("klib", normalize(name, "name"), null,
+                Objects.requireNonNull(parser, "parser"), true, false);
+        return new Registration(entry);
+    }
+
     public Optional<QuestActionParser> resolve(String name, List<String> namespaces) {
         Objects.requireNonNull(namespaces, "namespaces");
         String normalizedName = normalize(name, "name");

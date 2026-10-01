@@ -1,6 +1,6 @@
 # klib-script
 
-`klib-script` 提供一个 Java 8 Kether 运行时，让插件把条件、奖励和流程编排放进配置，同时用受控的宿主服务连接消息、命令、权限和占位符。它适合短小的业务脚本，不用于执行任意 Java 代码。
+`klib-script` 提供一个 Java 8 Kether 运行时，让插件把条件、奖励和流程编排放进配置，同时用受控的宿主服务连接消息、命令、权限和占位符。配置脚本由插件管理员维护；JEXL 表达式可以访问显式放入变量的对象。
 
 ## 接入模块
 
@@ -11,6 +11,8 @@ klib {
     modules {
         script()
     }
+    relocate("org.apache.commons.jexl3", "jexl3")
+    relocate("org.apache.commons.logging", "commonslogging")
 }
 ```
 
@@ -31,7 +33,7 @@ dependencies {
 }
 ```
 
-Kether 解析核心已经包含在 `klib-script` 中，没有额外运行时库。其移植来源和许可证见仓库的 `THIRD_PARTY_NOTICES.md`。`me.kzheart.klib.script.kether.core` 包中，只有注册完整 Kether 语句所需的类型（`QuestActionParser`、`QuestReader`、`ParsedAction`、`QuestAction`、`QuestContext`）属于对外使用面，见[注册完整 Kether 解析器](#注册完整-kether-解析器)；其余为移植而来的解析器内部实现，普通插件不应依赖，也不应假定其结构稳定。
+Kether 解析核心已经包含在 `klib-script` 中。`calc` / `invoke` 通过传递运行时依赖使用 Apache Commons JEXL 与 Commons Logging；构建插件会打包它们，请使用上面的显式重定位避免与同服插件冲突。手动打包也必须包含并重定位这两个依赖。其移植来源和许可证见仓库的 `THIRD_PARTY_NOTICES.md`。`me.kzheart.klib.script.kether.core` 包中，只有注册完整 Kether 语句所需的类型（`QuestActionParser`、`QuestReader`、`ParsedAction`、`QuestAction`、`QuestContext`）属于对外使用面，见[注册完整 Kether 解析器](#注册完整-kether-解析器)；其余为移植而来的解析器内部实现，普通插件不应依赖，也不应假定其结构稳定。
 
 ## 执行脚本与条件
 
@@ -61,6 +63,34 @@ engine.evalCondition("gte &level 10", context)
 `eval(...)` 返回最后一个动作的结果，`evalCondition(...)` 把布尔值、数字、文本和 `null` 转为条件结果。变量在一次上下文中可读写；命名空间默认按 `klib`、`global` 搜索。
 
 引擎会安装变量、比较、逻辑、算术、条件、列表和延迟等内置语句。`tell`、`command`、`papi`、`perm` 等语句只有在上下文中提供相应宿主服务时才能运行。
+
+## 嵌套动作、分支与表达式
+
+`tell`、`colored` / `color`、`inline` / `function` 的参数可以是文字、`&变量`、`*字面量`、代码块或另一个动作。带引号的参数始终是文字；已注册动作的语法错误会抛出，独立位置的未知语句仍然报错。
+
+```text
+tell colored inline *"&aLevel up! &f{{ &level }}!"
+case &level [
+  when <= 15 -> calc "level * 2 + 7"
+  when <= 30 -> calc "level * 5 - 38"
+  else calc "level * 9 - 158"
+]
+```
+
+`colored` 支持传统 `&` 颜色和格式代码、`&#RRGGBB` 与 `&x&R&R&G&G&B&B`。`inline` 顺序执行 `{{ 脚本 }}`，并保留 `${name}` 与 `{{ name }}` 变量简写。嵌套脚本共用求值深度限制；错误会向外传播。
+
+`case` 只求值输入一次，按顺序选择第一个满足条件的分支；仅执行选中的分支体，无匹配且无 `else` 时返回 `null`。分支分隔符为 `->` 或 `then`，省略比较符时按推断类型后的相等判断。条件可写为 `[ 条件一 条件二 ]`，普通比较对各条件取“或”；`in` / `contains` 的多条件组成列表。支持 `==` / `is`、`!=` / `!is` / `not`、`=!` / `is!`（不转换类型）、`=!!` / `is!!`（同一对象）、`=?` / `is?`（忽略大小写）、`>` / `gt`、`>=` / `gte`、`<` / `lt`、`<=` / `lte`、`in` 和 `contains` / `has`。
+
+`calc` / `calculate` 使用 JEXL 表达式，`invoke` 使用 JEXL 脚本。静态表达式在解析阶段编译；`dynamic` 后接受嵌套动作，运行时将结果编译求值：
+
+```text
+calc dynamic inline "{{ &level }} * 2"
+invoke "var doubled = level * 2; return doubled;"
+```
+
+JEXL 读取当前帧与 `ScriptContext` 的变量，不自动注入服务器、控制台或插件对象。`invoke` 中的局部赋值不写回 `ScriptContext`。异步参数完成后的消息和后续动作通过引擎指定的 continuation executor 执行；默认构造器遇到异步续接会明确失败，宿主必须按下文注入正确的线程调度。
+
+底层解析器可用 `QuestReader.nextValue()` 接受动作或字面量参数，用 `nextParsedAction()` 保持严格动作解析。二者都不会吞掉已识别动作内部的错误。
 
 ## 向脚本暴露受控能力
 

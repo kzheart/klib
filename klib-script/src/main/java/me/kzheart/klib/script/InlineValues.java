@@ -47,6 +47,10 @@ final class InlineValues {
         if (source.length() > 1 && source.charAt(0) == '*') {
             return source.substring(1);
         }
+        return interpolate(source, context);
+    }
+
+    static String interpolate(String source, ScriptContext context) {
         Matcher matcher = VARIABLE.matcher(source);
         StringBuffer result = new StringBuffer();
         while (matcher.find()) {

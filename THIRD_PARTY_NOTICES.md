@@ -53,8 +53,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Structured Kether actions
+
+`StructuredScriptActions` implements nested text actions, case branches and JEXL
+expressions using the behavior of the following MIT-licensed TabooLib sources:
+
+- Fixed revision: `0e3a911fc55624075b5c9abd4368cb5b063b022b`
+- Base path: `module/minecraft/minecraft-kether/src/main/kotlin/taboolib/module/kether/`
+- Files: `action/game/Actions.kt`, `action/transform/ActionWhen.kt`,
+  `action/transform/CheckType.kt`, `action/transform/ActionJexl3.kt`, `KetherHelper.kt`.
+- Copyright (c) 2018 Bkm016; MIT terms are reproduced above and in the JAR's
+  `META-INF/LICENSE-TabooLib-Kether.txt`.
+- Changes: independent Java 8 implementation, explicit ScriptContext services,
+  strict statement parsing, propagated failures, executor-bound asynchronous
+  continuations, and no dependency on the TabooLib runtime.
+
 ## Runtime libraries
 
+- Apache Commons JEXL 3.2.1 and Commons Logging 1.2 — Apache License 2.0.
 - SnakeYAML 1.33 — Apache License 2.0.
 - Kyori Adventure API and MiniMessage 4.17.0 — MIT License.
 - `maxminddb-golang` 2.2.0 — ISC License.

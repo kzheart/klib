@@ -10,6 +10,8 @@ mysql-connector = "8.4.0"
 h2 = "1.4.200"
 gson = "2.10.1"
 
+jexl = "3.2.1"
+
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
@@ -23,3 +25,4 @@ sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 mysql-connector = { module = "com.mysql:mysql-connector-j", version.ref = "mysql-connector" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+jexl = { module = "org.apache.commons:commons-jexl3", version.ref = "jexl" }

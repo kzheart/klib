@@ -20,7 +20,7 @@ final class BuiltInStatements {
             return;
         }
         literal(registry, "literal");
-        literal(registry, "inline");
+        StructuredScriptActions.install(registry);
         registry.registerBuiltin("klib", "set", BuiltInStatements::set);
         registry.registerBuiltin("klib", "get", BuiltInStatements::get);
         registry.registerBuiltin("klib", "unset", BuiltInStatements::unset);
@@ -39,7 +39,6 @@ final class BuiltInStatements {
         registry.registerBuiltin("klib", "div", arithmetic(Arithmetic.DIVIDE));
         registry.registerBuiltin("klib", "if", BuiltInStatements::conditional);
         registry.registerBuiltin("klib", "namespace", BuiltInStatements::namespace);
-        registry.registerBuiltin("klib", "tell", BuiltInStatements::tell);
         registry.registerBuiltin("klib", "command", BuiltInStatements::command);
         registry.registerBuiltin("klib", "papi", BuiltInStatements::papi);
         registry.registerBuiltin("klib", "check", BuiltInStatements::check);
@@ -136,14 +135,6 @@ final class BuiltInStatements {
     private static CompletionStage<Object> namespace(StatementCall call, ScriptContext context) {
         require(call, 2, context, "block");
         return call.eval(call.argument(1), context.withNamespaces(call.argument(0)));
-    }
-
-    private static CompletionStage<Object> tell(StatementCall call, ScriptContext context) {
-        require(call, 1, context, "message");
-        String message = call.text(0, context);
-        MessageSink sink = context.requireService(MessageSink.class);
-        sink.send(context.sender().orElse(null), message);
-        return completed(message);
     }
 
     private static CompletionStage<Object> command(StatementCall call, ScriptContext context) {

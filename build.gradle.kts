@@ -123,6 +123,7 @@ val sqliteJdbc = libs.sqlite.jdbc
 val mysqlConnector = libs.mysql.connector
 val h2 = libs.h2
 val gson = libs.gson
+val jexl = libs.jexl
 
 val publicationUrl = "https://github.com/kzheart/klib"
 val privateMavenUrl = providers.environmentVariable("KLIB_MAVEN_REPOSITORY_URL")
@@ -344,6 +345,7 @@ project(":klib-command") {
 
 project(":klib-script") {
     dependencies {
+        add("implementation", jexl)
         add("api", project(":klib-core"))
         add("compileOnly", project(":klib-guard-api"))
         add("testImplementation", project(":klib-guard-api"))

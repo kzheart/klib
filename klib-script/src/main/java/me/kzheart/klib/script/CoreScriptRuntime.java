@@ -432,8 +432,7 @@ final class CoreScriptRuntime {
             reader.expect("then");
             ParsedAction<?> accepted = reader.nextParsedAction();
             ParsedAction<?> rejected = null;
-            if (reader.hasNext() && reader.peek() != '}') {
-                reader.expect("else");
+            if (StructuredScriptActions.consume(reader, "else")) {
                 rejected = reader.nextParsedAction();
             }
             final ParsedAction<?> elseAction = rejected;
@@ -564,12 +563,21 @@ final class CoreScriptRuntime {
         return arguments;
     }
 
-    private static ScriptContext context(QuestContext.Frame frame) {
+    static ScriptContext context(QuestContext.Frame frame) {
         ScriptContext context = frame.variables().getOrNull(CONTEXT_VARIABLE);
         if (context == null) {
             throw new IllegalStateException("Kether frame has no ScriptContext");
         }
         return context;
+    }
+
+    static CompletionStage<Object> evalNested(QuestContext.Frame frame, String source) {
+        ScriptContext context = context(frame);
+        Map<String, Object> before = context.variables();
+        return evaluationState(frame).evalNested(source, context).thenApply(value -> {
+            synchronizeFrameVariables(frame.context().rootFrame(), before, context.variables());
+            return value;
+        });
     }
 
     private static EvaluationState evaluationState(QuestContext.Frame frame) {

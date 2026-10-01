@@ -56,7 +56,28 @@ public final class KetherScriptEngine implements ScriptEngine {
     public CompletionStage<Object> eval(String script, ScriptContext context) {
         Objects.requireNonNull(script, "script");
         Objects.requireNonNull(context, "context");
-        CompletionStage<Object> execution = runtime.eval(script, context);
+        return localizeExecution(runtime.eval(script, context), script, context);
+    }
+
+    /**
+     * 同步编译并开始执行。编译失败立即抛出 ScriptException；执行失败仍由返回的阶段承载。
+     * 与 eval 共用编译缓存，不会为了预检查再次解析或执行脚本。
+     */
+    public CompletionStage<Object> evalChecked(String script, ScriptContext context) {
+        Objects.requireNonNull(script, "script");
+        Objects.requireNonNull(context, "context");
+        final CompletionStage<Object> execution;
+        try {
+            execution = runtime.evalChecked(script, context);
+        } catch (RuntimeException failure) {
+            throw localize(unwrap(failure), context.locale(), script);
+        }
+        return localizeExecution(execution, script, context);
+    }
+
+    private static CompletionStage<Object> localizeExecution(
+            CompletionStage<Object> execution, String script, ScriptContext context
+    ) {
         CompletableFuture<Object> result = new CompletableFuture<Object>();
         execution.whenComplete((value, failure) -> {
             if (failure == null) {

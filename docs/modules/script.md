@@ -64,6 +64,17 @@ engine.evalCondition("gte &level 10", context)
 
 引擎会安装变量、比较、逻辑、算术、条件、列表和延迟等内置语句。`tell`、`command`、`papi`、`perm` 等语句只有在上下文中提供相应宿主服务时才能运行。
 
+
+需要在进入业务流程前同步处理编译失败时，调用 `KetherScriptEngine.evalChecked(source, context)`。
+编译失败立即抛出本地化 `ScriptException`；动作执行失败（包括立即失败）仍通过返回的 `CompletionStage` 传播。
+它与 `eval` 共用编译缓存，每次调用只执行一次脚本，不先预检再重新解析。现有 `eval` 仍将编译失败放入返回阶段。
+
+默认 `sender(...)` 固定发送者。需要脚本内切换执行者时，显式使用
+`ScriptContext.builder().senderVariable("actor").variable("actor", player).build()`。
+每次 `sender()` 读取当前帧可见的 `actor`，原生动作修改变量会立即影响后续宿主服务；
+缺失、移除或显式 null 都表示无发送者，不回退到 `sender(...)`，也不会替调用者初始化变量。
+命名空间派生视图保留此设置。宿主服务仍负责检查接收者类型和访问线程。
+
 ## 嵌套动作、分支与表达式
 
 `tell`、`colored` / `color`、`inline` / `function` 的参数可以是文字、`&变量`、`*字面量`、代码块或另一个动作。带引号的参数始终是文字；已注册动作的语法错误会抛出，独立位置的未知语句仍然报错。

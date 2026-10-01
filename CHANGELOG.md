@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.8.4 - 2026-10-02
+
+- `KetherScriptEngine.evalChecked` 区分同步编译异常与异步执行失败，复用同一编译缓存，现有 `eval` 契约保持不变。
+- `ScriptContext.Builder.senderVariable` 可从当前帧可见变量动态读取执行者，支持切换、显式 null 与移除；固定 sender 仍为默认行为。
+- `ConfigNode.createSection` 在已有映射内创建或替换空子节，保留原样键和父文档可见性。
+
 ## 0.8.3 - 2026-10-02
 
 - `klib-script` 的 `check` 改为双嵌套动作解析，补齐原比较运算符、null 与独立布尔文本，保留公开的 `=` 别名。

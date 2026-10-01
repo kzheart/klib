@@ -82,6 +82,22 @@ final class CoreScriptRuntime {
             return failed(compilationFailure(
                     "syntax nesting exhausted the parser stack", failure));
         }
+        return execute(quest, scriptContext, evaluationState);
+    }
+
+    CompletionStage<Object> evalChecked(String source, ScriptContext scriptContext) {
+        final Quest quest;
+        try {
+            quest = compiledQuest(source, scriptContext.namespaces());
+        } catch (StackOverflowError failure) {
+            throw compilationFailure("syntax nesting exhausted the parser stack", failure);
+        }
+        return execute(quest, scriptContext, new EvaluationState());
+    }
+
+    private CompletionStage<Object> execute(
+            Quest quest, ScriptContext scriptContext, EvaluationState evaluationState
+    ) {
         final SimpleQuestService service = new SimpleQuestService(continuationExecutor);
         try {
             SimpleQuestContext context = service.newContext(quest);

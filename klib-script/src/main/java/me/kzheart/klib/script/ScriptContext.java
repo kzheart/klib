@@ -19,6 +19,7 @@ public final class ScriptContext {
     private static final Object NULL_VALUE = new Object();
 
     private final Object sender;
+    private final String senderVariable;
     private final ConcurrentMap<String, Object> variables;
     private final QuestContext.Frame frame;
     private final List<String> namespaces;
@@ -27,6 +28,7 @@ public final class ScriptContext {
 
     private ScriptContext(Builder builder) {
         sender = builder.sender;
+        senderVariable = builder.senderVariable;
         variables = new ConcurrentHashMap<String, Object>();
         for (Map.Entry<String, Object> entry : builder.variables.entrySet()) {
             variables.put(entry.getKey(), entry.getValue() == null ? NULL_VALUE : entry.getValue());
@@ -39,6 +41,7 @@ public final class ScriptContext {
 
     private ScriptContext(ScriptContext source, List<String> selectedNamespaces) {
         sender = source.sender;
+        senderVariable = source.senderVariable;
         variables = source.variables;
         frame = source.frame;
         namespaces = Collections.unmodifiableList(new ArrayList<String>(selectedNamespaces));
@@ -48,6 +51,7 @@ public final class ScriptContext {
 
     private ScriptContext(ScriptContext source, QuestContext.Frame selectedFrame) {
         sender = source.sender;
+        senderVariable = source.senderVariable;
         variables = source.variables;
         frame = selectedFrame;
         namespaces = source.namespaces;
@@ -64,7 +68,7 @@ public final class ScriptContext {
     }
 
     public Optional<Object> sender() {
-        return Optional.ofNullable(sender);
+        return Optional.ofNullable(senderVariable == null ? sender : variableOrNull(senderVariable));
     }
 
     public Optional<Object> variable(String name) {
@@ -170,6 +174,7 @@ public final class ScriptContext {
     public static final class Builder {
 
         private Object sender;
+        private String senderVariable;
         private final Map<String, Object> variables = new LinkedHashMap<String, Object>();
         private final List<String> namespaces = new ArrayList<String>(
                 Arrays.asList("klib", "global"));
@@ -181,6 +186,15 @@ public final class ScriptContext {
 
         public Builder sender(Object value) {
             sender = value;
+            return this;
+        }
+
+        /**
+         * 每次读取发送者时使用当前帧可见变量；变量缺失或为 null 时没有发送者。
+         * 不会写入该变量，也不会回退到 sender(Object)；默认仍使用固定发送者。
+         */
+        public Builder senderVariable(String name) {
+            senderVariable = requireName(name);
             return this;
         }
 

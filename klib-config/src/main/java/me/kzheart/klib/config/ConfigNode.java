@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -52,6 +53,30 @@ public final class ConfigNode {
                 document,
                 YamlDocument.childNode((MappingNode) node, key),
                 childPath);
+    }
+
+    /**
+     * 在当前映射内创建空子节，替换同名值。key 与 child 一样是单个原样键，点号不拆分。
+     * 当前节点必须是已存在的映射；不会隐式创建缺失祖先。已有子视图仍引用原节点。
+     */
+    public ConfigNode createSection(String key) {
+        Objects.requireNonNull(key, "key");
+        if (!(node instanceof MappingNode)) {
+            throw mappingError("expected an existing mapping before key '" + key + "'");
+        }
+        MappingNode created = new MappingNode(Tag.MAP, new ArrayList<NodeTuple>(),
+                DumperOptions.FlowStyle.BLOCK);
+        List<NodeTuple> entries = ((MappingNode) node).getValue();
+        for (int index = 0; index < entries.size(); index++) {
+            NodeTuple entry = entries.get(index);
+            if (YamlDocument.scalarKey(entry.getKeyNode()).equals(key)) {
+                entries.set(index, new NodeTuple(entry.getKeyNode(), created));
+                return child(key, created);
+            }
+        }
+        entries.add(new NodeTuple(new ScalarNode(Tag.STR, key, null, null,
+                DumperOptions.ScalarStyle.PLAIN), created));
+        return child(key, created);
     }
 
     public ConfigNode node(String relativePath) {

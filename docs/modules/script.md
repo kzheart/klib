@@ -202,7 +202,7 @@ check math 2 + 3 == 5
 
 `player 属性` 通过 `ScriptSenderQuery.isPlayer` 确认玩家，再调用 `PlayerQuery.property`，null 结果视为不可读。宿主决定支持哪些单词属性；此接口尚不实现原玩家动作的写入、多词属性和全部属性集合。写入关键字被拒绝；`=` 留给外围 `check`，独立 `player level = 5` 仍然解析失败，不会改变玩家。
 
-`papi` 与 `placeholder` 接一个完整嵌套动作，再调用 `PlaceholderResolver.resolve`；要求真实玩家语义的发送者查询服务。多词文本须使用引号，如 `papi "hi %name%"`。null 输入转换为空串，其他值使用原 trimIndent 规则。沿原字符串辅助算法，输入或首次展开失败时打印错误，再以空串展开一次；第二次失败传播。普通动作的参数消费、发送者要求因此与旧扁平 PAPI 实现有变化，控制台不能再直接展开。
+`papi` 与 `placeholder` 接一个完整嵌套动作，再调用 `PlaceholderResolver.resolve`；要求真实玩家语义的发送者查询服务。多词文本须使用引号，如 `papi "hi %name%"`。null 输入转换为空串，其他值使用原 trimIndent 规则。沿原字符串辅助算法，输入 Future 或首次展开失败时打印错误，再以空串展开一次；第二次失败传播。输入动作在返回 Future 之前同步抛错则直接传播，不进入这条重试链。普通动作的参数消费、发送者要求因此与旧扁平 PAPI 实现有变化，控制台不能再直接展开。
 
 异步参数完成后通过 frame 的续接执行器调用宿主查询。宿主仍须负责 Bukkit 主线程检查和实际插件集成。既有 `all/any` 的扁平条件 helper 没有在本批换成原框架的组合动作，不能据此宣布完整条件语言兼容。
 

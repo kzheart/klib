@@ -30,7 +30,7 @@ description: 按 kzheart/klib 官方 Wiki 为 Bukkit、Spigot 或 Paper 插件�
 | 物品栏菜单、分页和聊天输入 | [UI](https://github.com/kzheart/klib/wiki/UI) |
 | Kether 脚本和语句互操作 | [Script](https://github.com/kzheart/klib/wiki/Script) |
 | 经济插件和 PlaceholderAPI | [Hook](https://github.com/kzheart/klib/wiki/Hook) |
-| 服务端版本与能力查询 | [Compat](https://github.com/kzheart/klib/wiki/Compat) |
+| 服务端版本、能力查询与数据包侧边栏 | [Compat](https://github.com/kzheart/klib/wiki/Compat) |
 | 日志、Incident 和异步交付 | [Remote](https://github.com/kzheart/klib/wiki/Remote) |
 | Guard 商品公开生命周期 API | [Guard API](https://github.com/kzheart/klib/wiki/Guard-API) |
 | 依赖、启动、重载和线程错误 | [故障排查](https://github.com/kzheart/klib/wiki/Troubleshooting) |

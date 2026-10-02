@@ -35,6 +35,7 @@ class CompatCapabilityMatrixTest {
             assertTrue(row.has(Capabilities.NBT));
             assertTrue(row.has(Capabilities.MATERIAL));
             assertTrue(row.has(Capabilities.INVENTORY));
+            assertTrue(row.has(Capabilities.SIDEBAR));
         }
     }
 }

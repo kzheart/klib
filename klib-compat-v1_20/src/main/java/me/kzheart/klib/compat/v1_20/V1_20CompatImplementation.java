@@ -41,6 +41,7 @@ public final class V1_20CompatImplementation extends AbstractCompatProvider {
         bridges.put(Capabilities.INVENTORY, new InventoryBridge() {
             @Override public boolean supportsRuntimeTitleUpdates() { return true; }
         });
+        bridges.put(Capabilities.SIDEBAR, new V1_20SidebarBridge());
         return bridges;
     }
 }

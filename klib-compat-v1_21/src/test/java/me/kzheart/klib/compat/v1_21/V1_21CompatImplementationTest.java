@@ -23,5 +23,6 @@ class V1_21CompatImplementationTest {
         assertTrue(provider.capability(Capabilities.NBT).isPresent());
         assertTrue(provider.capability(Capabilities.MATERIAL).isPresent());
         assertTrue(provider.capability(Capabilities.INVENTORY).isPresent());
+        assertEquals(15, provider.capability(Capabilities.SIDEBAR).get().maxLines());
     }
 }

@@ -19,5 +19,6 @@ class V1_12CompatImplementationTest {
         assertTrue(implementation.capability(Capabilities.NBT).isPresent());
         assertTrue(implementation.capability(Capabilities.MATERIAL).isPresent());
         assertTrue(implementation.capability(Capabilities.INVENTORY).isPresent());
+        assertEquals(15, implementation.capability(Capabilities.SIDEBAR).get().maxLines());
     }
 }

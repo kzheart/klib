@@ -35,6 +35,7 @@ public final class V1_21CompatImplementation extends AbstractCompatProvider {
         bridges.put(Capabilities.NBT, new V1_21NbtBridge());
         bridges.put(Capabilities.MATERIAL, new V1_21MaterialBridge());
         bridges.put(Capabilities.INVENTORY, new V1_21InventoryBridge());
+        bridges.put(Capabilities.SIDEBAR, new V1_21SidebarBridge());
         return bridges;
     }
 

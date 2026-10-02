@@ -1,7 +1,7 @@
 # Klib
 
 Klib 是面向 Bukkit/Paper 插件的 Java 8 模块化基础库，提供生命周期、配置、语言、命令、物品、
-数据、UI、脚本、外部插件集成、版本能力查询和远程诊断客户端。
+数据、UI、脚本、外部插件集成、版本能力查询、数据包侧边栏和远程诊断客户端。
 
 本仓库只包含 Apache License 2.0 公共模块和最小的 `klib-guard-api` 编译契约。Gradle 构建插件由
 [kzheart/klib-gradle-plugin](https://github.com/kzheart/klib-gradle-plugin) 独立维护；Guard runtime、
@@ -84,7 +84,7 @@ dependencies {
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
 | `klib-script` | Kether 嵌套动作、同步编译检查、动态执行者、原生帧宿主接口、数值与比较动作、玩家/PAPI 查询、即时模板、异步组合与 Guard 商品互操作适配 |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |
-| `klib-compat*` | Minecraft 版本能力与实现选择 |
+| `klib-compat*` | Minecraft 版本能力、实现选择与按玩家发送的数据包侧边栏 |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 |
 | `klib-guard-api` | 受保护商品的生命周期与门户级 Kether Broker 契约 |
 

@@ -33,6 +33,7 @@ public final class V26CompatImplementation extends AbstractCompatProvider {
         bridges.put(Capabilities.NBT, new V26NbtBridge());
         bridges.put(Capabilities.MATERIAL, new V26MaterialBridge());
         bridges.put(Capabilities.INVENTORY, new V26InventoryBridge());
+        bridges.put(Capabilities.SIDEBAR, new V26SidebarBridge());
         return bridges;
     }
 

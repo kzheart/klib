@@ -10,11 +10,13 @@ public final class Capabilities {
     public static final Capability<NbtBridge> NBT = Capability.of("nbt", NbtBridge.class);
     public static final Capability<MaterialBridge> MATERIAL = Capability.of("material", MaterialBridge.class);
     public static final Capability<InventoryBridge> INVENTORY = Capability.of("inventory", InventoryBridge.class);
+    public static final Capability<SidebarBridge> SIDEBAR = Capability.of("sidebar", SidebarBridge.class);
     private static final List<Capability<?>> VALUES = Collections.unmodifiableList(Arrays.<Capability<?>>asList(
             TEXT,
             NBT,
             MATERIAL,
-            INVENTORY
+            INVENTORY,
+            SIDEBAR
     ));
 
     private Capabilities() {

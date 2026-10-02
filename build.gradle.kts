@@ -295,12 +295,41 @@ project(":klib-core") {
     }
 }
 
-project(":klib-compat-v1_12") { dependencies { add("api", project(":klib-compat")) } }
-project(":klib-compat-v1_20") { dependencies { add("api", project(":klib-compat")) } }
-project(":klib-compat-v1_21") { dependencies { add("api", project(":klib-compat")) } }
+// 侧边栏入口在 Bukkit 运行时使用，Spigot API 与 klib-core 只参与编译和测试，不写入发布依赖。
+project(":klib-compat") {
+    dependencies {
+        val compileSpigot = create(spigotApi.get()) as ModuleDependency
+        val testSpigot = create(spigotApi.get()) as ModuleDependency
+        compileSpigot.isTransitive = false
+        testSpigot.isTransitive = false
+        add("compileOnly", compileSpigot)
+        add("compileOnly", project(":klib-core"))
+        add("testImplementation", testSpigot)
+        add("testImplementation", project(":klib-core"))
+    }
+}
+
+listOf(":klib-compat-v1_12", ":klib-compat-v1_20", ":klib-compat-v1_21", ":klib-compat-v26").forEach { path ->
+    project(path) {
+        dependencies {
+            val compileSpigot = create(spigotApi.get()) as ModuleDependency
+            val testSpigot = create(spigotApi.get()) as ModuleDependency
+            compileSpigot.isTransitive = false
+            testSpigot.isTransitive = false
+            add("api", project(":klib-compat"))
+            add("compileOnly", compileSpigot)
+            add("testImplementation", testSpigot)
+        }
+    }
+}
+project(":klib-compat-v1_12") {
+    dependencies {
+        // 旧版文本拆分使用 Spigot 的 ChatColor，测试时需要它依赖的 Guava。
+        add("testImplementation", "com.google.guava:guava:21.0")
+    }
+}
 project(":klib-compat-v26") {
     dependencies {
-        add("api", project(":klib-compat"))
         add("testImplementation", project(":klib-compat-v1_12"))
         add("testImplementation", project(":klib-compat-v1_20"))
         add("testImplementation", project(":klib-compat-v1_21"))
@@ -583,7 +612,7 @@ val stagingPublicationTasks = publishableProjects.map {
     it.tasks.named("publishAllPublicationsToStagingRepository")
 }
 
-val expectedDataPublicationDependencies = mapOf(
+val expectedPublicationDependencies = mapOf(
     "klib-data" to setOf("me.kzheart.klib:klib-core:compile"),
     "klib-data-json" to setOf(
         "me.kzheart.klib:klib-data:compile",
@@ -600,6 +629,12 @@ val expectedDataPublicationDependencies = mapOf(
         "me.kzheart.klib:klib-data-jdbc:compile",
         "com.mysql:mysql-connector-j:runtime",
     ),
+    // compat 系列的 Spigot API 与 klib-core 只在编译期可见，不能进入发布依赖。
+    "klib-compat" to emptySet(),
+    "klib-compat-v1_12" to setOf("me.kzheart.klib:klib-compat:compile"),
+    "klib-compat-v1_20" to setOf("me.kzheart.klib:klib-compat:compile"),
+    "klib-compat-v1_21" to setOf("me.kzheart.klib:klib-compat:compile"),
+    "klib-compat-v26" to setOf("me.kzheart.klib:klib-compat:compile"),
 )
 
 fun pomDependencies(pom: String): Set<String> = Regex(
@@ -659,7 +694,7 @@ tasks.register("verifyMavenStaging") {
                 throw GradleException(
                     "$baseName.pom must not publish the host-provided Spigot API")
             }
-            expectedDataPublicationDependencies[module.name]?.let { expected ->
+            expectedPublicationDependencies[module.name]?.let { expected ->
                 val actual = pomDependencies(pom)
                 if (actual != expected) {
                     throw GradleException(

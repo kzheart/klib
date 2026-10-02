@@ -91,6 +91,27 @@ revision. Copyright (c) SpongePowered <https://www.spongepowered.org> and
 contributors, MIT; the full notice is included in
 `META-INF/LICENSE-Sponge-Coerce.txt`.
 
+## Packet sidebars
+
+`klib-compat`'s `me.kzheart.klib.compat.sidebar` package and the
+`V1_12SidebarBridge`, `V1_20SidebarBridge`, `V1_21SidebarBridge` and
+`V26SidebarBridge` classes in the `klib-compat-v*` modules adapt the per-player
+packet scoreboard of the same fixed TabooLib revision
+`0e3a911fc55624075b5c9abd4368cb5b063b022b`:
+
+- `module/bukkit-nms/bukkit-nms-stable/src/main/kotlin/taboolib/module/nms/`:
+  `NMSScoreboard.kt`, `NMSScoreboardImpl.kt`, `NMSScoreboardImpl26.kt` and
+  `type/PlayerScoreboard.kt`.
+- Copyright (c) 2018 Bkm016; the MIT terms are reproduced above and in each
+  affected JAR's `META-INF/LICENSE-TabooLib-Scoreboard.txt`.
+- Changes: independent Java 8 implementation without the TabooLib or Kotlin
+  runtime; reflection resolved by member signatures instead of TabooLib's NMS
+  proxy and remapper; scope-bound lifecycle with quit cleanup; line diffs keyed
+  by score index; random per-instance objective, team and holder names; score
+  display text with a blank number format from 1.20.4 instead of line teams;
+  the 1.12 removal packet targets the line holder; team prefix, suffix, colour
+  and JSON text features are not included.
+
 ## Runtime libraries
 
 - Apache Commons JEXL 3.2.1 and Commons Logging 1.2 — Apache License 2.0.

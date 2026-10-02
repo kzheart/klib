@@ -29,6 +29,26 @@ class KetherRegistrationTest {
         scope.close();
     }
 
+    @Test
+    void parserCanReadRawSourceOfFollowingAction() {
+        ScopeImpl scope = new ScopeImpl("test");
+        StatementRegistry registry = new StatementRegistry();
+        registry.registerKether(scope, "custom", "echo", QuestActionParser.of(reader -> literal(reader.nextToken())));
+        registry.registerKether(scope, "custom", "raw", QuestActionParser.of(reader -> {
+            int begin = reader.getIndex();
+            reader.nextParsedAction();
+            return literal(reader.source(begin, reader.getIndex()).trim());
+        }));
+
+        Object value = new KetherScriptEngine(registry).eval(
+                "raw { echo hello }",
+                ScriptContext.builder().namespaces("custom").build())
+                .toCompletableFuture().join();
+
+        assertEquals("{ echo hello }", value);
+        scope.close();
+    }
+
     static QuestAction<Object> literal(final Object value) {
         return new QuestAction<Object>() {
             @Override

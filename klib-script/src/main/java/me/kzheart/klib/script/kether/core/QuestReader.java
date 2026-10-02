@@ -19,6 +19,8 @@ public interface QuestReader {
     /** 读取动作参数；仅未注册的参数词元可作为字面量，动作内部的解析错误仍会抛出。 */
     default <T> ParsedAction<T> nextValue() { return nextAction(); }
     void expect(String value);
+    /** 返回 [begin, end) 范围的原始脚本文本；不支持读取源码的读取器抛出 UnsupportedOperationException。 */
+    default String source(int begin, int end) { throw new UnsupportedOperationException("source is not available"); }
 
     default int nextInt() { return next(ArgTypes.INT); }
     default long nextLong() { return next(ArgTypes.LONG); }

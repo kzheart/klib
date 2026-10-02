@@ -27,6 +27,12 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
     }
 
     @Override
+    public String source(int begin, int end) {
+        if (begin < 0 || end > content.length || begin > end) throw new IndexOutOfBoundsException("source range " + begin + ".." + end);
+        return new String(content, begin, end - begin);
+    }
+
+    @Override
     public String nextToken() {
         return nextTokenBlock().getToken();
     }

@@ -72,12 +72,13 @@ import me.kzheart.klib.data.sqlite.SQLiteStorageProvider;
 import me.kzheart.klib.scope.Scope;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.concurrent.CompletionStage;
 
 public final class PlayerNotes {
     private final CompletionStage<StorageSession> sessionStage;
 
-    public PlayerNotes(Scope scope, java.nio.file.Path file) {
+    public PlayerNotes(Scope scope, Path file) {
         KLogger logger = scope.requireCapability(KLogger.class);
         StorageProvider provider = scope.install(new SQLiteStorageProvider(file, logger));
         sessionStage = provider.open().thenApply(scope::install);

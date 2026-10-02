@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.8.9 - 2026-10-02
+
+- `QuestReader.source(begin, end)` 返回指定游标范围的原始脚本文本（包含匿名块的花括号），供需要保存后续动作源码的解析器使用；未持有源码的读取器抛出 `UnsupportedOperationException`，现有解析行为不变。
+
 ## 0.8.8 - 2026-10-02
 
 - `klib-compat` 新增 `Capabilities.SIDEBAR` 与 `me.kzheart.klib.compat.sidebar.Sidebars`：按玩家发送数据包侧边栏，不替换玩家的 Bukkit 记分板，更新只发送差异，玩家退出时丢弃状态、作用域关闭时移除；四个 `compat-v*` 实现均公开该能力。改写自 TabooLib `NMSScoreboard`（MIT），不引入 TabooLib 或 Kotlin 运行时。

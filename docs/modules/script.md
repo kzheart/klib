@@ -187,15 +187,15 @@ permission admin
 sender
 ```
 
-`math` 支持列表式 add/sub/mul/div（或 +、-、*、/）及中缀左结合，**不采用乘除优先级**。所有操作数可转换为 Int 时返回整数，整数除法截断；否则使用 Double。列表的操作数异常沿原动作规则打印错误并取 0；中缀首值错误向调用方传播，不复制原框架可能不结束的 Future。循环 break 状态尚未接入该动作，不能据此声明原框架循环动作兼容。
+`math` 支持列表式 add/sub/mul/div（或 +、-、*、/）及中缀左结合，**不采用乘除优先级**。所有操作数可转换为 Int 时返回整数，整数除法截断；否则使用 Double。列表的操作数异常沿原动作规则打印错误并取 0；中缀首值错误向调用方传播，不复制原框架可能不结束的 Future。
 
 `round` 返回饱和边界的 Int，半数向正无穷方向取整，NaN 抛错。`random N` 对 Int 返回 `[0,N)`；`random A to B` 的整数边界两端包含、自动排序，Double 使用半开区间，相等边界返回该值。集合和对象数组随机选元素，空集合/空数组返回 null；非空的 null 元素保留原错误行为。
 
-`set key to 动作` 顺序求值并将原始结果写入变量，动作自身返回 null；保留旧 `set key value` 的类型推断与返回值。支持 `set property key from 动作 to 动作` 与 `set &object[key] to 动作`，通过 `ScriptPropertyAccess` 明确适配对象，不自动反射任意字段。缺服务或不支持属性时抛错。属性服务的空对象或 unsupported 写入采用显式失败，原框架在这些分支仅输出警告；赋值值表达式保留打印错误并完成 null 的规则。尚未提供默认对象适配器、属性继承查找和读值 shorthand，不代表整个原对象属性模块已经提供。
+`set key to 动作` 顺序求值并将原始结果写入变量，动作自身返回 null；保留旧 `set key value` 的类型推断与返回值。支持 `set property key from 动作 to 动作` 与 `set &object[key] to 动作`，先交给宿主 `ScriptPropertyAccess`，未支持时使用内置的 Map（`@键`）、List 与数组（下标）写入，不自动反射任意字段。不支持的属性写入抛错，原框架在这些分支仅输出警告；赋值值表达式保留打印错误并完成 null 的规则。属性读取见[原框架内置语句](#原框架内置语句)。
 
 `permission` 接嵌套参数，使用 `ScriptSenderQuery.isPlayer` 确认玩家，再通过 `PlayerQuery.hasPermission` 查询；其他发送者失败。`sender` 对玩家使用 `ScriptSenderQuery.name`，对 null 及其他非玩家按原语义返回 `console`。原 `perm` 动作保留原有宿主查询行为，不因新动作改变。随机区间多行文本的 trimIndent 以及原随机动作非终止错误链不在当前兼容范围；这里传播异常，不返回永远不结束的 Future。
 
-## 比较与只读宿主查询
+## 比较与宿主查询
 
 `check` 读取两个嵌套动作，按左、右顺序执行，再比较结果：
 
@@ -211,11 +211,69 @@ check math 2 + 3 == 5
 
 独立 `true` 和 `false` 保留原容错字面量的 String 结果，`null` 返回真实 null；不要把字面量文本的 Java 类型误写成 Boolean。
 
-`player 属性` 通过 `ScriptSenderQuery.isPlayer` 确认玩家，再调用 `PlayerQuery.property`，null 结果视为不可读。宿主决定支持哪些单词属性；此接口尚不实现原玩家动作的写入、多词属性和全部属性集合。写入关键字被拒绝；`=` 留给外围 `check`，独立 `player level = 5` 仍然解析失败，不会改变玩家。
+`player 属性` 通过 `ScriptSenderQuery.isPlayer` 确认玩家，再调用 `PlayerQuery.property`，null 结果视为不可读。属性名按原框架操作名表匹配多词名称（如 `block x`、`bed spawn x`、`on ground`、`display name`），取最长的完整匹配；不在表中的单个词元按宿主自定义属性传入。名称以小写、空格分隔传给宿主。
+
+`player 属性 to|add|increase|+|sub|decrease|- 值` 调用 `PlayerQuery.write`，返回 false 时报“不可写”。`=` 仍留给外围 `check` 的相等别名，独立 `player level = 5` 解析失败，不会改变玩家；原框架把 `=` 当作写入。
 
 `papi` 与 `placeholder` 接一个完整嵌套动作，再调用 `PlaceholderResolver.resolve`；要求真实玩家语义的发送者查询服务。多词文本须使用引号，如 `papi "hi %name%"`。null 输入转换为空串，其他值使用原 trimIndent 规则。沿原字符串辅助算法，输入 Future 或首次展开失败时打印错误，再以空串展开一次；第二次失败传播。输入动作在返回 Future 之前同步抛错则直接传播，不进入这条重试链。普通动作的参数消费、发送者要求因此与旧扁平 PAPI 实现有变化，控制台不能再直接展开。
 
-异步参数完成后通过 frame 的续接执行器调用宿主查询。宿主仍须负责 Bukkit 主线程检查和实际插件集成。既有 `all/any` 的扁平条件 helper 没有在本批换成原框架的组合动作，不能据此宣布完整条件语言兼容。
+异步参数完成后通过 frame 的续接执行器调用宿主查询。宿主仍须负责 Bukkit 主线程检查和实际插件集成。
+
+## 原框架内置语句
+
+引擎内置 TabooLib 6.3.0 的通用语句，写法与语义按原框架实现，同一份脚本在两边都能运行。
+
+| 类别 | 语句 |
+| --- | --- |
+| 流程 | `wait`/`sleep` 时长、`exit`/`stop`/`terminate`、`pause`、`seq [ ... ]`、`repeat 次数 动作`、`call 块`、`goto 块`、`async`、`await`、`await_all [ ... ]`、`await_any [ ... ]`、`import`/`release` 命名空间、`optional 值 else 动作`、`pass`、`vars`/`variables` |
+| 循环 | `for i in 值 then 动作`、`map i in 值 with 动作`、`while 条件 then 动作`、`break` |
+| 集合 | `array [ ... ]`/`arr`、`size`/`length`、`arr-get`/`element`/`elem 下标 in 列表`、`arr-add 值 to 列表`、`arr-push`/`arr-add-first`、`arr-remove 值 in 列表`、`arr-remove-at`、`arr-take`/`arr-remove-first`、`arr-drop`/`arr-remove-last`、`arr-find 值 in 列表`、`mutable`、`shuffle`、`reverse`、`split 文本 [by 正则]`、`join [ ... ] [by 分隔符]`、`range 起 to 止 [step 步长]` |
+| 文本与时间 | `uncolor`/`uncolored`、`scale`/`scaled`、`format 毫秒 [by 格式]`、`printed 文本 [by 分隔符]`、`match 文本 by 正则`、`time`/`date [as 格式]`、`day of year|month|week`、`year`、`month`、`hour`、`minute`、`second`（复数形式同义）、`log`/`print`/`info`、`warn`/`warning`、`error`/`severe` |
+| 游戏 | `tell`/`send`/`message`、`actionbar`、`broadcast`/`bc`、`players`、`switch 玩家名|console`、`title 文本 [subtitle 文本] [by 淡入 停留 淡出]`、`subtitle`、`location`/`loc 世界 x y z [and yaw pitch]`、`sound 名称 [by 音量 音调]`、`stopsound`、`itemstack`、`material`、`scoreboard 内容`、`command 文本 [as player|op|console]`、`js`/`javascript`/`$` |
+
+```text
+for p in players then {
+  tell inline "{{ &p }}"
+}
+set list to array [ *a *b *c ]
+arr-add *d to &list
+tell join [ &list[0] &list[size] ] by -
+title "&a你好 @sender" subtitle "欢迎" by 10 40 10
+command "give @sender diamond 1" as op
+```
+
+- 列表语句就地修改变量中的列表（`array` 生成可变列表）；`for`、`map`、`while` 在同步执行时以循环推进，不会因次数多而耗尽调用栈，异步迭代通过续接执行器恢复。`for`/`map` 遍历 Map 时额外提供 `键-key`、`键-value` 变量，结束后移除。
+- `exit` 与原框架一样只设置退出状态：后续语句不再执行，脚本以最后的值正常完成，不报错。`pause` 返回永不完成的 Future，宿主应自行限制等待。
+- `wait` 通过 `DelayScheduler` 等待，结束时发送者为已离线玩家（`ScriptSenderQuery.isOnline`）则停止脚本。
+- 文本中的 `@sender` 在 `tell`、`actionbar`、`broadcast`、`title`、`command` 中替换为发送者名称；`command ... as console` 替换为 `console`。`command` 文本会去除公共缩进。
+- `switch` 切换本次脚本后续语句的发送者；嵌套 `inline` 求值不继承切换结果。
+- `sound` 省略 `by` 时音量与音调为 0（原框架行为）；名称以 `resource:` 开头时为资源包音效，否则把 `.` 换为 `_` 并转大写后按枚举查找。
+
+属性读取：`&变量[键]` 与 `动作[键]`（如 `player[name]`）、`get property 键 from 动作`。先交给宿主 `ScriptPropertyAccess`，再使用内置属性：String 的 `upper`/`lower`/`length`/`trim`，Map 的 `@键`/`size`/`keys`/`values`，List 与数组的下标和 `size`，正则 Matcher 的组号或组名。不支持时向 `ScriptLogger` 警告并返回 null。
+
+### 容错解析
+
+原框架默认把未注册的词元当作字面量，因此 `array [ 1 2 ]`、`if true then 1` 可以直接写。Klib 默认仍为严格解析，以便在加载时发现拼写错误；需要兼容原框架脚本时使用四参数构造器：
+
+```java
+KetherScriptEngine engine = new KetherScriptEngine(statements, interop, mainThread, true);
+```
+
+字面量词元是字符串，例如 `array [ 1 2 ]` 得到 `["1", "2"]`。
+
+安装 `TabooLibKetherInterop` 时，未注册的词元先交给同服 TabooLib 容器解析；没有容器认领才按字面量处理，远端语句自身的语法错误照常抛出。Klib 另有原框架没有的内置语句名（`add`、`sub`、`mul`、`div`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`and`、`or`、`unset`、`list`、`namespace`），容错模式下这些词作为文字使用时需要加引号或 `*` 前缀。
+
+### 游戏语句的宿主服务
+
+游戏语句通过 `ScriptPlatform`（在线玩家、广播、控制台、按名查找玩家、动作栏、标题、音效、坐标、材质与物品、侧边栏）、`PlayerQuery.write`、`CommandSink.dispatchAsOperator`、`ScriptLogger` 与 `JavaScriptEvaluator` 访问服务器。Bukkit 插件可直接安装默认实现：
+
+```java
+ScriptContext context = BukkitScriptServices.apply(ScriptContext.builder().sender(player), plugin)
+        .service(PlaceholderResolver.class, (target, text) -> PlaceholderAPI.setPlaceholders((Player) target, text))
+        .build();
+```
+
+`BukkitScriptServices.apply` 安装 `MessageSink`、`CommandSink`（含 `as op`）、`ScriptSenderQuery`、`PlayerQuery`（原框架全部玩家操作，含写入与取值范围限制）、`DelayScheduler`（按 50 毫秒一刻向下取整）、`ScriptLogger`（插件日志）、`ScriptPlatform`、ItemStack/ItemMeta 属性，以及服务端存在 JavaScript 引擎时的 `JavaScriptEvaluator`。`PlaceholderResolver` 依赖 PlaceholderAPI，仍由宿主提供。`scoreboard` 需要侧边栏实现，通过 `apply(builder, plugin, (player, lines) -> ...)` 传入，lines 为 null 表示移除；未传入时该语句报不支持。所有服务必须在主线程调用，引擎的续接执行器应为主线程调度器。在旧版本中不存在的玩家属性（如 `swimming`、`ping`、`pose`）调用时报不支持。
 
 ## 原生动作与宿主变量
 

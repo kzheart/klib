@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.9.0 - 2026-10-03
+
+- `klib-script` 补齐原框架（TabooLib 6.3.0）内置 Kether 语句：`wait`/`sleep`、`exit`/`stop`/`terminate`、`pause`、`for`、`while`、`map`、`repeat`、`break`、`seq`、`call`、`goto`、`async`/`await`/`await_all`/`await_any`、`import`/`release`、`optional`、`pass`、`vars`、`log`/`warn`/`error`、`array` 与 `arr-*` 系列、`size`/`length`、`split`、`range`、`shuffle`/`reverse`/`mutable`、`join [ ... ] by`、`uncolored`、`scale`、`format`、`printed`、`match`、`time`/`date`、`day of`、`year`/`month`/`hour`/`minute`/`second`、`actionbar`、`broadcast`/`bc`、`players`、`switch`、`title`/`subtitle`、`location`/`loc`、`sound`/`stopsound`、`itemstack`、`material`、`scoreboard`、`js`/`javascript`/`$`；`tell` 增加 `send`/`message` 别名与 `@sender` 替换。
+- 新增 `&变量[键]`、`动作[键]` 属性读取与 `get property 键 from 动作`，内置 String、Map、List、数组与正则 Matcher 属性，宿主 `ScriptPropertyAccess` 优先；`set &对象[键]` 同样支持这些内置类型。
+- `player` 按原框架操作名表匹配多词属性（如 `block x`、`on ground`），支持 `to`/`add`/`sub` 写入；`command` 支持 `as|by|with player/op/console` 与 `@sender`。
+- 新增宿主服务 `ScriptPlatform`、`ScriptLogger`、`JavaScriptEvaluator`，以及 `PlayerQuery.write`、`CommandSink.dispatchAsOperator`、`ScriptSenderQuery.isOnline` 默认方法；`BukkitScriptServices.apply(builder, plugin)` 一次安装全部 Bukkit 默认实现。
+- `KetherScriptEngine` 新增四参数构造器，`toleranceParser` 为 true 时与原框架默认行为一致，未注册词元按字面量处理；默认仍为严格解析。安装 `TabooLibKetherInterop` 时，同服容器都不认领的词元同样按字面量处理。
+- 行为变化：`element`、`elem`、`async` 等成为内置语句，原先依赖它们作为字面量或远端语句名的脚本需改用 `*element` 等写法。
+
 ## 0.8.11 - 2026-10-02
 
 - `MountedCommand` 的挂载子命令支持多级路径（如 `"quest data"`），用于挂载本身嵌套在另一处理器子命令下的处理器。

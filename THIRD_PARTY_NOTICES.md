@@ -91,6 +91,34 @@ revision. Copyright (c) SpongePowered <https://www.spongepowered.org> and
 contributors, MIT; the full notice is included in
 `META-INF/LICENSE-Sponge-Coerce.txt`.
 
+## TabooLib built-in Kether statements
+
+`FlowScriptActions`, `CollectionScriptActions`, `TextScriptActions`,
+`GameScriptActions`, `ScriptProperties`, `KetherSupport` and the player operator
+table in `NativeCheckActions` / `BukkitScriptServices` translate the behavior of
+TabooLib's built-in Kether statements:
+
+- Fixed revision: `34732f0a17aa3d739c8c7c1a3b3ff44c948f84f5` (TabooLib 6.3.0)
+- Base path: `module/minecraft/minecraft-kether/src/main/kotlin/taboolib/module/kether/`
+- Files: `action/Actions.kt`, `action/ActionGet.kt`, `action/ActionProperty.kt`,
+  `action/ActionSet.kt`, `action/loop/*.kt`, `action/supplier/*.kt`,
+  `action/transform/Actions.kt`, `action/transform/ActionArray.kt`,
+  `action/transform/ActionMatcher.kt`, `action/transform/ActionJavaScript.kt`,
+  `action/game/Actions.kt`, `action/game/ActionCommand.kt`,
+  `action/game/ActionPlayer.kt`, `action/game/PlayerOperators.kt`,
+  `action/game/PlayerOperatorsExtension.kt`, `action/game/bukkit/ActionItemStack.kt`,
+  `action/game/bukkit/ActionScoreboard.kt`, `KetherScriptLoader.kt`, `ParserHolder.kt`.
+- `common-legacy-api/src/main/java/taboolib/common5/Coerce.java` and
+  `common-util/src/main/kotlin/taboolib/common5/util/String.kt` (`printed`).
+- Copyright (c) 2018 Bkm016; the MIT terms are reproduced above and in
+  `META-INF/LICENSE-TabooLib-Kether.txt`.
+- Changes: Java 8 translation; host capabilities through explicit ScriptContext
+  services (`ScriptPlatform`, `PlayerQuery`, `CommandSink`, `ScriptLogger`,
+  `JavaScriptEvaluator`); iterative loops that do not grow the call stack;
+  longest-match player operator names; `=` stays reserved for the Klib `check`
+  alias; java.text date formatting instead of Commons Lang; no TabooLib or
+  Kotlin runtime dependency.
+
 ## Packet sidebars
 
 `klib-compat`'s `me.kzheart.klib.compat.sidebar` package and the

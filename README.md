@@ -71,7 +71,7 @@ dependencies {
 | 模块 | 用途 |
 | --- | --- |
 | `klib-core` | `KPlugin`、`Scope`、调度、事件、资源释放、冷却与加权随机 |
-| `klib-config` | YAML 配置映射、子节创建、迁移与原子重载 |
+| `klib-config` | YAML 配置映射、第三方格式原值树、子节文本与创建、迁移及原子重载 |
 | `klib-lang` | 多语言消息、占位符和富文本 |
 | `klib-command` | 类型化命令树、权限、建议与内置管理命令 |
 | `klib-item` | 物品构建、标签、跨版本编解码与 MMOItems/NeigeItems/ItemsAdder/MythicMobs 物品适配 |

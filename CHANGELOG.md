@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.8.5 - 2026-10-02
+
+- `ValueDocument` 可持有第三方格式已解析的原值树，保留标量类型、键顺序、缺失与显式 null、可变子节和文档所属 writer；现有 YAML AST 契约保持不变。
+- `ConfigNode` 新增原样名称、列表元素视图和子节文本能力；mapper 的 POJO、列表、映射和数组支持两种后端，保留 YAML 错误位置。
+- `ValueDocument.ofWithNodeWriter` 与 `ConfigNode.sameNode` 为格式 writer 提供节点身份，区分同路径替换的新节、旧持有视图及列表内映射，原 path writer 契约保留。
+
 ## 0.8.4 - 2026-10-02
 
 - `KetherScriptEngine.evalChecked` 区分同步编译异常与异步执行失败，复用同一编译缓存，现有 `eval` 契约保持不变。

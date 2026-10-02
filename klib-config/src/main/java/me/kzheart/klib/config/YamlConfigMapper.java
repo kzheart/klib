@@ -21,10 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.yaml.snakeyaml.nodes.MappingNode;
-import org.yaml.snakeyaml.nodes.Node;
-import org.yaml.snakeyaml.nodes.NodeTuple;
-import org.yaml.snakeyaml.nodes.SequenceNode;
 
 /** 将能感知路径的 YAML 节点映射为 Java 8 POJO。 */
 public final class YamlConfigMapper {
@@ -162,7 +158,7 @@ public final class YamlConfigMapper {
     }
 
     private Object convertPojo(ConfigNode node, Class<?> type) {
-        if (!(node.yamlNode() instanceof MappingNode)) {
+        if (!node.isMapping()) {
             throw node.mappingError("expected a mapping for " + type.getName());
         }
         if (type.isInterface() || Modifier.isAbstract(type.getModifiers())) {
@@ -247,8 +243,8 @@ public final class YamlConfigMapper {
      */
     private void warnUnknownKeys(ConfigNode node, Class<?> type, Set<String> declaredNames) {
         String basePath = node.path();
-        for (NodeTuple tuple : ((MappingNode) node.yamlNode()).getValue()) {
-            String key = YamlDocument.scalarKey(tuple.getKeyNode());
+        for (ConfigNode child : node.mappingChildren()) {
+            String key = child.name();
             if (declaredNames.contains(key)) {
                 continue;
             }
@@ -259,50 +255,47 @@ public final class YamlConfigMapper {
             if (!warnedUnknownKeys.add(node.sourceName() + ' ' + keyPath)) {
                 continue;
             }
-            LOGGER.warning(ConfigLocations.prefix(
-                    node.sourceName(),
-                    keyPath,
-                    ConfigLocations.startMark(tuple.getKeyNode()))
+            LOGGER.warning(child.keyLocationPrefix()
                     + ": unknown configuration key is ignored; " + type.getName()
                     + " has no matching field");
         }
     }
 
     private Object convertCollection(ConfigNode node, Class<?> rawClass, Type elementType) {
-        if (!(node.yamlNode() instanceof SequenceNode)) {
+        if (!node.isSequence()) {
             throw node.mappingError("expected a sequence, got " + kind(node.raw()));
         }
         Collection<Object> result = newCollection(node, rawClass);
-        List<Node> values = ((SequenceNode) node.yamlNode()).getValue();
-        for (int index = 0; index < values.size(); index++) {
-            result.add(convert(node.indexed(values.get(index), index), elementType));
+        int size = node.sequenceSize();
+        for (int index = 0; index < size; index++) {
+            result.add(convert(node.index(index), elementType));
         }
         return result;
     }
 
     private Object convertMap(ConfigNode node, Class<?> rawClass, Type valueType) {
-        if (!(node.yamlNode() instanceof MappingNode)) {
+        if (!node.isMapping()) {
             throw node.mappingError("expected a mapping, got " + kind(node.raw()));
         }
         Map<String, Object> result = newMap(node, rawClass);
-        for (NodeTuple tuple : ((MappingNode) node.yamlNode()).getValue()) {
-            String key = YamlDocument.scalarKey(tuple.getKeyNode());
-            result.put(key, convert(node.child(key, tuple.getValueNode()), valueType));
+        for (ConfigNode child : node.mappingChildren()) {
+            String key = child.name();
+            result.put(key, convert(child, valueType));
         }
         return result;
     }
 
     private Object convertArray(ConfigNode node, Class<?> componentType) {
-        if (!(node.yamlNode() instanceof SequenceNode)) {
+        if (!node.isSequence()) {
             throw node.mappingError("expected a sequence, got " + kind(node.raw()));
         }
-        List<Node> values = ((SequenceNode) node.yamlNode()).getValue();
-        Object array = java.lang.reflect.Array.newInstance(componentType, values.size());
-        for (int index = 0; index < values.size(); index++) {
+        int size = node.sequenceSize();
+        Object array = java.lang.reflect.Array.newInstance(componentType, size);
+        for (int index = 0; index < size; index++) {
             java.lang.reflect.Array.set(
                     array,
                     index,
-                    convert(node.indexed(values.get(index), index), componentType));
+                    convert(node.index(index), componentType));
         }
         return array;
     }

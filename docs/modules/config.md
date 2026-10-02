@@ -304,3 +304,38 @@ Remote 不会自动发现配置对象；是否采集这些上下文由插件开�
 当前节点缺失或不是映射时抛出带来源与路径的 `ConfigMappingException`，不会创建未关联的子节。
 替换会保留已有键节点及其注释；旧子视图仍引用旧节点，因此替换后需要重新读取。
 这是内存中的文档修改，不会自动保存到文件或触发配置重载监听。
+
+
+## 原值文档与格式 writer
+
+已使用独立解析器获得 `Map<String, ?>` 时，可以创建 `ValueDocument`，直接保留原有标量类型，而不先序列化为 YAML。它不负责读取文件或解析 JSON/TOML，也不自动解码字符串；解析策略与格式 writer 由调用方明确提供。
+
+```java
+Map<String, Object> values = new LinkedHashMap<String, Object>();
+values.put("title", "NPC");
+values.put("settings", new LinkedHashMap<String, Object>());
+
+ValueDocument document = ValueDocument.of("dialogue.json", values,
+        (path, section) -> jsonSectionWriter.write(path, section));
+ConfigNode root = document.root();
+ConfigNode settings = document.node("settings");
+settings.createSection("transfer");
+String text = settings.sectionText();
+```
+
+`jsonSectionWriter` 表示调用方实际选用的格式 writer，不是本模块提供的 JSON API。回调首参是当前节点路径，根节点为 `""`；第二参为当前 mapping 的深层不可变 Map/List 快照。相同值的两个节仍会分别传入各自路径，可用于定位原文件中的注释。回调必须返回非 null 文本，异常直接传给调用方。
+
+`ValueDocument.of` 复制输入 Map/List 容器为文档自有的可变树，后续修改输入容器不会影响文档；标量保留原对象及类型，例如日期、布尔值和大整数。嵌套 mapping 键必须是 String，不接受递归 Map/List 容器。`raw()` 返回深层不可变普通 Map/List 快照，快照不会随文档修改而改变；标量对象本身不会额外克隆。null 和缺失键的 `raw()` 都为 null，使用 `exists()` 区分。
+
+两个文档都提供以下节点能力：
+
+- `name()` 返回单个原样键，根返回空字符串；`child("a.b")` 的 name 为 `"a.b"`，不会按点号截断。
+- `node("a.b")` 仍按点分路径逐级读取；与 literal-key 的 child 分开使用。
+- `index(i)` 返回列表元素视图，路径为 `list[i]`，name 为 `[i]`。非列表抛出带来源/路径的 ConfigMappingException，越界抛出 IndexOutOfBoundsException。
+- `sectionText()` 只接受存在的 mapping；ValueDocument 调用上述 writer，YamlDocument 使用自身 YAML writer渲染该子节并保留子节内注释，不把普通 Map.toString 当作格式文本。
+- `sameNode(other)` 比较节点身份，不比较内容相等：必须属于同一文档，YAML 比较 AST 节点，原值 mapping/list 比较容器引用；原值标量（含显式 null）比较父容器、原样键或索引与值引用。两个值相等、路径文本相同或来源名相同不代表同一节点。缺失节点和 null 参数始终返回 false；不同文档不可混比，也不暴露底层可变容器。
+- `createSection` 直接修改所在文档的父 mapping；同一父树的其它视图可见新值。替换前持有的旧子视图继续指向旧节点，需重新读取才能访问新节。它不自动保存文件或派发 reload。
+
+需要区分原节和同路径替换后的新节时，使用命名工厂 `ValueDocument.ofWithNodeWriter(sourceName, values, BiFunction<ConfigNode, Map<String,Object>, String>)`。writer 的第一个参数是本次 `sectionText()` 的当前节点视图，第二个仍是深层不可变容器快照；可以保存初始节点视图，并用 `sameNode` 关联所属格式的注释或其它元数据。替换后的新节不会与初始节混同，仍持有的旧视图继续识别原节点；列表内映射与含点号、方括号的原样键也不依赖文本路径猜身份。原有 `of` 的 path writer 继续按原契约工作。两种 writer 的异常和 null 结果都直接传播，不返回伪造文本。
+
+`YamlConfigMapper.read(document.root(), Settings.class)` 可映射两种文档的 POJO、列表、Map、数组及自定义 converter；未知键告警仍按来源和路径去重。原值文档没有 YAML 行列标记，错误包含来源与节点路径；YAML 文档继续提供原行列信息。原有 YamlDocument 的解析、raw 转换、注释、默认值合并和 migration 行为保持原契约，新增后端不会把第三方格式的字符串或类型规范化规则强加给默认 YAML 文档。

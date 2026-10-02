@@ -173,6 +173,12 @@ public final class YamlDocument {
         return output.toString();
     }
 
+    String sectionText(MappingNode section) {
+        StringWriter output = new StringWriter();
+        yaml.serialize(section, output);
+        return output.toString();
+    }
+
     MappingNode rootNode() {
         return root;
     }

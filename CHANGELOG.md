@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.8.11 - 2026-10-02
+
+- `MountedCommand` 的挂载子命令支持多级路径（如 `"quest data"`），用于挂载本身嵌套在另一处理器子命令下的处理器。
+
 ## 0.8.10 - 2026-10-02
 
 - `klib-command` 新增 `MountedCommand.of(command, handler, literal, aliases...)`：在同一次 `register(...)` 中把注解处理器的全部路由挂到另一根命令的子命令（及其别名）下，处理器自身根命令不受影响；权限、Check 与补全沿用处理器声明，不支持嵌套挂载。

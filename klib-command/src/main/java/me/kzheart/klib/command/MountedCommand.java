@@ -21,7 +21,10 @@ public final class MountedCommand {
         this.handler = handler;
     }
 
-    /** {@code literal} and each alias become sibling prefixes in front of every handler route. */
+    /**
+     * {@code literal} and each alias become sibling prefixes in front of every handler route; a prefix may
+     * span several words, e.g. {@code "quest data"} mounts under {@code /main quest data ...}.
+     */
     public static MountedCommand of(String command, Object handler, String literal, String... aliases) {
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(handler, "handler");

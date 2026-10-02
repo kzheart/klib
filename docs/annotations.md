@@ -95,7 +95,7 @@ public final class DungeonCommands {
 - 类级 Permission 为默认值，方法级 Permission 替换默认值；类级和方法级 Check 累加、按声明顺序去重。
 - CheckHandler 可无参或接收一个 CommandCall，仅执行命令时调用，不在补全和帮助中执行。
 - 同根命令的多个处理类必须放在同一次 `register(playerCommands, adminCommands)` 中；所有别名共享合并后的完整树。
-- `MountedCommand.of("main", questCommands, "quest", "q")` 把一个处理类的全部路由再挂到 `/main quest ...` 与 `/main q ...` 下，处理类自身的根命令照常注册（同一实例同时传入即可）。挂载忽略处理类的 `@Command` 名称、别名与类级 `@Description`，权限、Check 与补全照常生效；挂载项须与目标根的处理类放在同一次 `register(...)` 中，不支持嵌套挂载。
+- `MountedCommand.of("main", questCommands, "quest", "q")` 把一个处理类的全部路由再挂到 `/main quest ...` 与 `/main q ...` 下，处理类自身的根命令照常注册（同一实例同时传入即可）；子命令可写多级，如 `"quest data"`。挂载忽略处理类的 `@Command` 名称、别名与类级 `@Description`，权限、Check 与补全照常生效；挂载项须与目标根的处理类放在同一次 `register(...)` 中，不支持嵌套挂载。
 - 共享参数路径必须保持名称、类型和补全声明一致；绑定到不同对象的补全器不能占用同一个共享参数节点。
 - 注册前校验整个批次；重复路由、缺失参数、未知补全器、错误签名会在触碰 Bukkit 前失败。注册桥接中途失败会回滚已注册的命令和别名。
 - 所有声明方法须 public、非 static。路由须返回 void；继承方法按正常 Java override 规则处理，不隐式继承父类方法注解。

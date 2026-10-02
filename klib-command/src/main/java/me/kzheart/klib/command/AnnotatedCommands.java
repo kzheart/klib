@@ -45,7 +45,9 @@ public final class AnnotatedCommands {
                     prefixes.add("");
                 } else {
                     for (String literal : mount.literals()) {
-                        String prefix = word(literal);
+                        StringBuilder path = new StringBuilder();
+                        for (String part : literal.trim().split("\\s+")) path.append(path.length() == 0 ? "" : " ").append(word(part));
+                        String prefix = path.toString();
                         if (prefixes.contains(prefix)) throw new IllegalArgumentException("Duplicate mount literal " + literal);
                         prefixes.add(prefix);
                     }

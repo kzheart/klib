@@ -136,7 +136,7 @@ class AnnotatedCommandsTest {
     @Test void mountedHandlerKeepsOwnRootAndAppearsUnderEachLiteral() {
         try (Fixture f = new Fixture()) {
             Routes routes = new Routes(); Mounted mounted = new Mounted();
-            f.register(routes, mounted, MountedCommand.of("demo", mounted, "other", "o"));
+            f.register(routes, mounted, MountedCommand.of("demo", mounted, "other", "o", "deep other"));
             CommandSender console = TestSenders.console("admin", "use").sender();
             assertEquals(CommandResult.Status.SUCCESS, f.registered.get("other").execute(console, new String[]{"set", "a"}).status());
             assertEquals("a", mounted.value);
@@ -144,6 +144,8 @@ class AnnotatedCommandsTest {
             assertEquals("b", mounted.value);
             f.registered.get("d").execute(console, new String[]{"o"});
             assertEquals("root", mounted.value);
+            assertEquals(CommandResult.Status.SUCCESS, f.dispatcher().execute(console, new String[]{"deep", "other", "set", "z"}).status());
+            assertEquals("z", mounted.value);
             assertEquals(Arrays.asList("alpha", "beta"), f.dispatcher().complete(console, new String[]{"other", "set", ""}));
             CommandSender player = TestSenders.player("p", "use").sender();
             assertNotEquals(CommandResult.Status.SUCCESS, f.dispatcher().execute(player, new String[]{"other", "set", "c"}).status());

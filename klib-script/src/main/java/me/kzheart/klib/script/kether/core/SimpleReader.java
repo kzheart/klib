@@ -152,7 +152,8 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
             default:
                 TokenBlock token = nextTokenBlock();
                 String element = token.getToken();
-                if (allowLiteral && token.isBlock()) {
+                // 容错模式下引号文本总是字面量，不会被同名语句（如 "or"）解析。
+                if ((allowLiteral || service.isToleranceParser()) && token.isBlock()) {
                     beforeParse();
                     result = (ParsedAction<T>) wrap(new CoreActions.Literal<>(element));
                     break;

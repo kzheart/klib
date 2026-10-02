@@ -261,7 +261,7 @@ KetherScriptEngine engine = new KetherScriptEngine(statements, interop, mainThre
 
 字面量词元是字符串，例如 `array [ 1 2 ]` 得到 `["1", "2"]`。
 
-安装 `TabooLibKetherInterop` 时，未注册的词元先交给同服 TabooLib 容器解析；没有容器认领才按字面量处理，远端语句自身的语法错误照常抛出。Klib 另有原框架没有的内置语句名（`add`、`sub`、`mul`、`div`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`and`、`or`、`unset`、`list`、`namespace`），容错模式下这些词作为文字使用时需要加引号或 `*` 前缀。
+安装 `TabooLibKetherInterop` 时，未注册的词元先交给同服 TabooLib 容器解析；没有容器认领才按字面量处理，远端语句自身的语法错误照常抛出。容错模式下引号括起的文本总是字面量，即使与语句同名（原框架会把 `"mm"` 这类与语句同名的引号文本解析为语句）。Klib 另有原框架没有的内置语句名（`add`、`sub`、`mul`、`div`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`and`、`or`、`unset`、`list`、`namespace`），未加引号作为文字使用时需要加引号或 `*` 前缀。
 
 ### 游戏语句的宿主服务
 

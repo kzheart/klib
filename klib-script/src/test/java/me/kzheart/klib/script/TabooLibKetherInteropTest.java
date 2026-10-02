@@ -119,6 +119,7 @@ class TabooLibKetherInteropTest {
         try {
             assertEquals(Arrays.asList("1", "2"), engine.eval("array [ 1 2 ]", ScriptContext.builder().build()).toCompletableFuture().join());
             assertEquals("value", engine.eval("inner value", ScriptContext.builder().build()).toCompletableFuture().join());
+            assertEquals("a b", engine.eval("join [ a \" \" b ]", ScriptContext.builder().build()).toCompletableFuture().join());
         } finally {
             scope.close();
         }

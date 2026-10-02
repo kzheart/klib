@@ -122,6 +122,10 @@ class TabooLibBuiltinActionsTest {
         assertEquals(Arrays.asList(0.0, 0.5, 1.0), eval("range 0 to 1 step 0.5"));
     }
 
+    @Test void quotedTextIsAlwaysLiteralInTolerantMode() {
+        assertEquals(Arrays.asList("or", "tell", "a"), eval("array [ \"or\" \"tell\" a ]"));
+    }
+
     @Test void klibJoinFormStillWorks() {
         assertEquals("a,b", eval("join , a b"));
     }

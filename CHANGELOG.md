@@ -1,5 +1,10 @@
 # 更新日志
 
+## 0.9.1 - 2026-10-03
+
+- 修复安装 `TabooLibKetherInterop` 时，引号中的空白文本（如 `" "`）被交给远端解析而报 `action must not be blank`。
+- 容错模式下引号括起的文本总是字面量，不再被同名语句解析（例如列表中的 `"or"` 不会成为 Klib 的 `or` 语句）。
+
 ## 0.9.0 - 2026-10-03
 
 - `klib-script` 补齐原框架（TabooLib 6.3.0）内置 Kether 语句：`wait`/`sleep`、`exit`/`stop`/`terminate`、`pause`、`for`、`while`、`map`、`repeat`、`break`、`seq`、`call`、`goto`、`async`/`await`/`await_all`/`await_any`、`import`/`release`、`optional`、`pass`、`vars`、`log`/`warn`/`error`、`array` 与 `arr-*` 系列、`size`/`length`、`split`、`range`、`shuffle`/`reverse`/`mutable`、`join [ ... ] by`、`uncolored`、`scale`、`format`、`printed`、`match`、`time`/`date`、`day of`、`year`/`month`/`hour`/`minute`/`second`、`actionbar`、`broadcast`/`bc`、`players`、`switch`、`title`/`subtitle`、`location`/`loc`、`sound`/`stopsound`、`itemstack`、`material`、`scoreboard`、`js`/`javascript`/`$`；`tell` 增加 `send`/`message` 别名与 `@sender` 替换。

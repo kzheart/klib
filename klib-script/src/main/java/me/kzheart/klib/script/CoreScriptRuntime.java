@@ -192,6 +192,8 @@ final class CoreScriptRuntime {
         }
         if (unknownResolver instanceof KetherParserResolver) {
             service.getRegistry().setFallbackParser((name, selectedNamespaces) -> {
+                // 引号中的空白文本（如 " "）不可能是语句名，不交给远端解析。
+                if (name.trim().isEmpty()) return null;
                 QuestActionParser remote = ((KetherParserResolver) unknownResolver).parser(name, selectedNamespaces);
                 return toleranceParser ? tolerant(remote, name) : remote;
             });

@@ -26,6 +26,9 @@ final class BuiltInStatements {
         StructuredScriptActions.install(registry);
         NativeValueActions.install(registry);
         NativeCheckActions.install(registry);
+        FlowScriptActions.install(registry);
+        CollectionScriptActions.install(registry);
+        TextScriptActions.install(registry);
         registry.registerBuiltin("klib", "get", BuiltInStatements::get);
         registry.registerBuiltin("klib", "unset", BuiltInStatements::unset);
         registry.registerBuiltin("klib", "eq", compare(Comparison.EQUAL));

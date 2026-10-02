@@ -44,11 +44,25 @@ public final class KetherScriptEngine implements ScriptEngine {
             UnknownStatementResolver unknownResolver,
             Executor continuationExecutor
     ) {
+        this(registry, unknownResolver, continuationExecutor, false);
+    }
+
+    /**
+     * 与三参数构造器相同；{@code toleranceParser} 为 true 时与原框架默认行为一致，
+     * 未注册的词元按字面量处理（如 {@code array [ 1 2 ]}、{@code if true then 1}），而不是报未知语句。
+     */
+    public KetherScriptEngine(
+            StatementRegistry registry,
+            UnknownStatementResolver unknownResolver,
+            Executor continuationExecutor,
+            boolean toleranceParser
+    ) {
         Objects.requireNonNull(registry, "registry");
         this.runtime = new CoreScriptRuntime(
                 registry,
                 unknownResolver,
-                Objects.requireNonNull(continuationExecutor, "continuationExecutor"));
+                Objects.requireNonNull(continuationExecutor, "continuationExecutor"),
+                toleranceParser);
         BuiltInStatements.install(registry);
     }
 

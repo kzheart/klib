@@ -23,6 +23,9 @@ public interface QuestService<C extends QuestContext> {
 
     default boolean isToleranceParser() { return false; }
 
+    /** 属性读取简写的解析器；未安装时属性读取语句失败。 */
+    default PropertyAccessor getPropertyAccessor() { return null; }
+
     @SuppressWarnings("unchecked")
     static <C extends QuestContext> QuestService<C> instance() {
         return (QuestService<C>) ServiceHolder.getQuestServiceInstance();

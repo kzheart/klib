@@ -123,7 +123,7 @@ class NativeCheckActionsTest {
         assertEquals(Boolean.TRUE, eval("check &list contains { math add [ 1 ] }", context));
         assertEquals(Boolean.FALSE, eval("check &list contains *1", context));
         assertEquals(Boolean.TRUE, eval("check null in &list", context));
-        assertEquals(Boolean.TRUE, eval("check element in &array", context));
+        assertEquals(Boolean.TRUE, eval("check *element in &array", context));
         assertEquals(Boolean.TRUE, eval("check &array contains null", context));
         assertEquals(Boolean.TRUE, eval("check &map has key", context));
         assertEquals(Boolean.FALSE, eval("check value in &map", context));

@@ -119,7 +119,7 @@ class TabooLibKetherInteropTest {
 
         CompletableFuture<Object> result = new KetherScriptEngine(
                 registry, interop, Runnable::run).eval(
-                        "async delayed",
+                        "remote-async delayed",
                         ScriptContext.builder().build()).toCompletableFuture();
         assertFalse(result.isDone());
         remote.pending.complete("delayed");
@@ -252,7 +252,7 @@ class TabooLibKetherInteropTest {
                 if ("inner".equals(action)) {
                     return TabooLibKetherInterop.OpenResult.successful(new LiteralSource(reader.nextToken()));
                 }
-                if ("async".equals(action)) {
+                if ("remote-async".equals(action)) {
                     reader.nextToken();
                     return TabooLibKetherInterop.OpenResult.successful(new AsyncSource(pending));
                 }

@@ -34,12 +34,20 @@ final class StructuredScriptActions {
     private StructuredScriptActions() { }
 
     static void install(StatementRegistry registry) {
-        registry.registerBuiltinKether("tell", unary((frame, value) -> {
+        QuestActionParser tell = unary((frame, value) -> {
             ScriptContext context = CoreScriptRuntime.context(frame);
             String message = InlineValues.interpolate(text(value), context);
-            context.requireService(MessageSink.class).send(context.sender().orElse(null), message);
+            Object sender = context.sender().orElse(null);
+            // 原框架把 @sender 替换为发送者名称。
+            if (message.contains("@sender")) {
+                message = message.replace("@sender", sender == null ? "null" : String.valueOf(context.requireService(ScriptSenderQuery.class).name(sender)));
+            }
+            context.requireService(MessageSink.class).send(sender, message);
             return completed(message);
-        }));
+        });
+        registry.registerBuiltinKether("tell", tell);
+        registry.registerBuiltinKether("send", tell);
+        registry.registerBuiltinKether("message", tell);
         QuestActionParser colored = unary((frame, value) -> completed(color(text(value))));
         registry.registerBuiltinKether("colored", colored);
         registry.registerBuiltinKether("color", colored);
@@ -172,7 +180,7 @@ final class StructuredScriptActions {
 
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
 
-    private static String color(String value) {
+    static String color(String value) {
         StringBuilder result = new StringBuilder();
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);

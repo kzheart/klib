@@ -238,9 +238,7 @@ final class NativeValueActions {
         return action(frame -> follow(frame, frame.newFrame(source).run(), instance -> {
             if (instance == null) throw new IllegalArgumentException("Property object must be not null.");
             return follow(frame, frame.newFrame(value).run(), result -> {
-                ScriptPropertyAccess.Result written = CoreScriptRuntime.context(frame)
-                        .requireService(ScriptPropertyAccess.class).write(instance, property, result);
-                if (written == null || !written.isSupported()) {
+                if (!ScriptProperties.write(frame, instance, property, result)) {
                     throw new IllegalArgumentException(instance.getClass().getSimpleName() + "[" + property + "] not supported yet.");
                 }
                 return completed(null);

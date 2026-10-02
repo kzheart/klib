@@ -24,12 +24,18 @@ public final class SimpleQuestService implements QuestService<SimpleQuestContext
     private final ScheduledExecutorService asyncExecutor;
     private final boolean ownsAsyncExecutor;
     private final boolean toleranceParser;
+    private volatile PropertyAccessor propertyAccessor;
     private final Map<String, Quest> quests = new LinkedHashMap<>();
     private final Map<String, Map<String, Object>> settings = new LinkedHashMap<>();
     private final Map<String, List<SimpleQuestContext>> running = new LinkedHashMap<>();
 
     public SimpleQuestService() {
         this(Runnable::run, newDaemonScheduler(), true, false);
+    }
+
+    /** 创建只用于解析的服务；toleranceParser 为 true 时未注册的词元按字面量处理。 */
+    public SimpleQuestService(boolean toleranceParser) {
+        this(Runnable::run, newDaemonScheduler(), true, toleranceParser);
     }
 
     /** 创建一个使用给定执行器运行异步动作续接的服务。 */
@@ -126,6 +132,8 @@ public final class SimpleQuestService implements QuestService<SimpleQuestContext
         return node + (params.length == 0 ? "" : " " + Arrays.toString(params));
     }
     @Override public boolean isToleranceParser() { return toleranceParser; }
+    @Override public PropertyAccessor getPropertyAccessor() { return propertyAccessor; }
+    public void setPropertyAccessor(PropertyAccessor value) { propertyAccessor = value; }
 
     @Override
     public void close() {

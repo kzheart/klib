@@ -48,4 +48,28 @@ final class CoreActions {
 
         @Override public String toString() { return "Get{" + name + '}'; }
     }
+
+    /** 属性读取：先求值实例，再交给任务服务安装的 PropertyAccessor。 */
+    static final class PropertyGet extends QuestAction<Object> {
+        private final ParsedAction<?> instance;
+        private final String key;
+
+        PropertyGet(ParsedAction<?> instance, String key) {
+            this.instance = instance;
+            this.key = key;
+        }
+
+        @Override
+        public CompletableFuture<Object> process(QuestContext.Frame frame) {
+            PropertyAccessor accessor = frame.context().getService().getPropertyAccessor();
+            if (accessor == null) throw new IllegalStateException("Property access is not installed: " + key);
+            CompletableFuture<Object> value = frame.newFrame(instance).run();
+            return value.isDone() ? value.thenApply(result -> accessor.read(frame, result, key))
+                    : value.thenApplyAsync(result -> accessor.read(frame, result, key), frame.context().getExecutor());
+        }
+
+        ParsedAction<?> getInstance() { return instance; }
+        String getKey() { return key; }
+        @Override public String toString() { return "PropertyGet{" + instance + '[' + key + "]}"; }
+    }
 }

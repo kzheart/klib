@@ -50,6 +50,7 @@ final class CoreScriptRuntime {
     private final StatementRegistry registry;
     private final UnknownStatementResolver unknownResolver;
     private final Executor continuationExecutor;
+    private final boolean toleranceParser;
     private final Object cacheLock = new Object();
     private final LinkedHashMap<CacheKey, CacheEntry> compiledScripts =
             new LinkedHashMap<CacheKey, CacheEntry>(16, 0.75F, true);
@@ -60,11 +61,13 @@ final class CoreScriptRuntime {
     CoreScriptRuntime(
             StatementRegistry registry,
             UnknownStatementResolver unknownResolver,
-            Executor continuationExecutor
+            Executor continuationExecutor,
+            boolean toleranceParser
     ) {
         this.registry = registry;
         this.unknownResolver = unknownResolver;
         this.continuationExecutor = continuationExecutor;
+        this.toleranceParser = toleranceParser;
     }
 
     CompletionStage<Object> eval(String source, ScriptContext scriptContext) {
@@ -102,6 +105,7 @@ final class CoreScriptRuntime {
             Quest quest, ScriptContext scriptContext, EvaluationState evaluationState
     ) {
         final SimpleQuestService service = new SimpleQuestService(continuationExecutor);
+        service.setPropertyAccessor(ScriptProperties::read);
         try {
             SimpleQuestContext context = service.newContext(quest);
             Map<String, Object> variablesBefore = scriptContext.variables();
@@ -249,7 +253,7 @@ final class CoreScriptRuntime {
             return cached;
         }
 
-        SimpleQuestService compiler = new SimpleQuestService();
+        SimpleQuestService compiler = new SimpleQuestService(toleranceParser);
         Quest compiled;
         try {
             int lineOffset = source.trim().startsWith("def ") ? 0 : 1;
@@ -357,7 +361,28 @@ final class CoreScriptRuntime {
         if (builtinCommand) {
             return commandParser(lookupName, name, namespaces, lineOffset);
         }
-        return statementParser(lookupName, name, namespaces, lineOffset);
+        final QuestActionParser statement = statementParser(lookupName, name, namespaces, lineOffset);
+        if ("join".equals(name)) {
+            // join [ 动作... ] by 分隔符 为原框架写法；其余保持 join 分隔符 值... 。
+            return QuestActionParser.of(reader -> reader.hasNext() && reader.peek() == '['
+                    ? CollectionScriptActions.joinList(reader) : statement.resolve(reader));
+        }
+        if ("get".equals(name)) {
+            // get property 键 from|in 动作 为原框架写法。
+            return QuestActionParser.of(reader -> {
+                int mark = reader.getIndex();
+                if (reader.hasNext() && "property".equals(reader.nextToken())) {
+                    String key = reader.nextToken();
+                    KetherSupport.expects(reader, "from", "in");
+                    ParsedAction<?> instance = reader.nextValue();
+                    return KetherSupport.action(frame -> KetherSupport.follow(frame, KetherSupport.run(frame, instance),
+                            value -> KetherSupport.completed(ScriptProperties.read(frame, value, key))));
+                }
+                reader.setIndex(mark);
+                return statement.resolve(reader);
+            });
+        }
+        return statement;
     }
 
     private QuestActionParser statementParser(

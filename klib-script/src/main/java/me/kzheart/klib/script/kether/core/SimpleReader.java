@@ -133,11 +133,17 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
                 index = blockParser.index;
                 result = (ParsedAction<T>) anonymous;
                 break;
-            case '&':
+            case '&': {
                 skip(1);
                 beforeParse();
-                result = (ParsedAction<T>) wrap(new CoreActions.Get<>(nextToken()));
+                String variable = nextToken();
+                int bracket = propertyBracket(variable);
+                result = bracket > 0
+                        ? (ParsedAction<T>) wrap(new CoreActions.PropertyGet(wrap(new CoreActions.Get<>(variable.substring(0, bracket))),
+                                variable.substring(bracket + 1, variable.length() - 1)))
+                        : (ParsedAction<T>) wrap(new CoreActions.Get<>(variable));
                 break;
+            }
             case '*':
                 skip(1);
                 beforeParse();
@@ -152,6 +158,23 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
                     break;
                 }
                 List<String> domains = selectedNamespaces(selectedNamespace);
+                int bracket = token.isBlock() ? -1 : propertyBracket(element);
+                if (bracket > 0) {
+                    // 原框架的 动作[键] 属性读取简写，如 player[name]。
+                    String key = element.substring(bracket + 1, element.length() - 1);
+                    String owner = element.substring(0, bracket);
+                    Optional<QuestActionParser> ownerParser = service.getRegistry().getParser(owner, domains);
+                    beforeParse();
+                    if (ownerParser.isPresent()) {
+                        result = (ParsedAction<T>) wrap(new CoreActions.PropertyGet(wrap(ownerParser.get().resolve(this)), key));
+                        break;
+                    }
+                    if (allowLiteral || service.isToleranceParser()) {
+                        result = (ParsedAction<T>) wrap(new CoreActions.PropertyGet(wrap(new CoreActions.Literal<>(owner, true)), key));
+                        break;
+                    }
+                    throw LoadError.UNKNOWN_ACTION.create(owner);
+                }
                 Optional<QuestActionParser> parser = service.getRegistry().getParser(element, domains);
                 beforeParse();
                 if (parser.isPresent()) {
@@ -167,6 +190,13 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
         result.set(ActionProperties.LINE, Integer.valueOf(blockParser.lineOf(actionStart)));
         result.set(ActionProperties.COLUMN, Integer.valueOf(blockParser.columnOf(actionStart)));
         return result;
+    }
+
+    /** 形如 name[key] 的词元返回左括号位置，否则返回 -1。 */
+    private static int propertyBracket(String token) {
+        if (token.isEmpty() || token.charAt(token.length() - 1) != ']') return -1;
+        int bracket = token.indexOf('[');
+        return bracket >= 1 && bracket < token.length() ? bracket : -1;
     }
 
     private ParsedAction<?> nextAnonAction(String selectedNamespace) {
@@ -196,6 +226,10 @@ public class SimpleReader extends AbstractStringReader implements QuestReader {
     protected <T> ParsedAction<T> wrap(QuestAction<T> action) { return new ParsedAction<>(action); }
     @Override public void expect(String value) { super.expect(value); }
     public List<String> getNamespace() { return new ArrayList<>(namespace); }
+    /** 之后解析的语句也在该命名空间中查找（import 语句）。 */
+    public void addNamespace(String value) { if (!namespace.contains(value)) namespace.add(value); }
+    /** 不再在该命名空间中查找（release 语句）。 */
+    public void removeNamespace(String value) { namespace.remove(value); }
     public QuestService<?> getService() { return service; }
     public BlockReader getBlockParser() { return blockParser; }
 }

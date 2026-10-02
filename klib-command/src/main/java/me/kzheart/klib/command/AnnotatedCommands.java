@@ -28,15 +28,27 @@ public final class AnnotatedCommands {
             Map<String, CommandSpecImpl> roots = new LinkedHashMap<String, CommandSpecImpl>();
             Map<CommandNode, String> signatures = new IdentityHashMap<CommandNode, String>();
             Map<String, String> names = new LinkedHashMap<String, String>();
-            for (Object target : handlers) {
-                Objects.requireNonNull(target, "handler");
+            for (Object entry : handlers) {
+                Objects.requireNonNull(entry, "handler");
+                MountedCommand mount = entry instanceof MountedCommand ? (MountedCommand) entry : null;
+                Object target = mount == null ? entry : mount.handler();
                 Command command = target.getClass().getAnnotation(Command.class);
-                if (command == null) throw new IllegalArgumentException(target.getClass().getName() + ": missing @Command");
-                String canonical = word(command.value());
+                if (mount == null && command == null) throw new IllegalArgumentException(target.getClass().getName() + ": missing @Command");
+                String canonical = word(mount == null ? command.value() : mount.command());
                 Set<String> labels = new LinkedHashSet<String>();
                 labels.add(canonical);
-                for (String alias : command.aliases()) {
-                    if (!labels.add(word(alias))) throw new IllegalArgumentException("Duplicate alias " + alias);
+                List<String> prefixes = new ArrayList<String>();
+                if (mount == null) {
+                    for (String alias : command.aliases()) {
+                        if (!labels.add(word(alias))) throw new IllegalArgumentException("Duplicate alias " + alias);
+                    }
+                    prefixes.add("");
+                } else {
+                    for (String literal : mount.literals()) {
+                        String prefix = word(literal);
+                        if (prefixes.contains(prefix)) throw new IllegalArgumentException("Duplicate mount literal " + literal);
+                        prefixes.add(prefix);
+                    }
                 }
                 Map<String, Method> checks = new HashMap<String, Method>();
                 Map<String, Method> suggestions = new HashMap<String, Method>();
@@ -69,13 +81,17 @@ public final class AnnotatedCommands {
                 for (String label : Collections.singleton(canonical)) {
                     CommandSpecImpl root = roots.computeIfAbsent(label, CommandSpecImpl::command);
                     Description description = target.getClass().getAnnotation(Description.class);
-                    if (description != null) root.description(description.value());
+                    if (mount == null && description != null) root.description(description.value());
                     for (Method m : methods) {
                         Route route = m.getAnnotation(Route.class);
                         if (route == null) continue;
                         found = true;
                         if (route.value().length == 0) throw Declarations.invalid(m, "empty route declaration");
-                        for (String path : route.value()) add(root.root(), signatures, target, m, path, checks, suggestions, child);
+                        for (String prefix : prefixes) {
+                            for (String path : route.value()) {
+                                add(root.root(), signatures, target, m, (prefix + " " + path).trim(), checks, suggestions, child);
+                            }
+                        }
                     }
                 }
                 if (!found) throw new IllegalArgumentException(target.getClass().getName() + ": no @Route methods");

@@ -126,6 +126,37 @@ class AnnotatedCommandsTest {
             assertEquals(CommandResult.Status.INVALID_ARGUMENT, f.dispatcher().execute(player, new String[]{"resolve", "bad"}).status());
         }
     }
+    @Command("other") @Permission("admin")
+    public static class Mounted {
+        String value;
+        @Route("") public void root(CommandSender sender) { value = "root"; }
+        @Route("set <key>") public void set(CommandSender sender, @Param("key") @Suggest("keys") String key) { value = key; }
+        @Suggestions("keys") public List<String> keys(SuggestionContext context) { return Arrays.asList("alpha", "beta"); }
+    }
+    @Test void mountedHandlerKeepsOwnRootAndAppearsUnderEachLiteral() {
+        try (Fixture f = new Fixture()) {
+            Routes routes = new Routes(); Mounted mounted = new Mounted();
+            f.register(routes, mounted, MountedCommand.of("demo", mounted, "other", "o"));
+            CommandSender console = TestSenders.console("admin", "use").sender();
+            assertEquals(CommandResult.Status.SUCCESS, f.registered.get("other").execute(console, new String[]{"set", "a"}).status());
+            assertEquals("a", mounted.value);
+            assertEquals(CommandResult.Status.SUCCESS, f.dispatcher().execute(console, new String[]{"other", "set", "b"}).status());
+            assertEquals("b", mounted.value);
+            f.registered.get("d").execute(console, new String[]{"o"});
+            assertEquals("root", mounted.value);
+            assertEquals(Arrays.asList("alpha", "beta"), f.dispatcher().complete(console, new String[]{"other", "set", ""}));
+            CommandSender player = TestSenders.player("p", "use").sender();
+            assertNotEquals(CommandResult.Status.SUCCESS, f.dispatcher().execute(player, new String[]{"other", "set", "c"}).status());
+            assertFalse(f.dispatcher().complete(player, new String[]{""}).contains("other"));
+        }
+    }
+    @Test void mountRejectsDuplicateLiteralsAndNesting() {
+        Mounted mounted = new Mounted();
+        assertThrows(IllegalArgumentException.class, () -> MountedCommand.of("demo", MountedCommand.of("demo", mounted, "a"), "b"));
+        try (Fixture f = new Fixture()) {
+            assertThrows(RuntimeException.class, () -> f.register(new Routes(), MountedCommand.of("demo", mounted, "x", "x")));
+        }
+    }
     @Test void playerAndAdminPermissionsRemainIndependentOnSharedRoot() {
         try (Fixture f = new Fixture()) {
             Routes routes = new Routes(); Admin admin = new Admin(); f.register(routes, admin);

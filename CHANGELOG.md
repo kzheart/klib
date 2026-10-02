@@ -1,5 +1,9 @@
 # 更新日志
 
+## 未发布
+
+- `klib-command` 新增 `MountedCommand.of(command, handler, literal, aliases...)`：在同一次 `register(...)` 中把注解处理器的全部路由挂到另一根命令的子命令（及其别名）下，处理器自身根命令不受影响；权限、Check 与补全沿用处理器声明，不支持嵌套挂载。
+
 ## 0.8.9 - 2026-10-02
 
 - `QuestReader.source(begin, end)` 返回指定游标范围的原始脚本文本（包含匿名块的花括号），供需要保存后续动作源码的解析器使用；未持有源码的读取器抛出 `UnsupportedOperationException`，现有解析行为不变。

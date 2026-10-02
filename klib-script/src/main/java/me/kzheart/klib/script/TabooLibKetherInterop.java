@@ -180,8 +180,7 @@ public final class TabooLibKetherInterop
                 if (last != null) {
                     throw last;
                 }
-                throw new IllegalArgumentException(
-                        "No shared Kether action resolved: " + normalized);
+                throw new UnresolvedActionException(normalized);
             }
         };
     }

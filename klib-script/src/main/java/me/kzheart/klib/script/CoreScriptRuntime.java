@@ -191,9 +191,10 @@ final class CoreScriptRuntime {
             }
         }
         if (unknownResolver instanceof KetherParserResolver) {
-            service.getRegistry().setFallbackParser((name, selectedNamespaces) ->
-                    ((KetherParserResolver) unknownResolver).parser(
-                            name, selectedNamespaces));
+            service.getRegistry().setFallbackParser((name, selectedNamespaces) -> {
+                QuestActionParser remote = ((KetherParserResolver) unknownResolver).parser(name, selectedNamespaces);
+                return toleranceParser ? tolerant(remote, name) : remote;
+            });
         } else if (unknownResolver != null) {
             Matcher matcher = ACTION_START.matcher(source);
             while (matcher.find()) {
@@ -210,6 +211,19 @@ final class CoreScriptRuntime {
                 }
             }
         }
+    }
+
+    /** 容错解析：远端都不认领时与原框架一样把词元当作字面量，远端语句的语法错误仍然抛出。 */
+    private static QuestActionParser tolerant(QuestActionParser remote, String name) {
+        return QuestActionParser.of(reader -> {
+            int index = reader.getIndex();
+            try {
+                return remote.resolve(reader);
+            } catch (UnresolvedActionException unresolved) {
+                reader.setIndex(index);
+                return KetherSupport.now(frame -> name);
+            }
+        });
     }
 
     private static boolean containsEntry(

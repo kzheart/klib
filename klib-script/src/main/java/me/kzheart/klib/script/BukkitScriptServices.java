@@ -104,6 +104,7 @@ public final class BukkitScriptServices {
         try {
             for (java.lang.reflect.Method candidate : target.getClass().getMethods()) {
                 if (candidate.getName().equals(method) && candidate.getParameterTypes().length == args.length) {
+                    candidate.setAccessible(true);
                     return candidate.invoke(target, args);
                 }
             }
@@ -306,10 +307,11 @@ public final class BukkitScriptServices {
                 Class<?> type = Class.forName("net.md_5.bungee.api.ChatMessageType", true, loader);
                 Class<?> text = Class.forName("net.md_5.bungee.api.chat.TextComponent", true, loader);
                 Class<?> components = Class.forName("[Lnet.md_5.bungee.api.chat.BaseComponent;", true, loader);
-                Object spigot = player.getClass().getMethod("spigot").invoke(player);
+                // 方法取自公开的 Player / Player.Spigot，实现类可能不是公开类。
+                Object spigot = Player.class.getMethod("spigot").invoke(player);
                 Object barType = type.getField("ACTION_BAR").get(null);
                 Object content = text.getMethod("fromLegacyText", String.class).invoke(null, message);
-                spigot.getClass().getMethod("sendMessage", type, components).invoke(spigot, barType, content);
+                Player.Spigot.class.getMethod("sendMessage", type, components).invoke(spigot, barType, content);
             } catch (ReflectiveOperationException failure) {
                 throw new UnsupportedOperationException("actionbar is not supported on this server", failure);
             }

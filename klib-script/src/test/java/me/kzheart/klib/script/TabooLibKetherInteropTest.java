@@ -107,6 +107,24 @@ class TabooLibKetherInteropTest {
     }
 
     @Test
+    void toleranceTreatsUnclaimedTokensAsLiteralsWhileRemoteActionsStillResolve() {
+        ScopeImpl scope = new ScopeImpl("test");
+        StatementRegistry registry = new StatementRegistry();
+        FakeDiscovery discovery = new FakeDiscovery();
+        FakeContainer remote = new FakeContainer("Remote");
+        remote.resolveActions = true;
+        discovery.containers.add(remote);
+        TabooLibKetherInterop interop = TabooLibKetherInterop.install(scope, registry, "KlibProvider", discovery);
+        KetherScriptEngine engine = new KetherScriptEngine(registry, interop, Runnable::run, true);
+        try {
+            assertEquals(Arrays.asList("1", "2"), engine.eval("array [ 1 2 ]", ScriptContext.builder().build()).toCompletableFuture().join());
+            assertEquals("value", engine.eval("inner value", ScriptContext.builder().build()).toCompletableFuture().join());
+        } finally {
+            scope.close();
+        }
+    }
+
+    @Test
     void remoteActionFutureCompletesWithoutFlatteningExecution() {
         ScopeImpl scope = new ScopeImpl("test");
         StatementRegistry registry = new StatementRegistry();

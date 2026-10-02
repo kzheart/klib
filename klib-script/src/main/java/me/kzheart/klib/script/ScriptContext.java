@@ -17,6 +17,7 @@ import me.kzheart.klib.script.kether.core.QuestContext;
 public final class ScriptContext {
 
     private static final Object NULL_VALUE = new Object();
+    static final String SENDER_OVERRIDE = "~klib:sender";
 
     private final Object sender;
     private final String senderVariable;
@@ -68,6 +69,11 @@ public final class ScriptContext {
     }
 
     public Optional<Object> sender() {
+        if (frame != null) {
+            // switch 语句切换的执行者对本次脚本的后续语句生效。
+            Object switched = frame.context().rootFrame().variables().getOrNull(SENDER_OVERRIDE);
+            if (switched != null) return Optional.of(switched);
+        }
         return Optional.ofNullable(senderVariable == null ? sender : variableOrNull(senderVariable));
     }
 

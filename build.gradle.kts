@@ -377,6 +377,10 @@ project(":klib-command") {
 project(":klib-script") {
     dependencies {
         add("implementation", jexl)
+        // BukkitScriptServices 只在 Bukkit 运行时使用，Spigot API 仅参与编译。
+        val compileSpigot = create(spigotApi.get()) as ModuleDependency
+        compileSpigot.isTransitive = false
+        add("compileOnly", compileSpigot)
         add("api", project(":klib-core"))
         add("compileOnly", project(":klib-guard-api"))
         add("testImplementation", project(":klib-guard-api"))

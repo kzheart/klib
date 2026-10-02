@@ -459,14 +459,14 @@ final class CoreScriptRuntime {
                 return statementParser(lookupName, name, namespaces, lineOffset).resolve(reader);
             }
             ParsedAction<?> command = reader.nextValue();
-            boolean console = false;
-            if (!reader.hasLineBreakBeforeNextToken() && StructuredScriptActions.consume(reader, "as")) {
+            BuiltInStatements.CommandMode mode = BuiltInStatements.CommandMode.PLAYER;
+            if (!reader.hasLineBreakBeforeNextToken() && KetherSupport.consume(reader, "as", "by", "with")) {
                 if (reader.hasLineBreakBeforeNextToken() || !reader.hasNext() || reader.peek() == '}') {
                     throw new IllegalArgumentException("Expected command sender after as");
                 }
-                console = "console".equalsIgnoreCase(reader.nextToken());
+                mode = BuiltInStatements.CommandMode.of(reader.nextToken());
             }
-            final boolean asConsole = console;
+            final BuiltInStatements.CommandMode asMode = mode;
             return new QuestAction<Object>() {
                 @Override public CompletableFuture<Object> process(QuestContext.Frame frame) {
                     ScriptContext context = context(frame);
@@ -478,7 +478,7 @@ final class CoreScriptRuntime {
                         CompletableFuture<Object> value = frame.newFrame(command).run();
                         Function<Object, Object> dispatch = input ->
                                 BuiltInStatements.dispatchCommand(context,
-                                        InlineValues.interpolate(String.valueOf(input), context), asConsole);
+                                        InlineValues.interpolate(String.valueOf(input), context), asMode);
                         CompletableFuture<Object> execution = value.isDone()
                                 ? value.thenApply(dispatch)
                                 : value.thenApplyAsync(dispatch, frame.context().getExecutor());

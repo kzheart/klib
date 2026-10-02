@@ -29,6 +29,7 @@ final class BuiltInStatements {
         FlowScriptActions.install(registry);
         CollectionScriptActions.install(registry);
         TextScriptActions.install(registry);
+        GameScriptActions.install(registry);
         registry.registerBuiltin("klib", "get", BuiltInStatements::get);
         registry.registerBuiltin("klib", "unset", BuiltInStatements::unset);
         registry.registerBuiltin("klib", "eq", compare(Comparison.EQUAL));
@@ -146,6 +147,32 @@ final class BuiltInStatements {
     static Object dispatchCommand(ScriptContext context, String command, boolean console) {
         return context.requireService(CommandSink.class).dispatch(
                 console ? null : context.sender().orElse(null), command);
+    }
+
+    /** 原框架 command 的执行身份：player（默认）、op/operator、console/server。 */
+    enum CommandMode {
+        PLAYER, OPERATOR, CONSOLE;
+
+        static CommandMode of(String token) {
+            switch (token.toLowerCase(Locale.ROOT)) {
+                case "player": return PLAYER;
+                case "op": case "operator": return OPERATOR;
+                case "console": case "server": return CONSOLE;
+                default: throw new IllegalArgumentException("Unknown command sender " + token);
+            }
+        }
+    }
+
+    /** 原框架行为：命令去公共缩进并把 @sender 替换为执行者名（控制台为 console）。 */
+    static Object dispatchCommand(ScriptContext context, String command, CommandMode mode) {
+        CommandSink sink = context.requireService(CommandSink.class);
+        String text = NativeCheckActions.trimIndent(command);
+        if (mode == CommandMode.CONSOLE) return sink.dispatch(null, text.replace("@sender", "console"));
+        Object sender = context.sender().orElse(null);
+        if (text.contains("@sender")) {
+            text = text.replace("@sender", sender == null ? "console" : String.valueOf(context.requireService(ScriptSenderQuery.class).name(sender)));
+        }
+        return mode == CommandMode.OPERATOR ? sink.dispatchAsOperator(sender, text) : sink.dispatch(sender, text);
     }
 
     private static CompletionStage<Object> permission(StatementCall call, ScriptContext context) {

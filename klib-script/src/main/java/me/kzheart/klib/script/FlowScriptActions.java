@@ -58,8 +58,19 @@ final class FlowScriptActions {
         log(registry, Level.SEVERE, "error", "severe");
         QuestActionParser wait = QuestActionParser.of(reader -> {
             Duration duration = reader.next(ArgTypes.DURATION);
-            return action(frame -> CoreScriptRuntime.context(frame).requireService(DelayScheduler.class)
-                    .delay(duration).toCompletableFuture());
+            return action(frame -> {
+                ScriptContext context = CoreScriptRuntime.context(frame);
+                return context.requireService(DelayScheduler.class).delay(duration).toCompletableFuture().thenApply(ignored -> {
+                    // 原框架：等待期间玩家离线则停止脚本。
+                    Object sender = context.sender().orElse(null);
+                    ScriptSenderQuery query = context.service(ScriptSenderQuery.class).orElse(null);
+                    if (sender != null && query != null && query.isPlayer(sender) && !query.isOnline(sender)
+                            && !frame.context().getExitStatus().isPresent()) {
+                        frame.context().setExitStatus(ExitStatus.paused());
+                    }
+                    return (Object) null;
+                });
+            });
         });
         registry.registerBuiltinKether("wait", wait);
         registry.registerBuiltinKether("sleep", wait);

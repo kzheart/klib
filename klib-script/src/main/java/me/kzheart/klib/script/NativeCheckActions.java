@@ -4,6 +4,8 @@ package me.kzheart.klib.script;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -39,15 +41,28 @@ final class NativeCheckActions {
                             completed(Boolean.valueOf(Operator.of(symbol).check(first, second)))))));
         }));
         registry.registerBuiltinKether("player", QuestActionParser.of(reader -> {
-            String property = requiredToken(reader);
+            String property = playerOperator(reader);
+            PlayerQuery.Method method = null;
             int mark = reader.getIndex();
-            if (reader.hasNext()) {
-                String method = reader.nextToken();
-                // '=' 留给外围 check 的已公开 Klib alias；独立写法仍会在 strict 顶层失败。
-                if (Arrays.asList("to", "add", "increase", "+", "sub", "decrease", "-").contains(method)) {
-                    throw new IllegalArgumentException("Player writes are not supported by the read-only PlayerQuery service: " + property);
+            if (reader.hasNext() && reader.peek() != '}' && reader.peek() != ']') {
+                // '=' 留给外围 check 的已公开 Klib alias，不作为写入。
+                switch (reader.nextToken()) {
+                    case "to": method = PlayerQuery.Method.MODIFY; break;
+                    case "add": case "increase": case "+": method = PlayerQuery.Method.INCREASE; break;
+                    case "sub": case "decrease": case "-": method = PlayerQuery.Method.DECREASE; break;
+                    default: reader.setIndex(mark);
                 }
-                reader.setIndex(mark);
+            }
+            if (method != null) {
+                final PlayerQuery.Method write = method;
+                ParsedAction<?> value = requiredValue(reader);
+                return action(frame -> follow(frame, frame.newFrame(value).run(), result -> {
+                    ScriptContext context = CoreScriptRuntime.context(frame);
+                    if (!context.requireService(PlayerQuery.class).write(player(context), property, write, result)) {
+                        throw new IllegalArgumentException("Player \"" + property + "\" is not writable.");
+                    }
+                    return completed(null);
+                }));
             }
             return action(frame -> {
                 ScriptContext context = CoreScriptRuntime.context(frame);
@@ -74,6 +89,42 @@ final class NativeCheckActions {
         registry.registerBuiltinKether("placeholder", placeholder);
     }
 
+    /** 原框架玩家操作名（小写、空格分隔），按词数从多到少匹配，取最长的完整匹配。 */
+    static final List<String> PLAYER_OPERATORS = Collections.unmodifiableList(Arrays.asList(
+            "locale", "world", "x", "y", "z", "yaw", "pitch", "block x", "block y", "block z",
+            "compass x", "compass y", "compass z", "location", "compass target", "bed spawn",
+            "bed spawn x", "bed spawn y", "bed spawn z", "name", "list name", "display name", "uuid",
+            "gamemode", "address", "sneaking", "sprinting", "blocking", "gliding", "glowing", "swimming",
+            "riptiding", "sleeping", "sleep ticks", "sleep ignored", "dead", "conversing", "leashed",
+            "on ground", "is online", "inside vehicle", "op", "gravity", "attack cooldown", "player time",
+            "first played", "last played", "absorption amount", "no damage ticks", "remaining air",
+            "maximum air", "exp", "level", "exhaustion", "saturation", "food level", "health",
+            "max health", "allow flight", "flying", "fly speed", "walk speed", "ping", "pose", "facing"));
+
+    /** 读取玩家操作名；不在原框架表中时退回单个词元（宿主自定义属性）。 */
+    private static String playerOperator(QuestReader reader) {
+        requireInput(reader);
+        int start = reader.getIndex();
+        String best = null;
+        int bestEnd = start;
+        for (String operator : PLAYER_OPERATORS) {
+            String[] words = operator.split(" ");
+            if (best != null && words.length <= best.split(" ").length) continue;
+            reader.setIndex(start);
+            boolean matched = true;
+            for (String word : words) {
+                if (!reader.hasNext() || reader.peek() == '}' || reader.peek() == ']' || !word.equals(reader.nextToken())) {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) { best = operator; bestEnd = reader.getIndex(); }
+        }
+        if (best != null) { reader.setIndex(bestEnd); return best; }
+        reader.setIndex(start);
+        return reader.nextToken();
+    }
+
     private static Object player(ScriptContext context) {
         Object sender = context.sender().orElse(null);
         if (sender == null || !context.requireService(ScriptSenderQuery.class).isPlayer(sender)) {
@@ -89,7 +140,7 @@ final class NativeCheckActions {
     }
 
     /** Kotlin trimIndent：删首尾空行、取非空行最小缩进，不裁剪行尾空白。 */
-    private static String trimIndent(String text) {
+    static String trimIndent(String text) {
         String[] lines = text.split("\\r\\n|\\n|\\r", -1);
         int indent = Integer.MAX_VALUE;
         for (String line : lines) {

@@ -1,6 +1,6 @@
 # 更新日志
 
-## 未发布
+## 0.8.8 - 2026-10-02
 
 - `klib-compat` 新增 `Capabilities.SIDEBAR` 与 `me.kzheart.klib.compat.sidebar.Sidebars`：按玩家发送数据包侧边栏，不替换玩家的 Bukkit 记分板，更新只发送差异，玩家退出时丢弃状态、作用域关闭时移除；四个 `compat-v*` 实现均公开该能力。改写自 TabooLib `NMSScoreboard`（MIT），不引入 TabooLib 或 Kotlin 运行时。
 - 侧边栏在 Paper 1.12.2、1.16.5、1.18.2、1.20.4、1.21.1、1.21.4、1.21.11、26.1.2 与 26.2 上用真实客户端验证；`klib-compat` 只在编译期使用 Spigot API 与 `klib-core`，发布依赖不变。

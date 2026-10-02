@@ -2,6 +2,7 @@ package me.kzheart.klib.remote;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -9,6 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -79,7 +81,7 @@ public final class InstallationId implements Supplier<String> {
                 Files.write(temporary, value.getBytes(StandardCharsets.UTF_8));
                 Files.move(temporary, cacheFile, StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+            } catch (AtomicMoveNotSupportedException unsupported) {
                 Files.move(temporary, cacheFile, StandardCopyOption.REPLACE_EXISTING);
             } finally {
                 Files.deleteIfExists(temporary);
@@ -94,7 +96,7 @@ public final class InstallationId implements Supplier<String> {
         RANDOM.nextBytes(bytes);
         StringBuilder result = new StringBuilder("inst_");
         for (byte value : bytes) {
-            result.append(String.format(java.util.Locale.ROOT, "%02x", value & 0xff));
+            result.append(String.format(Locale.ROOT, "%02x", value & 0xff));
         }
         return result.toString();
     }
@@ -105,7 +107,7 @@ public final class InstallationId implements Supplier<String> {
                     .digest(product.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder(32);
             for (int index = 0; index < 16; index++) {
-                result.append(String.format(java.util.Locale.ROOT, "%02x", digest[index] & 0xff));
+                result.append(String.format(Locale.ROOT, "%02x", digest[index] & 0xff));
             }
             return result.toString();
         } catch (NoSuchAlgorithmException impossible) {

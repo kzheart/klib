@@ -1,6 +1,9 @@
 package me.kzheart.klib.command;
 
+import java.util.Locale;
+
 import me.kzheart.klib.KLogger;
+import me.kzheart.klib.KPlugin;
 import me.kzheart.klib.command.api.CommandCapability;
 import me.kzheart.klib.lang.MessagePipeline;
 import me.kzheart.klib.scope.Scope;
@@ -17,8 +20,8 @@ import me.kzheart.klib.scope.Scope;
  * <p>安装必须在服务器主线程完成。
  */
 public final class CommandModule {
-    public static CommandCapability install(me.kzheart.klib.KPlugin plugin) {
-        return install(plugin.context().scope(), BukkitCommandRegistrar.discover(plugin.getName().toLowerCase(java.util.Locale.ROOT)));
+    public static CommandCapability install(KPlugin plugin) {
+        return install(plugin.context().scope(), BukkitCommandRegistrar.discover(plugin.getName().toLowerCase(Locale.ROOT)));
     }
 
     private CommandModule() {

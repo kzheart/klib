@@ -1,16 +1,5 @@
 package me.kzheart.klib.data.json;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
-import me.kzheart.klib.data.StorageException;
-import me.kzheart.klib.data.StorageProvider;
-import me.kzheart.klib.data.StorageSession;
-import me.kzheart.klib.diagnostic.DiagnosticSource;
-import me.kzheart.klib.data.StorageTransaction;
-import me.kzheart.klib.data.TransactionContext;
-
 import java.io.BufferedWriter;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;
@@ -24,6 +13,7 @@ import java.io.Writer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -43,6 +33,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import me.kzheart.klib.data.StorageException;
+import me.kzheart.klib.data.StorageProvider;
+import me.kzheart.klib.data.StorageSession;
+import me.kzheart.klib.data.StorageTransaction;
+import me.kzheart.klib.data.TransactionContext;
+import me.kzheart.klib.diagnostic.DiagnosticSource;
 
 /**
  * 事务式文件 JSON 存储。提供器为每个文件持有一份共享状态和一个串行执行器，
@@ -284,7 +285,7 @@ public final class JsonStorageProvider implements StorageProvider, DiagnosticSou
                 Files.move(temporary, file,
                         StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+            } catch (AtomicMoveNotSupportedException unsupported) {
                 Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException | RuntimeException error) {

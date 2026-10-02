@@ -1,10 +1,5 @@
 package me.kzheart.klib.remote;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,8 +15,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RemoteDeliveryTest {
     @TempDir Path temporaryDirectory;
@@ -175,7 +177,7 @@ class RemoteDeliveryTest {
         RemoteDelivery delivery = delivery(new AcceptingTransport(), queue).build();
         try {
             await(() -> Files.isDirectory(queue.resolve("quarantine")), 5000L);
-            try (java.util.stream.Stream<Path> files = Files.list(queue.resolve("quarantine"))) {
+            try (Stream<Path> files = Files.list(queue.resolve("quarantine"))) {
                 assertTrue(files.findAny().isPresent());
             }
         } finally {

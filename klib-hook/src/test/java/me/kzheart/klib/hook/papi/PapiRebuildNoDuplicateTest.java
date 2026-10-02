@@ -1,12 +1,14 @@
 package me.kzheart.klib.hook.papi;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.ScopeImpl;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class PapiRebuildNoDuplicateTest {
 
@@ -56,7 +58,7 @@ class PapiRebuildNoDuplicateTest {
         private PapiExpansion latest;
 
         @Override
-        public me.kzheart.klib.scope.Disposable register(
+        public Disposable register(
                 String identifier,
                 PapiExpansion expansion
         ) {

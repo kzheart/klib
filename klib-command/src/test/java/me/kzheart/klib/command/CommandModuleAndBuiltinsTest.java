@@ -1,18 +1,19 @@
 package me.kzheart.klib.command;
 
-import me.kzheart.klib.command.api.CommandCapability;
-import me.kzheart.klib.lang.RichText;
-import me.kzheart.klib.lang.MessagePipeline;
-import me.kzheart.klib.scope.ScopeImpl;
-import org.bukkit.command.CommandSender;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.CompletableFuture;
+
+import me.kzheart.klib.command.api.CommandCapability;
+import me.kzheart.klib.lang.MessagePipeline;
+import me.kzheart.klib.lang.RichText;
+import me.kzheart.klib.scope.ScopeImpl;
+import org.bukkit.command.CommandSender;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -143,7 +144,7 @@ class CommandModuleAndBuiltinsTest {
     @Test
     void messagePipelineAdapterResolvesCatalogKeysWithoutDeliveringTwice() {
         MessagePipelineCommandMessages messages = new MessagePipelineCommandMessages(
-                key -> java.util.Optional.of("{prefix}value={value}"),
+                key -> Optional.of("{prefix}value={value}"),
                 "prefix ",
                 null);
 
@@ -166,7 +167,7 @@ class CommandModuleAndBuiltinsTest {
         };
         AtomicInteger routed = new AtomicInteger();
         MessagePipeline pipeline = new MessagePipeline(
-                key -> java.util.Optional.of("localized:" + key + " {value}"),
+                key -> Optional.of("localized:" + key + " {value}"),
                 "",
                 null,
                 (recipient, message) -> routed.incrementAndGet());

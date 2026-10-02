@@ -1,14 +1,15 @@
 package me.kzheart.klib.data.json;
 
-import me.kzheart.klib.data.StorageSession;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+
+import me.kzheart.klib.data.StorageSession;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,7 +20,7 @@ class JsonStorageBudgetTest {
     @Test
     void oversizedFileAndDeepJsonAreRejected() throws Exception {
         Path oversized = directory.resolve("oversized.json");
-        try (java.io.RandomAccessFile output = new java.io.RandomAccessFile(oversized.toFile(), "rw")) {
+        try (RandomAccessFile output = new RandomAccessFile(oversized.toFile(), "rw")) {
             output.setLength(8L * 1024L * 1024L + 1L);
         }
         assertOpenFails(oversized);

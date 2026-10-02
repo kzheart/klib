@@ -1,10 +1,12 @@
 package me.kzheart.klib.command;
 
-import me.kzheart.klib.command.api.CommandSpec;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
+
+import me.kzheart.klib.command.api.CommandSpec;
+import org.bukkit.command.CommandSender;
 
 final class BrigadierTree {
     enum Kind {
@@ -13,7 +15,7 @@ final class BrigadierTree {
         ARGUMENT
     }
 
-    private final java.util.function.Predicate<org.bukkit.command.CommandSender> access;
+    private final Predicate<CommandSender> access;
     private final Kind kind;
     private final String token;
     private final String permission;
@@ -30,7 +32,7 @@ final class BrigadierTree {
             boolean greedy,
             boolean handler,
             List<BrigadierTree> children,
-            java.util.function.Predicate<org.bukkit.command.CommandSender> access
+            Predicate<CommandSender> access
     ) {
         this.access = access;
         this.kind = kind;
@@ -76,7 +78,7 @@ final class BrigadierTree {
                 children, sender -> CommandDispatcher.isAccessible(sender, node));
     }
 
-    boolean accessible(org.bukkit.command.CommandSender sender) { return access.test(sender); }
+    boolean accessible(CommandSender sender) { return access.test(sender); }
 
     Kind kind() {
         return kind;

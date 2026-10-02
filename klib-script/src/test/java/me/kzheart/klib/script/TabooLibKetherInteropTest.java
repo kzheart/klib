@@ -1,26 +1,28 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+
 import me.kzheart.klib.scope.ScopeImpl;
 import me.kzheart.klib.script.TabooLibKetherInterop.OpenContainer;
-import me.kzheart.klib.script.TabooLibKetherInterop.OpenResult;
-import me.kzheart.klib.script.kether.core.ParsedAction;
 import me.kzheart.klib.script.kether.core.ExitStatus;
-import me.kzheart.klib.script.kether.core.SimpleQuestContext;
-import me.kzheart.klib.script.kether.core.SimpleQuestService;
+import me.kzheart.klib.script.kether.core.ParsedAction;
 import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestActionParser;
 import me.kzheart.klib.script.kether.core.QuestContext;
 import me.kzheart.klib.script.kether.core.QuestReader;
+import me.kzheart.klib.script.kether.core.SimpleQuestContext;
+import me.kzheart.klib.script.kether.core.SimpleQuestService;
+import me.kzheart.klib.script.taboolib.common.OpenAPI;
+import me.kzheart.klib.script.taboolib.common.OpenResult;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TabooLibKetherInteropTest {
 
@@ -138,8 +140,8 @@ class TabooLibKetherInteropTest {
             return KetherRegistrationTest.literal(token);
         }));
 
-        me.kzheart.klib.script.taboolib.common.OpenResult endpoint =
-                me.kzheart.klib.script.taboolib.common.OpenAPI.call(
+        OpenResult endpoint =
+                OpenAPI.call(
                         TabooLibKetherInterop.REMOTE_RESOLVE,
                         new Object[] {
                             "Remote", new OneTokenReader("endpoint"), "echo", "plugin"
@@ -238,28 +240,28 @@ class TabooLibKetherInteropTest {
 
         @Override public String name() { return name; }
 
-        @Override public OpenResult call(String channel, Object... data) {
+        @Override public TabooLibKetherInterop.OpenResult call(String channel, Object... data) {
             invocations.add(new Invocation(channel, data));
             if (TabooLibKetherInterop.REMOTE_RESOLVE.equals(channel) && resolveActions) {
                 String action = String.valueOf(data[2]);
                 resolved.add(action);
                 QuestReader reader = (QuestReader) data[1];
                 if ("outer".equals(action)) {
-                    return OpenResult.successful(new NestedSource(reader.nextAction()));
+                    return TabooLibKetherInterop.OpenResult.successful(new NestedSource(reader.nextAction()));
                 }
                 if ("inner".equals(action)) {
-                    return OpenResult.successful(new LiteralSource(reader.nextToken()));
+                    return TabooLibKetherInterop.OpenResult.successful(new LiteralSource(reader.nextToken()));
                 }
                 if ("async".equals(action)) {
                     reader.nextToken();
-                    return OpenResult.successful(new AsyncSource(pending));
+                    return TabooLibKetherInterop.OpenResult.successful(new AsyncSource(pending));
                 }
-                return OpenResult.failed();
+                return TabooLibKetherInterop.OpenResult.failed();
             }
             if (TabooLibKetherInterop.CREATE_FRAME.equals(channel)) {
-                return OpenResult.successful(data[1]);
+                return TabooLibKetherInterop.OpenResult.successful(data[1]);
             }
-            return OpenResult.successful();
+            return TabooLibKetherInterop.OpenResult.successful();
         }
 
         private List<String> channelsFor(String action) {

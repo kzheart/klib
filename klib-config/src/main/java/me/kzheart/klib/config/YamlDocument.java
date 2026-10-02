@@ -7,6 +7,8 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.logging.Logger;
+
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -25,8 +27,8 @@ import org.yaml.snakeyaml.representer.Representer;
 
 /** 可变且能感知注释的 YAML 文档。 */
 public final class YamlDocument {
-    private static final java.util.logging.Logger LOGGER =
-            java.util.logging.Logger.getLogger(YamlDocument.class.getName());
+    private static final Logger LOGGER =
+            Logger.getLogger(YamlDocument.class.getName());
 
     private final String sourceName;
     private final Yaml yaml;

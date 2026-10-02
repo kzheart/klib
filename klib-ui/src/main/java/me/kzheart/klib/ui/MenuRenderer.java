@@ -1,28 +1,5 @@
 package me.kzheart.klib.ui;
 
-import me.kzheart.klib.KLogger;
-import me.kzheart.klib.scope.Disposable;
-import me.kzheart.klib.scope.Scope;
-import me.kzheart.klib.ui.drop.DropResult;
-import me.kzheart.klib.ui.drop.DropZoneController;
-import me.kzheart.klib.ui.drop.InventoryAction;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Sound;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.HandlerList;
-import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.Plugin;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -35,6 +12,31 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+
+import me.kzheart.klib.KLogger;
+import me.kzheart.klib.scope.Disposable;
+import me.kzheart.klib.scope.Scope;
+import me.kzheart.klib.ui.drop.DropResult;
+import me.kzheart.klib.ui.drop.DropZoneController;
+import me.kzheart.klib.ui.drop.InventoryAction;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Server;
+import org.bukkit.Sound;
+import org.bukkit.entity.HumanEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 /** 负责打开、渲染、派发并安全关闭已编译菜单的 Bukkit 桥接。 */
 public final class MenuRenderer implements Listener, Disposable {
@@ -310,8 +312,8 @@ public final class MenuRenderer implements Listener, Disposable {
             reportUnreturned(holder, result);
             Inventory inventory = holder.getInventory();
             if (inventory != null) {
-                for (org.bukkit.entity.HumanEntity viewer
-                        : new ArrayList<org.bukkit.entity.HumanEntity>(inventory.getViewers())) {
+                for (HumanEntity viewer
+                        : new ArrayList<HumanEntity>(inventory.getViewers())) {
                     viewer.closeInventory();
                 }
             }
@@ -577,7 +579,7 @@ public final class MenuRenderer implements Listener, Disposable {
 
     /** 主线程断言；无服务端环境（如单元测试）时跳过检查。 */
     private static void ensureMainThread(String action) {
-        org.bukkit.Server server = Bukkit.getServer();
+        Server server = Bukkit.getServer();
         if (server != null && !server.isPrimaryThread()) {
             throw new IllegalStateException(action + "必须在服务器主线程执行，"
                     + "请先用 scope.sync(...) 或 thenSync(...) 切回主线程");

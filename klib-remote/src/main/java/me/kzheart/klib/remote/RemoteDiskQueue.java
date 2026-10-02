@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
@@ -13,14 +14,15 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.UserPrincipal;
+import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,6 +31,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -141,7 +144,7 @@ final class RemoteDiskQueue implements AutoCloseable {
         if (identity == null || identity.length != 32) {
             throw new IOException("Remote queue identity is invalid");
         }
-        byte[] expected = hex(identity).getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] expected = hex(identity).getBytes(StandardCharsets.US_ASCII);
         Path marker = directory.resolve("queue.identity");
         if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) {
             if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)
@@ -155,7 +158,7 @@ final class RemoteDiskQueue implements AutoCloseable {
                     if (channel.read(actual) < 0) throw new EOFException("truncated identity");
                 }
             }
-            if (!java.security.MessageDigest.isEqual(expected, actual.array())) {
+            if (!MessageDigest.isEqual(expected, actual.array())) {
                 throw new IOException("Remote queue belongs to a different endpoint or key");
             }
             return;
@@ -191,7 +194,7 @@ final class RemoteDiskQueue implements AutoCloseable {
         if (!directoryBindingIntact()) return new StoreResult(false, 0);
         byte[] installationId = envelope.installationId();
         byte[] environment = envelope.environment();
-        byte[] encodedEventId = eventId.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] encodedEventId = eventId.getBytes(StandardCharsets.UTF_8);
         long fileBytes = (long) HEADER_BYTES + installationId.length
                 + environment.length + encodedEventId.length + data.length;
         if (data.length > maxEventBytes
@@ -206,7 +209,7 @@ final class RemoteDiskQueue implements AutoCloseable {
             return new StoreResult(false, evicted);
         }
         long sequence = ++nextSequence;
-        String stem = String.format(java.util.Locale.ROOT, "%019d-%019d-%s",
+        String stem = String.format(Locale.ROOT, "%019d-%019d-%s",
                 createdAtMillis, sequence, UUID.randomUUID().toString());
         Path temporary = directory.resolve(stem + TEMP_SUFFIX);
         Path target = directory.resolve(stem + ENTRY_SUFFIX);
@@ -393,7 +396,7 @@ final class RemoteDiskQueue implements AutoCloseable {
             crc.update(data);
             if (crc.getValue() != expectedCrc) throw new IOException("queue checksum mismatch");
             return new Entry(path, priority == 1, createdAtMillis, sequence,
-                    new String(eventId, java.nio.charset.StandardCharsets.UTF_8),
+                    new String(eventId, StandardCharsets.UTF_8),
                     new RemoteBatchEnvelope(installationId, environment), data, fileBytes);
         } catch (IOException | RuntimeException failure) {
             quarantine(path);

@@ -1,6 +1,14 @@
 package me.kzheart.klib.ui.prompt;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
 import me.kzheart.klib.KLogger;
+import me.kzheart.klib.scheduler.Ticks;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
 import org.bukkit.entity.Player;
@@ -10,13 +18,6 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.Plugin;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
 
 /** 作用域持有的聊天提示所使用的统一 Bukkit 监听器。 */
 public final class BukkitChatPrompts implements Listener, Disposable {
@@ -150,7 +151,7 @@ public final class BukkitChatPrompts implements Listener, Disposable {
             return;
         }
         try {
-            owner.after(me.kzheart.klib.scheduler.Ticks.of(0L), () -> {
+            owner.after(Ticks.of(0L), () -> {
                 Player player = plugin.getServer().getPlayer(playerId);
                 if (player != null && player.isOnline()) {
                     send(player, message);

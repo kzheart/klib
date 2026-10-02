@@ -155,7 +155,7 @@ statements.register(scope, "shop", "announce", Statements.combine()
 
 ```java
 // 注意：这些类型来自 kether.core 包，与 me.kzheart.klib.script.QuestActionParser 同名但不同签名，
-// 必须按下面的 import 引入，或使用全限定名。
+// 按下面的 import 选定完整语法解析器，正文使用简单类名。
 import me.kzheart.klib.script.kether.core.ParsedAction;
 import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestActionParser;
@@ -173,7 +173,7 @@ statements.registerKether(scope, "myplugin", "twice", QuestActionParser.of(reade
 }));
 ```
 
-这里的 `QuestActionParser`、`ParsedAction`、`QuestAction` 和 `QuestContext` 位于 `me.kzheart.klib.script.kether.core`。其中 `QuestActionParser` 与 `me.kzheart.klib.script.QuestActionParser`（`Statements` 系列使用的 `execute(StatementCall, ScriptContext)` 接口）同名而不同类型，`registerKether(...)` 只接受前者，写代码时不要依赖未限定名。这是需要完整 Kether 语法能力时的低层入口；普通固定参数业务语句仍优先使用 `Statements.combine()`。
+这里的 `QuestActionParser`、`ParsedAction`、`QuestAction` 和 `QuestContext` 位于 `me.kzheart.klib.script.kether.core`。其中 `QuestActionParser` 与 `me.kzheart.klib.script.QuestActionParser`（`Statements` 系列使用的 `execute(StatementCall, ScriptContext)` 接口）同名而不同类型，`registerKether(...)` 只接受前者，按示例显式 import 后使用简单类名；同一文件确实需要两种同名接口时才使用必要限定名。这是需要完整 Kether 语法能力时的低层入口；普通固定参数业务语句仍优先使用 `Statements.combine()`。
 
 ## 数值、赋值与发送者动作
 

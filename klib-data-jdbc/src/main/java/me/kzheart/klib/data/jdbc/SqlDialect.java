@@ -1,5 +1,7 @@
 package me.kzheart.klib.data.jdbc;
 
+import java.sql.DriverManager;
+
 /** SQLite、MySQL 与 PostgreSQL 语法差异的唯一边界。 */
 public enum SqlDialect {
     SQLITE(
@@ -95,7 +97,7 @@ public enum SqlDialect {
     /**
      * 为网络后端补齐连接超时参数。
      *
-     * <p>不使用 {@link java.sql.DriverManager#setLoginTimeout(int)}：那是整个 JVM 的全局开关，
+     * <p>不使用 {@link DriverManager#setLoginTimeout(int)}：那是整个 JVM 的全局开关，
      * 会连带影响同一服务端里其他插件的 JDBC 连接。URL 参数只作用于本提供器自己的连接。
      * 已在 URL 中显式写明 {@code connectTimeout} 时保持调用方设置不变。
      */

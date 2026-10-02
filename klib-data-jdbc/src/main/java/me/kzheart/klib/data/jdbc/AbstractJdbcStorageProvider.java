@@ -1,23 +1,25 @@
 package me.kzheart.klib.data.jdbc;
 
-import me.kzheart.klib.KLogger;
-import me.kzheart.klib.data.StorageException;
-import me.kzheart.klib.data.StorageProvider;
-import me.kzheart.klib.data.StorageSession;
-import me.kzheart.klib.diagnostic.DiagnosticSource;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import me.kzheart.klib.KLogger;
+import me.kzheart.klib.data.StorageException;
+import me.kzheart.klib.data.StorageProvider;
+import me.kzheart.klib.data.StorageSession;
+import me.kzheart.klib.diagnostic.DiagnosticSource;
 
 public abstract class AbstractJdbcStorageProvider implements StorageProvider, DiagnosticSource {
     /** 网络后端的连接超时，避免防火墙丢包时挂到操作系统的 TCP 超时。 */
@@ -139,8 +141,8 @@ public abstract class AbstractJdbcStorageProvider implements StorageProvider, Di
     }
 
     @Override
-    public java.util.Map<String, ?> diagnosticSnapshot() {
-        java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+    public Map<String, ?> diagnosticSnapshot() {
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("backend", dialect.displayName());
         result.put("sessions", sessions.size());
         result.put("closed", disposed.get());

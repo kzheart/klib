@@ -1,9 +1,6 @@
 package me.kzheart.klib.scheduler;
 
-import me.kzheart.klib.scope.ScopeImpl;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -13,6 +10,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
+import me.kzheart.klib.scope.ScopeImpl;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,7 +50,7 @@ class SchedulerSyncDispatchTest {
         ExecutorScheduler scheduler =
                 new ExecutorScheduler(scope, timerExecutor, asyncExecutor, syncExecutor);
 
-        java.util.Map<String, ?> snapshot = scheduler.diagnosticSnapshot();
+        Map<String, ?> snapshot = scheduler.diagnosticSnapshot();
 
         assertEquals("executor", snapshot.get("backend"));
         assertEquals("diagnostic-scheduler", snapshot.get("scope"));

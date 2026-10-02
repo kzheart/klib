@@ -1,17 +1,18 @@
 package me.kzheart.klib.hook.cost;
 
+import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.Objects;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 import me.kzheart.klib.hook.economy.Currency;
 import me.kzheart.klib.hook.economy.CurrencyResult;
 import org.bukkit.ChatColor;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-
-import java.math.BigDecimal;
-import java.util.Collections;
-import java.util.Objects;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /**
  * 内置奖励类型。命令与消息类型会替换 {@code %player%} 与 {@code %uuid%}，
@@ -133,7 +134,7 @@ public final class RewardTypes {
         };
     }
 
-    private static Reward reward(String description, java.util.function.Consumer<Player> action) {
+    private static Reward reward(String description, Consumer<Player> action) {
         return new Reward() {
             @Override
             public String describe() {

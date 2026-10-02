@@ -1,17 +1,21 @@
 package me.kzheart.klib.ui;
 
+import java.util.Optional;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+
+import me.kzheart.klib.scheduler.AsyncTask;
+import me.kzheart.klib.scheduler.KScheduler;
 import me.kzheart.klib.scheduler.SchedulerFactory;
+import me.kzheart.klib.scheduler.TaskHandle;
 import me.kzheart.klib.scheduler.Ticks;
 import me.kzheart.klib.scope.ScopeImpl;
 import me.kzheart.klib.ui.prompt.ChatPrompt;
 import me.kzheart.klib.ui.prompt.PromptOutcome;
 import me.kzheart.klib.ui.prompt.PromptSession;
 import org.junit.jupiter.api.Test;
-
-import java.util.Optional;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -42,14 +46,14 @@ class PromptSyncCompletionTest {
     void syncCompletionFailsWhenMainThreadDispatchIsRejected() {
         AtomicInteger submissions = new AtomicInteger();
         ScopeImpl scope = new ScopeImpl("prompt-sync-rejected");
-        scope.registerCapability(SchedulerFactory.class, ignored -> new me.kzheart.klib.scheduler.KScheduler() {
+        scope.registerCapability(SchedulerFactory.class, ignored -> new KScheduler() {
             @Override
-            public me.kzheart.klib.scheduler.TaskHandle every(Ticks period, Runnable task) {
+            public TaskHandle every(Ticks period, Runnable task) {
                 throw new UnsupportedOperationException();
             }
 
             @Override
-            public me.kzheart.klib.scheduler.TaskHandle after(Ticks delay, Runnable task) {
+            public TaskHandle after(Ticks delay, Runnable task) {
                 if (submissions.incrementAndGet() > 1) {
                     throw new IllegalStateException("main thread scheduler rejected completion");
                 }
@@ -57,8 +61,8 @@ class PromptSyncCompletionTest {
             }
 
             @Override
-            public <T> me.kzheart.klib.scheduler.AsyncTask<T> async(
-                    java.util.function.Supplier<T> supplier
+            public <T> AsyncTask<T> async(
+                    Supplier<T> supplier
             ) {
                 throw new UnsupportedOperationException();
             }
@@ -75,7 +79,7 @@ class PromptSyncCompletionTest {
         scope.close();
     }
 
-    private static final class NoopTask implements me.kzheart.klib.scheduler.TaskHandle {
+    private static final class NoopTask implements TaskHandle {
         @Override
         public boolean cancel() {
             return true;

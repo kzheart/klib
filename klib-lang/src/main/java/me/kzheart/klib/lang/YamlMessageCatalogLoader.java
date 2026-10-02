@@ -3,6 +3,7 @@ package me.kzheart.klib.lang;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** YAML 库将配置节解码为映射后使用的适配入口。 */
@@ -89,7 +90,7 @@ public final class YamlMessageCatalogLoader {
         final TextAction.Type action;
         try {
             action = TextAction.Type.valueOf(
-                    String.valueOf(type).trim().toUpperCase(java.util.Locale.ROOT));
+                    String.valueOf(type).trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException failure) {
             throw new IllegalArgumentException("Unknown rich catalog click type: " + type, failure);
         }

@@ -118,12 +118,15 @@ Key、IP、installation、ASN 与商品突发五个每分钟预算 getter，便�
 `latest.log` 或其他插件。
 
 ```java
+import java.util.logging.Level;
+import me.kzheart.klib.remote.RemoteLogContext;
+
 RemoteLogger remote = RemoteLogger.builder("example.market", delivery)
         .policy(client::policy)
         .build();
 
-remote.log(java.util.logging.Level.INFO, "listing refreshed",
-        me.kzheart.klib.remote.RemoteLogContext.builder()
+remote.log(Level.INFO, "listing refreshed",
+        RemoteLogContext.builder()
                 .context("listing_count", 42)
                 .mdc("request_id", "request-example")
                 .tag("listing")

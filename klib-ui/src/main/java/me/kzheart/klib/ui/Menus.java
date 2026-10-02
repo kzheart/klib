@@ -1,8 +1,10 @@
 package me.kzheart.klib.ui;
 
 import java.util.*;
+
 import me.kzheart.klib.KPlugin;
 import me.kzheart.klib.component.KContext;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -16,7 +18,7 @@ public final class Menus {
         return new Menus(MenuRenderer.install(context.scope(), plugin));
     }
     public MenuHolder open(Player player, Object controller) {
-        if (!org.bukkit.Bukkit.isPrimaryThread()) throw new IllegalStateException("Opening a menu requires the server main thread");
+        if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Opening a menu requires the server main thread");
         AnnotatedMenu declaration = new AnnotatedMenu(controller);
         synchronized (active) {
             if (!active.add(controller)) throw new IllegalStateException("Menu controller already has an open session");

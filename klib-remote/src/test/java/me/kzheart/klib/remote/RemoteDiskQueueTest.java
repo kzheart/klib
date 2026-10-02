@@ -1,23 +1,28 @@
 package me.kzheart.klib.remote;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
-import java.util.HashMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RemoteDiskQueueTest {
     @TempDir Path temporaryDirectory;
@@ -71,7 +76,7 @@ class RemoteDiskQueueTest {
                 1024L, 10, 180, TimeUnit.HOURS.toMillis(1L), identity(1));
         first.close();
 
-        assertThrows(java.io.IOException.class, () -> new RemoteDiskQueue(temporaryDirectory,
+        assertThrows(IOException.class, () -> new RemoteDiskQueue(temporaryDirectory,
                 1024L, 10, 180, TimeUnit.HOURS.toMillis(1L), identity(2)));
     }
 
@@ -88,13 +93,13 @@ class RemoteDiskQueueTest {
             try {
                 Files.move(queuePath, original, StandardCopyOption.ATOMIC_MOVE);
                 Files.createSymbolicLink(queuePath, attacker);
-            } catch (UnsupportedOperationException | java.io.IOException unsupported) {
+            } catch (UnsupportedOperationException | IOException unsupported) {
                 Assumptions.abort("filesystem cannot replace a live directory with a symlink");
             }
 
             assertFalse(queue.store(false, System.currentTimeMillis(), "event", envelope(),
                     event("must-not-be-redirected")).stored());
-            try (java.util.stream.Stream<Path> files = Files.list(attacker)) {
+            try (Stream<Path> files = Files.list(attacker)) {
                 assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".rqe")));
             }
         } finally {
@@ -111,7 +116,7 @@ class RemoteDiskQueueTest {
         Files.setPosixFilePermissions(parent, EnumSet.of(
                 PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
                 PosixFilePermission.OWNER_EXECUTE, PosixFilePermission.GROUP_WRITE));
-        assertThrows(java.io.IOException.class, () -> new RemoteDiskQueue(parent.resolve("queue"),
+        assertThrows(IOException.class, () -> new RemoteDiskQueue(parent.resolve("queue"),
                 2048L, 10, 180, TimeUnit.HOURS.toMillis(1L), identity(1)));
     }
 
@@ -130,7 +135,7 @@ class RemoteDiskQueueTest {
                     PosixFilePermission.OWNER_EXECUTE, PosixFilePermission.OTHERS_WRITE));
             assertFalse(queue.store(false, System.currentTimeMillis(), "event", envelope(),
                     event("must-not-be-written")).stored());
-            try (java.util.stream.Stream<Path> files = Files.list(queuePath)) {
+            try (Stream<Path> files = Files.list(queuePath)) {
                 assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".rqe")));
             }
         } finally {
@@ -144,13 +149,13 @@ class RemoteDiskQueueTest {
     @Test
     void ownerOnlyPermissionsFailClosedWithoutPosixOrAclSupport() throws Exception {
         Path archive = temporaryDirectory.resolve("queue.zip");
-        java.util.Map<String, String> environment = new HashMap<String, String>();
+        Map<String, String> environment = new HashMap<String, String>();
         environment.put("create", "true");
-        try (java.nio.file.FileSystem zip = FileSystems.newFileSystem(
+        try (FileSystem zip = FileSystems.newFileSystem(
                 URI.create("jar:" + archive.toUri()), environment)) {
             Path directory = zip.getPath("/queue");
             Files.createDirectory(directory);
-            assertThrows(java.io.IOException.class,
+            assertThrows(IOException.class,
                     () -> RemoteDiskQueue.restrictPermissions(directory, true));
         }
     }

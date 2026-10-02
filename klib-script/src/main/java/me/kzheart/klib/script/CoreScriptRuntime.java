@@ -2,8 +2,8 @@ package me.kzheart.klib.script;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -16,15 +16,18 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import me.kzheart.klib.script.kether.core.ParsedAction;
+
 import me.kzheart.klib.script.kether.core.ActionProperties;
+import me.kzheart.klib.script.kether.core.ParsedAction;
 import me.kzheart.klib.script.kether.core.Quest;
 import me.kzheart.klib.script.kether.core.QuestAction;
+import me.kzheart.klib.script.kether.core.QuestActionParser;
 import me.kzheart.klib.script.kether.core.QuestContext;
-import me.kzheart.klib.script.kether.core.QuestReader;
 import me.kzheart.klib.script.kether.core.QuestFuture;
+import me.kzheart.klib.script.kether.core.QuestReader;
 import me.kzheart.klib.script.kether.core.SimpleQuestContext;
 import me.kzheart.klib.script.kether.core.SimpleQuestService;
 
@@ -195,7 +198,7 @@ final class CoreScriptRuntime {
                     continue;
                 }
                 if (!containsEntry(registeredEntries, name, namespaces)) {
-                    me.kzheart.klib.script.kether.core.QuestActionParser parser =
+                    QuestActionParser parser =
                             unknownResolver instanceof KetherParserResolver
                                     ? ((KetherParserResolver) unknownResolver).parser(name, namespaces)
                                     : unknownParser(name);
@@ -338,7 +341,7 @@ final class CoreScriptRuntime {
         return compilationCount.get();
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser upperParser(
+    private QuestActionParser upperParser(
             final String lookupName,
             final String name,
             final List<String> namespaces,
@@ -357,20 +360,20 @@ final class CoreScriptRuntime {
         return statementParser(lookupName, name, namespaces, lineOffset);
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser statementParser(
+    private QuestActionParser statementParser(
             final String lookupName,
             final String name,
             final List<String> namespaces,
             final int lineOffset
     ) {
-        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+        return QuestActionParser.of(reader -> {
             List<String> arguments = readArguments(name, reader);
             return new QuestAction<Object>() {
                 @Override
                 public CompletableFuture<Object> process(QuestContext.Frame frame) {
                     ScriptContext context = context(frame);
                     SourcePosition position = sourcePosition(frame, lineOffset);
-                    Optional<QuestActionParser> parser = registry.resolve(lookupName, namespaces);
+                    Optional<me.kzheart.klib.script.QuestActionParser> parser = registry.resolve(lookupName, namespaces);
                     if (!parser.isPresent()) {
                         return failed(new IllegalArgumentException("Unknown statement: " + name));
                     }
@@ -409,13 +412,13 @@ final class CoreScriptRuntime {
         });
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser commandParser(
+    private QuestActionParser commandParser(
             final String lookupName,
             final String name,
             final List<String> namespaces,
             final int lineOffset
     ) {
-        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+        return QuestActionParser.of(reader -> {
             if (!reader.hasNext() || reader.peek() == '}') {
                 throw new IllegalArgumentException("Expected command value");
             }
@@ -448,7 +451,7 @@ final class CoreScriptRuntime {
                     CompletableFuture<Object> result = new CompletableFuture<Object>();
                     try {
                         CompletableFuture<Object> value = frame.newFrame(command).run();
-                        java.util.function.Function<Object, Object> dispatch = input ->
+                        Function<Object, Object> dispatch = input ->
                                 BuiltInStatements.dispatchCommand(context,
                                         InlineValues.interpolate(String.valueOf(input), context), asConsole);
                         CompletableFuture<Object> execution = value.isDone()
@@ -534,8 +537,8 @@ final class CoreScriptRuntime {
         }
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser conditionalParser() {
-        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+    private QuestActionParser conditionalParser() {
+        return QuestActionParser.of(reader -> {
             ParsedAction<?> condition = reader.nextParsedAction();
             reader.expect("then");
             ParsedAction<?> accepted = reader.nextParsedAction();
@@ -558,8 +561,8 @@ final class CoreScriptRuntime {
         });
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser namespaceParser() {
-        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+    private QuestActionParser namespaceParser() {
+        return QuestActionParser.of(reader -> {
             String namespace = reader.nextToken();
             ParsedAction<?> body = reader.nextParsedAction(namespace);
             return new QuestAction<Object>() {
@@ -571,8 +574,8 @@ final class CoreScriptRuntime {
         });
     }
 
-    private me.kzheart.klib.script.kether.core.QuestActionParser unknownParser(final String name) {
-        return me.kzheart.klib.script.kether.core.QuestActionParser.of(reader -> {
+    private QuestActionParser unknownParser(final String name) {
+        return QuestActionParser.of(reader -> {
             List<String> arguments = readRemaining(reader);
             return new QuestAction<Object>() {
                 @Override

@@ -1,19 +1,10 @@
 package me.kzheart.klib.item;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.Server;
-import org.bukkit.enchantments.Enchantment;
-import org.bukkit.inventory.ItemFactory;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
-
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -23,6 +14,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.Server;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemFactory;
+import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 
 /** 以动态代理模拟 ItemFactory 与 ItemMeta，让物品元数据逻辑可以脱离服务端测试。 */
 final class FakeItemServer {
@@ -100,7 +101,7 @@ final class FakeItemServer {
         for (Map.Entry<String, Object> entry : state(meta).entrySet()) {
             Object value = entry.getValue();
             boolean empty = value instanceof Map<?, ?> && ((Map<?, ?>) value).isEmpty()
-                    || value instanceof java.util.Collection<?> && ((java.util.Collection<?>) value).isEmpty();
+                    || value instanceof Collection<?> && ((Collection<?>) value).isEmpty();
             if (!empty) {
                 result.put(entry.getKey(), value);
             }

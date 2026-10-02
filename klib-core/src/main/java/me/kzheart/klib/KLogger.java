@@ -6,12 +6,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import me.kzheart.klib.scope.Disposable;
 
 /**
@@ -184,7 +186,7 @@ public final class KLogger {
         if (module == null || module.trim().isEmpty()) {
             return DEFAULT_MODULE;
         }
-        return module.trim().toLowerCase(java.util.Locale.ROOT);
+        return module.trim().toLowerCase(Locale.ROOT);
     }
 
     /** 行首符号；klib.logger.ascii=true 时降级为 ASCII，供 GBK 控制台使用。 */

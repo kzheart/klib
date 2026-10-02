@@ -1,13 +1,5 @@
 package me.kzheart.klib.remote;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,10 +13,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
 import java.util.zip.GZIPInputStream;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RemoteProtocolV1Test {
     private static final String VALID_SETTINGS = "{\"schema_version\":1,"
@@ -67,7 +69,7 @@ class RemoteProtocolV1Test {
                 .exceptions(true)
                 .logs(true)
                 .manualIncidents(true)
-                .minimumLevel(java.util.logging.Level.FINE)
+                .minimumLevel(Level.FINE)
                 .sampleRate(75)
                 .build();
 
@@ -210,7 +212,7 @@ class RemoteProtocolV1Test {
                 authorization.get());
         assertTrue(effective.exceptions());
         assertFalse(effective.logs(), "远端不能开启构建期未允许的日志能力");
-        assertEquals(java.util.logging.Level.WARNING, effective.minimumLevel());
+        assertEquals(Level.WARNING, effective.minimumLevel());
         assertEquals(30, client.settings().retention().incidentsDays());
         assertEquals(1000, client.settings().limits().keyEventsPerMinute());
         assertEquals(2000, client.settings().limits().ipEventsPerMinute());

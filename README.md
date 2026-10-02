@@ -9,7 +9,7 @@ Native、Collector 和生产部署配置不在本仓库中。
 
 ## 最小接入
 
-版本记录见 [CHANGELOG.md](CHANGELOG.md)，下文中的 `<...-version>` 填写 Maven Central 上已发布的版本。
+版本记录见 [CHANGELOG.md](CHANGELOG.md)，下文中的 `<...-version>` 填写 Maven Central 上已发布的版本。Java 源码与示例使用显式 import 和简单类名；嵌套类型使用 Outer.Inner。
 
 推荐通过 Klib Gradle 插件选择模块：
 

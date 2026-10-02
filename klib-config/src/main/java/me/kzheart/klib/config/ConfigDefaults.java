@@ -1,8 +1,11 @@
 package me.kzheart.klib.config;
 
 import java.lang.reflect.*;
+import java.time.Duration;
 import java.util.*;
+
 import me.kzheart.klib.config.annotation.*;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 /** Explicit default YAML generation, including @Comment; never overwrites a live file. */
@@ -49,11 +52,11 @@ public final class ConfigDefaults {
     }
     private static boolean pojo(Object value) {
         return !(value instanceof String || value instanceof Number || value instanceof Boolean
-                || value instanceof Character || value instanceof Enum<?> || value instanceof java.time.Duration
+                || value instanceof Character || value instanceof Enum<?> || value instanceof Duration
                 || value instanceof Map<?, ?> || value instanceof Iterable<?> || value.getClass().isArray());
     }
     private static Object normalize(Object value) {
-        if (value instanceof Enum<?> || value instanceof Character || value instanceof java.time.Duration) return value.toString();
+        if (value instanceof Enum<?> || value instanceof Character || value instanceof Duration) return value.toString();
         if (value instanceof Map<?, ?>) {
             Map<String, Object> map = new LinkedHashMap<String, Object>();
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
@@ -72,9 +75,9 @@ public final class ConfigDefaults {
         return value;
     }
     private static String flow(Object value) {
-        org.yaml.snakeyaml.DumperOptions options = new org.yaml.snakeyaml.DumperOptions();
-        options.setDefaultFlowStyle(org.yaml.snakeyaml.DumperOptions.FlowStyle.FLOW);
-        options.setDefaultScalarStyle(org.yaml.snakeyaml.DumperOptions.ScalarStyle.DOUBLE_QUOTED);
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.FLOW);
+        options.setDefaultScalarStyle(DumperOptions.ScalarStyle.DOUBLE_QUOTED);
         options.setWidth(Integer.MAX_VALUE);
         options.setSplitLines(false);
         return new Yaml(options).dump(value).trim();

@@ -2,12 +2,14 @@ package me.kzheart.klib.script;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+
 import me.kzheart.klib.script.TabooLibKetherInterop.OpenContainer;
 import me.kzheart.klib.script.TabooLibKetherInterop.OpenResult;
 import me.kzheart.klib.script.kether.core.ExitStatus;
@@ -490,7 +492,7 @@ final class TabooLibKetherProtocol {
         @Override public Map<String, Quest.Block> getBlocks() {
             @SuppressWarnings("unchecked") Map<String, Object> blocks =
                     (Map<String, Object>) invoke(source, "getBlocks");
-            Map<String, Quest.Block> result = new java.util.LinkedHashMap<String, Quest.Block>();
+            Map<String, Quest.Block> result = new LinkedHashMap<String, Quest.Block>();
             for (Map.Entry<String, Object> entry : blocks.entrySet()) {
                 result.put(entry.getKey(), new RemoteBlock(remote, consumerName, entry.getValue()));
             }

@@ -1,15 +1,16 @@
 package me.kzheart.klib.ui;
 
-import me.kzheart.klib.KLogger;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.junit.jupiter.api.Test;
-
 import java.lang.reflect.Proxy;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
+
+import me.kzheart.klib.KLogger;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -33,7 +34,7 @@ class MenuActionErrorBoundaryTest {
 
         assertFalse(succeeded);
         assertSame(expected, reported.get());
-        org.junit.jupiter.api.Assertions.assertEquals(1, logged.get());
+        Assertions.assertEquals(1, logged.get());
     }
 
     private static Player player() {

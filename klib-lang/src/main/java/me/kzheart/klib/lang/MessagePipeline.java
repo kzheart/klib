@@ -3,6 +3,7 @@ package me.kzheart.klib.lang;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -188,7 +189,7 @@ public final class MessagePipeline {
     }
 
     private static ResolvedText extractRoute(String source) {
-        String lower = source.toLowerCase(java.util.Locale.ROOT);
+        String lower = source.toLowerCase(Locale.ROOT);
         if (lower.startsWith("actionbar:")) {
             return new ResolvedText(MessageRoute.ACTION_BAR, stripRoutePrefix(source, 10));
         }

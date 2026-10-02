@@ -1,16 +1,17 @@
 package me.kzheart.klib.event;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import java.lang.reflect.Proxy;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
+
 import me.kzheart.klib.KLogger;
+import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.ScopeImpl;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventException;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.EventExecutor;
@@ -18,10 +19,13 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 class KEventDispatcherTest {
     public static class AnnotatedListener implements Listener {
         int calls;
-        @org.bukkit.event.EventHandler(priority=org.bukkit.event.EventPriority.HIGH, ignoreCancelled=true)
+        @EventHandler(priority=EventPriority.HIGH, ignoreCancelled=true)
         public void handle(TestEvent event) { calls++; }
     }
 
@@ -32,7 +36,7 @@ class KEventDispatcherTest {
         PluginManager manager = (PluginManager) Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class<?>[]{PluginManager.class}, (target, method, arguments) -> {
                     if (method.getName().equals("registerEvent")) {
-                        assertEquals(org.bukkit.event.EventPriority.HIGH, arguments[2]);
+                        assertEquals(EventPriority.HIGH, arguments[2]);
                         assertEquals(Boolean.TRUE, arguments[5]);
                         listener.set((Listener) arguments[1]); executor.set((EventExecutor) arguments[3]);
                     }
@@ -42,7 +46,7 @@ class KEventDispatcherTest {
         scope.registerCapability(KEventDispatcher.class, scope.install(new KEventDispatcher(
                 proxy(Plugin.class), manager, new KLogger(Logger.getLogger("test")))));
         AnnotatedListener receiver = new AnnotatedListener();
-        me.kzheart.klib.scope.Disposable registration = new Events(scope).register(receiver);
+        Disposable registration = new Events(scope).register(receiver);
         executor.get().execute(listener.get(), new TestEvent()); assertEquals(1, receiver.calls);
         registration.dispose(); executor.get().execute(listener.get(), new TestEvent());
         assertEquals(1, receiver.calls); scope.close();

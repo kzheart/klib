@@ -14,6 +14,7 @@
 - `klib-compat-v*` 是兼容实现，使用者通过 `klib-compat` 接入。
 - `klib-guard-api` 只包含公开生命周期契约，不得引入协议、JNI 或运行时实现。
 - 不新增未要求的旧 API 别名、降级路径或兼容层。
+- Java 类型优先显式 import 后使用简单类名；嵌套类型使用 Outer.Inner。仅真实同名冲突时保留必要限定名，不为省 import 在正文重复书写完整包名。
 
 ## 验证
 

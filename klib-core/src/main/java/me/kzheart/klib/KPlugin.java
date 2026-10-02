@@ -1,9 +1,16 @@
 package me.kzheart.klib;
 
 import java.util.function.Consumer;
+
+import me.kzheart.klib.command.api.Commands;
+import me.kzheart.klib.component.Components;
+import me.kzheart.klib.component.KContext;
+import me.kzheart.klib.config.api.Configs;
+import me.kzheart.klib.event.Events;
 import me.kzheart.klib.event.KEventDispatcher;
 import me.kzheart.klib.scheduler.BukkitSchedulerFactory;
 import me.kzheart.klib.scheduler.SchedulerFactory;
+import me.kzheart.klib.scheduler.Tasks;
 import me.kzheart.klib.scope.Scope;
 import me.kzheart.klib.scope.ScopeImpl;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -21,23 +28,23 @@ public abstract class KPlugin extends JavaPlugin {
     private volatile ScopeImpl rootScope;
     private KLogger klibLogger;
 
-    private volatile me.kzheart.klib.component.KContext context;
+    private volatile KContext context;
 
     protected void setup(Scope root) { setup(); }
 
     /** Default-scope entry point. Override this or setup(Scope), not both. */
     protected void setup() { }
 
-    public final me.kzheart.klib.component.KContext context() {
-        me.kzheart.klib.component.KContext current = context;
+    public final KContext context() {
+        KContext current = context;
         if (current == null || current.scope().isClosed()) throw new IllegalStateException("Plugin context is not active");
         return current;
     }
-    protected final me.kzheart.klib.command.api.Commands commands() { return context().commands(); }
-    protected final me.kzheart.klib.config.api.Configs configs() { return context().configs(); }
-    protected final me.kzheart.klib.event.Events events() { return context().events(); }
-    protected final me.kzheart.klib.scheduler.Tasks tasks() { return context().tasks(); }
-    protected final me.kzheart.klib.component.Components components() { return context().components(); }
+    protected final Commands commands() { return context().commands(); }
+    protected final Configs configs() { return context().configs(); }
+    protected final Events events() { return context().events(); }
+    protected final Tasks tasks() { return context().tasks(); }
+    protected final Components components() { return context().components(); }
 
 
     @Override
@@ -57,7 +64,7 @@ public abstract class KPlugin extends JavaPlugin {
             rootScope = PluginScopeBootstrap.create(getName(), new Consumer<Scope>() {
                 @Override
                 public void accept(Scope root) {
-                    context = new me.kzheart.klib.component.KContext(root);
+                    context = new KContext(root);
                     installCoreCapabilities(root);
                     setup(root);
                 }

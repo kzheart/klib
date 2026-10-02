@@ -1,15 +1,16 @@
 package me.kzheart.klib.hook.cost;
 
-import org.bukkit.entity.Player;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+
+import org.bukkit.entity.Player;
 
 /**
  * 消耗类型注册表，把 {@code money:500}、{@code item:mi:MATERIAL:SOUL_GEM*3} 这类配置条目解析为 {@link CostPlan}。
@@ -96,7 +97,7 @@ public final class Costs {
 
         public Builder type(String prefix, CostType type) {
             Objects.requireNonNull(type, "type");
-            String key = Objects.requireNonNull(prefix, "prefix").trim().toLowerCase(java.util.Locale.ROOT);
+            String key = Objects.requireNonNull(prefix, "prefix").trim().toLowerCase(Locale.ROOT);
             if (!key.matches("[a-z0-9_-]+")) {
                 throw new IllegalArgumentException("Invalid cost type prefix: '" + prefix + "'");
             }

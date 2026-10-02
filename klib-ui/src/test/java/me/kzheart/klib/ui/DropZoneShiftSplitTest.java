@@ -1,15 +1,16 @@
 package me.kzheart.klib.ui;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Map;
+
 import me.kzheart.klib.ui.drop.DropResult;
 import me.kzheart.klib.ui.drop.DropZoneController;
 import me.kzheart.klib.ui.drop.InventoryAction;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
-
-import java.util.Arrays;
-import java.util.LinkedHashSet;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -44,7 +45,7 @@ class DropZoneShiftSplitTest {
 
         assertThrows(IllegalArgumentException.class, () -> zone.handle(InventoryAction.drag(
                 source,
-                java.util.Collections.singletonMap(Integer.valueOf(1), Integer.valueOf(6)))));
+                Collections.singletonMap(Integer.valueOf(1), Integer.valueOf(6)))));
         assertEquals(0, zone.snapshot().size());
     }
 }

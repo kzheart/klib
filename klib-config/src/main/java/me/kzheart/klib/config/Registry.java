@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import me.kzheart.klib.diagnostic.DiagnosticSource;
 import me.kzheart.klib.scheduler.SchedulerFactory;
 import me.kzheart.klib.scheduler.Ticks;
@@ -359,7 +361,7 @@ public final class Registry<T> implements Disposable, ReloadFailureSource, Diagn
     }
 
     private static boolean isYaml(Path file) {
-        String name = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
         return name.endsWith(".yml") || name.endsWith(".yaml");
     }
 }

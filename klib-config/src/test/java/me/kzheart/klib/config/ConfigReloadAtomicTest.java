@@ -1,15 +1,8 @@
 package me.kzheart.klib.config;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -19,11 +12,20 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+
 import me.kzheart.klib.config.api.ConfigDocument;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.ScopeImpl;
 import me.kzheart.klib.scope.capability.ConfigCapability;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigReloadAtomicTest {
     @Test
@@ -83,7 +85,7 @@ class ConfigReloadAtomicTest {
         YamlConfigDocument<ServerConfig> document = YamlConfigDocument.open(
                 scope, source, new YamlConfigMapper(), ServerConfig.class);
 
-        java.util.Map<String, ?> snapshot = document.diagnosticSnapshot();
+        Map<String, ?> snapshot = document.diagnosticSnapshot();
 
         assertEquals("config.yml", snapshot.get("source"));
         assertEquals(ServerConfig.class.getName(), snapshot.get("value_type"));

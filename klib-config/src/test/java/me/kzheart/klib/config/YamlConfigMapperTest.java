@@ -1,14 +1,17 @@
 package me.kzheart.klib.config;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import me.kzheart.klib.config.api.ConfigDocument;
 import me.kzheart.klib.scope.ScopeImpl;
+import me.kzheart.klib.scope.capability.ConfigCapability;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class YamlConfigMapperTest {
     @Test
@@ -44,10 +47,10 @@ class YamlConfigMapperTest {
         documents.put("config.yml", "name: from-scope\n");
         ScopeImpl scope = new ScopeImpl("config-test");
         scope.registerCapability(
-                me.kzheart.klib.scope.capability.ConfigCapability.class,
+                ConfigCapability.class,
                 YamlConfigCapability.inMemory(documents));
 
-        me.kzheart.klib.config.api.ConfigDocument<TypedConfig> document =
+        ConfigDocument<TypedConfig> document =
                 scope.config(TypedConfig.class, "config.yml");
 
         assertEquals("from-scope", document.value().name);

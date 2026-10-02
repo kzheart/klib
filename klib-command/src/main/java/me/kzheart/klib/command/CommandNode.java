@@ -1,9 +1,11 @@
 package me.kzheart.klib.command;
 
-import me.kzheart.klib.command.api.CommandHandler;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
+
+import me.kzheart.klib.command.api.CommandHandler;
+import org.bukkit.command.CommandSender;
 
 final class CommandNode {
     final String literal;
@@ -18,8 +20,8 @@ final class CommandNode {
     Object suggestionOwner;
     boolean hasGreedyChild;
     CommandHandler handler;
-    java.util.function.Predicate<org.bukkit.command.CommandSender> branchAccess;
-    java.util.function.Predicate<org.bukkit.command.CommandSender> handlerAccess;
+    Predicate<CommandSender> branchAccess;
+    Predicate<CommandSender> handlerAccess;
 
 
     CommandNode(String literal, Arg<?> argument) {

@@ -1,11 +1,5 @@
 package me.kzheart.klib.hook.cost;
 
-import me.kzheart.klib.hook.economy.Currency;
-import me.kzheart.klib.hook.economy.CurrencyResult;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
-
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -15,6 +9,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import me.kzheart.klib.hook.economy.Currency;
+import me.kzheart.klib.hook.economy.CurrencyResult;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
 /** 用动态代理模拟消耗与奖励会触碰的玩家状态。 */
 final class TestPlayers {
@@ -32,7 +33,7 @@ final class TestPlayers {
         boolean op;
         Player player;
 
-        int count(org.bukkit.Material material) {
+        int count(Material material) {
             int total = 0;
             for (ItemStack item : contents) {
                 if (item != null && item.getType() == material) {

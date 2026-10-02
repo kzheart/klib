@@ -1,22 +1,23 @@
 package me.kzheart.klib.config;
 
-import me.kzheart.klib.scope.Scope;
-import me.kzheart.klib.scope.capability.ConfigCapability;
-
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Function;
 
+import me.kzheart.klib.KPlugin;
+import me.kzheart.klib.scope.Scope;
+import me.kzheart.klib.scope.capability.ConfigCapability;
+
 /**
  * Config 模块入口：把类路径中的默认 YAML 提取到插件数据目录，
- * 并以可重新加载的 {@link me.kzheart.klib.scope.capability.ConfigCapability} 形式注册到作用域。
+ * 并以可重新加载的 {@link ConfigCapability} 形式注册到作用域。
  *
  * <p>典型用法是在插件 {@code setup} 中调用
  * {@code ConfigModule.install(root, getDataFolder().toPath(), getClassLoader(), "defaults")}，
  * 之后通过 {@code root.config(Settings.class, "config.yml")} 取得类型化文档。
  */
 public final class ConfigModule {
-    public static ConfigCapability install(me.kzheart.klib.KPlugin plugin) {
+    public static ConfigCapability install(KPlugin plugin) {
         return install(plugin.context().scope(), plugin.getDataFolder().toPath(),
                 plugin.getClass().getClassLoader(), "defaults");
     }

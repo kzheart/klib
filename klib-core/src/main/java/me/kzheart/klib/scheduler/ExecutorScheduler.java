@@ -1,14 +1,16 @@
 package me.kzheart.klib.scheduler;
 
-import me.kzheart.klib.scope.Scope;
-import me.kzheart.klib.diagnostic.DiagnosticSource;
-
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+
+import me.kzheart.klib.diagnostic.DiagnosticSource;
+import me.kzheart.klib.scope.Scope;
 
 public final class ExecutorScheduler implements KScheduler, DiagnosticSource {
     private final Scope scope;
@@ -173,8 +175,8 @@ public final class ExecutorScheduler implements KScheduler, DiagnosticSource {
     }
 
     @Override
-    public java.util.Map<String, ?> diagnosticSnapshot() {
-        java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+    public Map<String, ?> diagnosticSnapshot() {
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("backend", "executor");
         result.put("scope", scope.name());
         result.put("scope_closed", scope.isClosed());

@@ -1,5 +1,7 @@
 package me.kzheart.klib.remote;
 
+import java.util.Locale;
+
 /** 共用的 JSON 字符串转义与反转义工具。 */
 final class JsonStrings {
     private JsonStrings() {
@@ -34,7 +36,7 @@ final class JsonStrings {
                 default:
                     if (character < 0x20) {
                         output.append(String.format(
-                                java.util.Locale.ROOT, "\\u%04x", (int) character));
+                                Locale.ROOT, "\\u%04x", (int) character));
                     } else {
                         output.append(character);
                     }

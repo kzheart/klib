@@ -1,13 +1,16 @@
 package me.kzheart.klib.scheduler;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.diagnostic.DiagnosticSource;
 import me.kzheart.klib.scope.Scope;
@@ -185,8 +188,8 @@ public final class BukkitSchedulerAdapter implements KScheduler, DiagnosticSourc
     }
 
     @Override
-    public java.util.Map<String, ?> diagnosticSnapshot() {
-        java.util.Map<String, Object> result = new java.util.LinkedHashMap<String, Object>();
+    public Map<String, ?> diagnosticSnapshot() {
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("backend", "bukkit");
         result.put("scope", scope.name());
         result.put("scope_closed", scope.isClosed());

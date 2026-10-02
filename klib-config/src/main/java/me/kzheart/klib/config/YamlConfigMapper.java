@@ -1,13 +1,10 @@
 package me.kzheart.klib.config;
 
-import me.kzheart.klib.config.annotation.*;
-import me.kzheart.klib.random.DoubleRange;
-import me.kzheart.klib.random.IntRange;
-import me.kzheart.klib.reflect.Declarations;
-import java.lang.reflect.Method;
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -18,16 +15,26 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import me.kzheart.klib.config.annotation.*;
+import me.kzheart.klib.random.DoubleRange;
+import me.kzheart.klib.random.IntRange;
+import me.kzheart.klib.reflect.Declarations;
 
 /** 将能感知路径的 YAML 节点映射为 Java 8 POJO。 */
 public final class YamlConfigMapper {
-    private static final java.util.logging.Logger LOGGER =
-            java.util.logging.Logger.getLogger(YamlConfigMapper.class.getName());
-    private static final java.util.regex.Pattern DURATION_SEGMENT =
-            java.util.regex.Pattern.compile("([0-9]+)(ms|[smhd])");
+    private static final Logger LOGGER =
+            Logger.getLogger(YamlConfigMapper.class.getName());
+    private static final Pattern DURATION_SEGMENT =
+            Pattern.compile("([0-9]+)(ms|[smhd])");
     /** 迁移系统写入的保留根键，不参与未知键判定。 */
     private static final String SCHEMA_VERSION_KEY = "_schema-version";
 
@@ -35,7 +42,7 @@ public final class YamlConfigMapper {
             new LinkedHashMap<Class<?>, ConfigConverter<?>>();
     /** 已告警过的“来源 + 路径”，保证同一个键在重复 reload 中只提示一次。 */
     private final Set<String> warnedUnknownKeys =
-            java.util.concurrent.ConcurrentHashMap.newKeySet();
+            ConcurrentHashMap.newKeySet();
 
     public <T> YamlConfigMapper registerConverter(Class<T> type, ConfigConverter<T> converter) {
         Objects.requireNonNull(type, "type");
@@ -290,9 +297,9 @@ public final class YamlConfigMapper {
             throw node.mappingError("expected a sequence, got " + kind(node.raw()));
         }
         int size = node.sequenceSize();
-        Object array = java.lang.reflect.Array.newInstance(componentType, size);
+        Object array = Array.newInstance(componentType, size);
         for (int index = 0; index < size; index++) {
-            java.lang.reflect.Array.set(
+            Array.set(
                     array,
                     index,
                     convert(node.index(index), componentType));
@@ -423,10 +430,10 @@ public final class YamlConfigMapper {
     private static Duration parseDuration(ConfigNode node, String value) {
         try {
             if (value.startsWith("P") || value.startsWith("p")) {
-                return Duration.parse(value.toUpperCase(java.util.Locale.ROOT));
+                return Duration.parse(value.toUpperCase(Locale.ROOT));
             }
-            String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
-            java.util.regex.Matcher matcher = DURATION_SEGMENT.matcher(normalized);
+            String normalized = value.trim().toLowerCase(Locale.ROOT);
+            Matcher matcher = DURATION_SEGMENT.matcher(normalized);
             Duration result = Duration.ZERO;
             int end = 0;
             while (matcher.find()) {

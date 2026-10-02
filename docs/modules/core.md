@@ -8,6 +8,8 @@
 
 ## 默认作用域与组件
 
+Java 类型通过显式 import 引入，正文使用简单类名；嵌套类型使用 Outer.Inner，仅真实同名冲突时保留必要限定名。
+
 新插件可覆盖无参 `setup()`，使用绑定插件生命周期的 `commands()`、`configs()`、`events()`、`tasks()` 和 `components()`。
 `KComponent` 提供相同服务入口；`components().install(instance)` 返回可关闭的 ComponentHandle。
 普通对象可声明 public 无参 void 的 `@OnStart`、`@OnStop`；初始化失败回滚，关闭时先清理注册资源再执行 OnStop。

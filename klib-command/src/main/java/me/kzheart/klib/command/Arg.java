@@ -1,10 +1,11 @@
 package me.kzheart.klib.command;
 
-import me.kzheart.klib.command.api.CommandArgument;
-import org.bukkit.command.CommandSender;
-
 import java.util.Collections;
 import java.util.List;
+
+import me.kzheart.klib.command.api.CommandArgument;
+import me.kzheart.klib.command.api.CommandContext;
+import org.bukkit.command.CommandSender;
 
 /**
  * {@link CommandArgument} 的唯一实现族，由 {@link Arguments} 工厂创建。
@@ -63,7 +64,7 @@ public abstract class Arg<T> implements CommandArgument<T> {
         return Collections.emptyList();
     }
 
-    T parse(String input, PlayerResolver players, me.kzheart.klib.command.api.CommandContext context)
+    T parse(String input, PlayerResolver players, CommandContext context)
             throws ArgumentException { return parse(input, players); }
 
     List<String> suggest(SuggestionContext context, PlayerResolver players) {

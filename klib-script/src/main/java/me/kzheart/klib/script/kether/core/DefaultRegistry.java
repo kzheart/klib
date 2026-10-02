@@ -1,6 +1,7 @@
 /* Copyright (c) 2018 Bkm016. MIT License. Upstream: c27e822fb34eebd7433a94efbfac0a26943cccd6 */
 package me.kzheart.klib.script.kether.core;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -37,12 +38,12 @@ public final class DefaultRegistry implements QuestRegistry {
     public synchronized Collection<String> getRegisteredActions(String namespace) {
         Map<String, QuestActionParser> map = parsers.get(namespace);
         return map == null ? Collections.emptyList()
-                : Collections.unmodifiableList(new java.util.ArrayList<>(map.keySet()));
+                : Collections.unmodifiableList(new ArrayList<>(map.keySet()));
     }
 
     @Override public Collection<String> getRegisteredActions() { return getRegisteredActions("kether"); }
     @Override public synchronized Collection<String> getRegisteredNamespace() {
-        return Collections.unmodifiableList(new java.util.ArrayList<>(parsers.keySet()));
+        return Collections.unmodifiableList(new ArrayList<>(parsers.keySet()));
     }
     @Override public Optional<QuestActionParser> getParser(String id, String namespace) {
         Map<String, QuestActionParser> map = parsers.get(namespace);
@@ -64,7 +65,7 @@ public final class DefaultRegistry implements QuestRegistry {
         return fallback == null
                 ? Optional.empty()
                 : Optional.ofNullable(fallback.apply(
-                        id, Collections.unmodifiableList(new java.util.ArrayList<>(namespaces))));
+                        id, Collections.unmodifiableList(new ArrayList<>(namespaces))));
     }
 
     @Override public Optional<QuestActionParser> getParser(String id) { return getParser(id, "kether"); }

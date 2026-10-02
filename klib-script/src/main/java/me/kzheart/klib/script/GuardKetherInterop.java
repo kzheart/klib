@@ -1,12 +1,15 @@
 package me.kzheart.klib.script;
 
 import java.lang.reflect.Array;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -14,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicLong;
+
 import me.kzheart.klib.guard.PluginHost;
 import me.kzheart.klib.guard.kether.KetherInteropEndpoint;
 import me.kzheart.klib.guard.kether.KetherInteropPeer;
@@ -26,6 +30,7 @@ import me.kzheart.klib.script.TabooLibKetherInterop.OpenContainer;
 import me.kzheart.klib.script.TabooLibKetherInterop.OpenResult;
 import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestActionParser;
+import me.kzheart.klib.script.kether.core.QuestReader;
 
 /**
  * 通过 Guard 门户 Broker 双向共享商品的 Kether action。
@@ -209,7 +214,7 @@ public final class GuardKetherInterop
         return new QuestActionParser() {
             @Override
             @SuppressWarnings("unchecked")
-            public <T> QuestAction<T> resolve(me.kzheart.klib.script.kether.core.QuestReader reader) {
+            public <T> QuestAction<T> resolve(QuestReader reader) {
                 synchronized (GuardKetherInterop.this) {
                     ensureActive();
                     for (String namespace : selected) {
@@ -334,7 +339,7 @@ public final class GuardKetherInterop
         if (type == String.class || type == Boolean.class || type == Byte.class
                 || type == Short.class || type == Integer.class || type == Long.class
                 || type == Float.class || type == Double.class || type == Character.class
-                || type == java.math.BigInteger.class || type == java.math.BigDecimal.class) {
+                || type == BigInteger.class || type == BigDecimal.class) {
             return value;
         }
         if (depth >= 16 || visited.size() >= 256) {
@@ -403,8 +408,8 @@ public final class GuardKetherInterop
     }
 
     private static String key(String namespace, String action) {
-        return requireText(namespace, "namespace").toLowerCase(java.util.Locale.ROOT) + ':'
-                + requireText(action, "action").toLowerCase(java.util.Locale.ROOT);
+        return requireText(namespace, "namespace").toLowerCase(Locale.ROOT) + ':'
+                + requireText(action, "action").toLowerCase(Locale.ROOT);
     }
 
     private static String requireText(String value, String label) {

@@ -1,7 +1,10 @@
 package me.kzheart.klib.command;
+import java.util.Optional;
+
 import me.kzheart.klib.command.api.CommandContext;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+
 public final class SuggestionContext {
     private final CommandContext context;
     private final String prefix;
@@ -13,5 +16,5 @@ public final class SuggestionContext {
     }
     public String prefix() { return prefix; }
     public <T> T get(String name, Class<T> type) { return context.get(name, type); }
-    public java.util.Optional<Object> find(String name) { return context.find(name); }
+    public Optional<Object> find(String name) { return context.find(name); }
 }

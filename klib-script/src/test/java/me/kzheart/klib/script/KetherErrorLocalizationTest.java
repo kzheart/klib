@@ -1,16 +1,18 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+
 import me.kzheart.klib.scope.ScopeImpl;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KetherErrorLocalizationTest {
 
@@ -93,7 +95,7 @@ class KetherErrorLocalizationTest {
         ScopeImpl scope = ScopeImpl.create("line-boundary", current ->
                 registry.register(current, "capture", (call, context) -> {
                     calls.add(call.arguments());
-                    return java.util.concurrent.CompletableFuture.completedFuture(null);
+                    return CompletableFuture.completedFuture(null);
                 }));
 
         new KetherScriptEngine(registry).eval(

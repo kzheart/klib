@@ -3,12 +3,15 @@ package me.kzheart.klib.config;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.LinkedHashSet;
+
 import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -27,7 +30,7 @@ public final class ConfigNode {
     private final boolean valueExists;
     private final Object valueParent;
     private final Object valueKey;
-    private org.yaml.snakeyaml.error.Mark keyMark;
+    private Mark keyMark;
 
     ConfigNode(YamlDocument document, Node node, String path) {
         this(document, node, path, path.substring(path.lastIndexOf('.') + 1));
@@ -237,7 +240,7 @@ public final class ConfigNode {
      * <p>节点存在时消息形如 {@code config.yml:12:5 (database.port): detail}。
      */
     public ConfigMappingException mappingError(String detail) {
-        org.yaml.snakeyaml.error.Mark mark = ConfigLocations.startMark(node);
+        Mark mark = ConfigLocations.startMark(node);
         return new ConfigMappingException(
                 sourceName(),
                 path,
@@ -248,7 +251,7 @@ public final class ConfigNode {
 
     /** 同 {@link #mappingError(String)}，并附带底层原因。 */
     public ConfigMappingException mappingError(String detail, Throwable cause) {
-        org.yaml.snakeyaml.error.Mark mark = ConfigLocations.startMark(node);
+        Mark mark = ConfigLocations.startMark(node);
         return new ConfigMappingException(
                 sourceName(),
                 path,
@@ -336,7 +339,7 @@ public final class ConfigNode {
     }
 
     private static Double parseFloat(String value) {
-        String normalized = value.replace("_", "").toLowerCase(java.util.Locale.ROOT);
+        String normalized = value.replace("_", "").toLowerCase(Locale.ROOT);
         if (".inf".equals(normalized) || "+.inf".equals(normalized)) {
             return Double.valueOf(Double.POSITIVE_INFINITY);
         }

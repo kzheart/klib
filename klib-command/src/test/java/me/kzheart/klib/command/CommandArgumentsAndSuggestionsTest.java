@@ -1,13 +1,14 @@
 package me.kzheart.klib.command;
 
-import org.bukkit.entity.Player;
-import org.junit.jupiter.api.Test;
-
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.bukkit.entity.Player;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +29,7 @@ class CommandArgumentsAndSuggestionsTest {
         CommandDispatcher dispatcher = new CommandDispatcher(spec);
 
         dispatcher.execute(TestSenders.console().sender(), new String[0]);
-        java.util.Map<String, ?> snapshot = dispatcher.diagnosticSnapshot();
+        Map<String, ?> snapshot = dispatcher.diagnosticSnapshot();
 
         assertEquals("diagnostic", snapshot.get("name"));
         assertEquals(1L, snapshot.get("invocations"));

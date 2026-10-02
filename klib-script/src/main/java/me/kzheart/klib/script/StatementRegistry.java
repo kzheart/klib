@@ -2,14 +2,19 @@ package me.kzheart.klib.script;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
+import me.kzheart.klib.script.kether.core.QuestActionParser;
 
 /** 注册项由作用域持有的线程安全命名空间注册表。 */
 public final class StatementRegistry {
@@ -38,7 +43,7 @@ public final class StatementRegistry {
     public StatementRegistration register(
             Scope scope,
             String name,
-            QuestActionParser parser
+            me.kzheart.klib.script.QuestActionParser parser
     ) {
         return register(scope, DEFAULT_NAMESPACE, name, parser);
     }
@@ -47,7 +52,7 @@ public final class StatementRegistry {
             Scope scope,
             String namespace,
             String name,
-            QuestActionParser parser
+            me.kzheart.klib.script.QuestActionParser parser
     ) {
         Objects.requireNonNull(scope, "scope");
         final String normalizedNamespace = normalize(namespace, "namespace");
@@ -67,7 +72,7 @@ public final class StatementRegistry {
             Scope scope,
             String namespace,
             String name,
-            me.kzheart.klib.script.kether.core.QuestActionParser parser
+            QuestActionParser parser
     ) {
         return registerKether(scope, namespace, name, parser, false);
     }
@@ -77,7 +82,7 @@ public final class StatementRegistry {
             Scope scope,
             String namespace,
             String name,
-            me.kzheart.klib.script.kether.core.QuestActionParser parser
+            QuestActionParser parser
     ) {
         return registerKether(scope, namespace, name, parser, true);
     }
@@ -86,7 +91,7 @@ public final class StatementRegistry {
             Scope scope,
             String namespace,
             String name,
-            me.kzheart.klib.script.kether.core.QuestActionParser parser,
+            QuestActionParser parser,
             boolean shared
     ) {
         Objects.requireNonNull(scope, "scope");
@@ -109,7 +114,7 @@ public final class StatementRegistry {
     StatementRegistration registerImportedKether(
             String namespace,
             String name,
-            me.kzheart.klib.script.kether.core.QuestActionParser parser
+            QuestActionParser parser
     ) {
         Entry entry = add(
                 normalize(namespace, "namespace"),
@@ -124,7 +129,7 @@ public final class StatementRegistry {
     StatementRegistration registerBuiltin(
             String namespace,
             String name,
-            QuestActionParser parser
+            me.kzheart.klib.script.QuestActionParser parser
     ) {
         Entry entry = add(normalize(namespace, "namespace"), normalize(name, "name"), parser, null, true, false);
         return new Registration(entry);
@@ -132,14 +137,14 @@ public final class StatementRegistry {
 
     StatementRegistration registerBuiltinKether(
             String name,
-            me.kzheart.klib.script.kether.core.QuestActionParser parser
+            QuestActionParser parser
     ) {
         Entry entry = add("klib", normalize(name, "name"), null,
                 Objects.requireNonNull(parser, "parser"), true, false);
         return new Registration(entry);
     }
 
-    public Optional<QuestActionParser> resolve(String name, List<String> namespaces) {
+    public Optional<me.kzheart.klib.script.QuestActionParser> resolve(String name, List<String> namespaces) {
         Objects.requireNonNull(namespaces, "namespaces");
         String normalizedName = normalize(name, "name");
         int separator = namespaceSeparator(normalizedName);
@@ -149,7 +154,7 @@ public final class StatementRegistry {
                     normalizedName.substring(separator + 1));
         }
         for (String namespace : namespaces) {
-            Optional<QuestActionParser> parser = resolveExact(namespace, normalizedName);
+            Optional<me.kzheart.klib.script.QuestActionParser> parser = resolveExact(namespace, normalizedName);
             if (parser.isPresent()) {
                 return parser;
             }
@@ -190,8 +195,8 @@ public final class StatementRegistry {
     private Entry add(
             String namespace,
             String name,
-            QuestActionParser parser,
-            me.kzheart.klib.script.kether.core.QuestActionParser ketherParser,
+            me.kzheart.klib.script.QuestActionParser parser,
+            QuestActionParser ketherParser,
             boolean builtin,
             boolean shared
     ) {
@@ -230,13 +235,13 @@ public final class StatementRegistry {
         return entry;
     }
 
-    private Optional<QuestActionParser> resolveExact(String namespace, String name) {
+    private Optional<me.kzheart.klib.script.QuestActionParser> resolveExact(String namespace, String name) {
         String key = key(normalize(namespace, "namespace"), normalize(name, "name"));
         lock.readLock().lock();
         try {
             Deque<Entry> stack = entries.get(key);
             return stack == null || stack.isEmpty() || stack.peekLast().parser == null
-                    ? Optional.<QuestActionParser>empty()
+                    ? Optional.<me.kzheart.klib.script.QuestActionParser>empty()
                     : Optional.of(stack.peekLast().parser);
         } finally {
             lock.readLock().unlock();
@@ -291,7 +296,7 @@ public final class StatementRegistry {
         }
     }
 
-    Optional<me.kzheart.klib.script.kether.core.QuestActionParser> resolveSharedKether(
+    Optional<QuestActionParser> resolveSharedKether(
             String namespace,
             String name
     ) {
@@ -302,7 +307,7 @@ public final class StatementRegistry {
             Entry entry = stack == null ? null : stack.peekLast();
             return entry != null && entry.shared && entry.ketherParser != null
                     ? Optional.of(entry.ketherParser)
-                    : Optional.<me.kzheart.klib.script.kether.core.QuestActionParser>empty();
+                    : Optional.<QuestActionParser>empty();
         } finally {
             lock.readLock().unlock();
         }
@@ -333,7 +338,7 @@ public final class StatementRegistry {
 
     private static String normalize(String value, String label) {
         Objects.requireNonNull(value, label);
-        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
         if (normalized.isEmpty()) {
             throw new IllegalArgumentException(label + " must not be blank");
         }
@@ -343,16 +348,16 @@ public final class StatementRegistry {
     private static final class Entry {
         private final String namespace;
         private final String name;
-        private final QuestActionParser parser;
-        private final me.kzheart.klib.script.kether.core.QuestActionParser ketherParser;
+        private final me.kzheart.klib.script.QuestActionParser parser;
+        private final QuestActionParser ketherParser;
         private final boolean builtin;
         private final boolean shared;
 
         private Entry(
                 String namespace,
                 String name,
-                QuestActionParser parser,
-                me.kzheart.klib.script.kether.core.QuestActionParser ketherParser,
+                me.kzheart.klib.script.QuestActionParser parser,
+                QuestActionParser ketherParser,
                 boolean builtin,
                 boolean shared
         ) {
@@ -372,12 +377,12 @@ public final class StatementRegistry {
     static final class EntryView {
         final String namespace;
         final String name;
-        final QuestActionParser parser;
-        final me.kzheart.klib.script.kether.core.QuestActionParser ketherParser;
+        final me.kzheart.klib.script.QuestActionParser parser;
+        final QuestActionParser ketherParser;
         final boolean shared;
 
-        EntryView(String namespace, String name, QuestActionParser parser,
-                me.kzheart.klib.script.kether.core.QuestActionParser ketherParser,
+        EntryView(String namespace, String name, me.kzheart.klib.script.QuestActionParser parser,
+                QuestActionParser ketherParser,
                 boolean shared) {
             this.namespace = namespace;
             this.name = name;
@@ -391,7 +396,7 @@ public final class StatementRegistry {
         void changed(EntryView entry, boolean added);
     }
 
-    final class ListenerRegistration implements me.kzheart.klib.scope.Disposable {
+    final class ListenerRegistration implements Disposable {
         private final ChangeListener listener;
         private boolean active = true;
 
@@ -420,8 +425,8 @@ public final class StatementRegistry {
 
         private Snapshot(long version, List<String> registeredNames, List<EntryView> entries) {
             this.version = version;
-            this.registeredNames = java.util.Collections.unmodifiableList(registeredNames);
-            this.entries = java.util.Collections.unmodifiableList(entries);
+            this.registeredNames = Collections.unmodifiableList(registeredNames);
+            this.entries = Collections.unmodifiableList(entries);
         }
 
         long version() {

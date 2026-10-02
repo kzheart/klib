@@ -1,13 +1,22 @@
 package me.kzheart.klib.command;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import me.kzheart.klib.command.annotation.*;
 import me.kzheart.klib.command.api.*;
 import me.kzheart.klib.component.KContext;
+import me.kzheart.klib.scheduler.ExecutorScheduler;
+import me.kzheart.klib.scheduler.SchedulerFactory;
 import me.kzheart.klib.scope.*;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AnnotatedCommandsTest {
@@ -69,22 +78,22 @@ class AnnotatedCommandsTest {
     }
 
     @Test void callDeliversCompletedSuccessAndFailureOnBoundExecutorAndSuppressesAfterClose() {
-        java.util.concurrent.ScheduledExecutorService timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
-        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
         ScopeImpl scope = new ScopeImpl("call");
         Queue<Runnable> queued = new ArrayDeque<Runnable>();
         try {
-            scope.registerCapability(me.kzheart.klib.scheduler.SchedulerFactory.class,
-                    owner -> new me.kzheart.klib.scheduler.ExecutorScheduler(owner, timer, pool, queued::add));
+            scope.registerCapability(SchedulerFactory.class,
+                    owner -> new ExecutorScheduler(owner, timer, pool, queued::add));
             TestSenders.SenderFixture sender = TestSenders.console();
             CommandCall call = new CommandCall(new CommandContextImpl(sender.sender(), "test", Collections.emptyMap()), scope);
-            call.await(java.util.concurrent.CompletableFuture.completedFuture("ready"), call::reply, error -> fail(error));
+            call.await(CompletableFuture.completedFuture("ready"), call::reply, error -> fail(error));
             assertTrue(sender.messages().isEmpty()); queued.remove().run(); assertEquals(Collections.singletonList("ready"), sender.messages());
-            java.util.concurrent.CompletableFuture<String> failed = new java.util.concurrent.CompletableFuture<String>();
-            failed.completeExceptionally(new java.util.concurrent.CompletionException(new IllegalArgumentException("bad")));
+            CompletableFuture<String> failed = new CompletableFuture<String>();
+            failed.completeExceptionally(new CompletionException(new IllegalArgumentException("bad")));
             call.await(failed, value -> fail("must not succeed"), error -> call.reply(error.getMessage()));
             queued.remove().run(); assertEquals(Arrays.asList("ready", "bad"), sender.messages());
-            call.await(java.util.concurrent.CompletableFuture.completedFuture("late"), call::reply, error -> fail(error));
+            call.await(CompletableFuture.completedFuture("late"), call::reply, error -> fail(error));
             scope.close(); queued.remove().run(); assertEquals(Arrays.asList("ready", "bad"), sender.messages());
         } finally { scope.close(); timer.shutdownNow(); pool.shutdownNow(); }
     }

@@ -1,14 +1,15 @@
 package me.kzheart.klib.data.json;
 
-import me.kzheart.klib.data.StorageSession;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import me.kzheart.klib.data.StorageSession;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,7 +43,7 @@ class JsonStorageReadOnlyTest {
     void diagnosticSnapshotDoesNotReadDatabaseOrExposeAbsolutePath() {
         JsonStorageProvider provider = new JsonStorageProvider(directory.resolve("state.json"));
 
-        java.util.Map<String, ?> snapshot = provider.diagnosticSnapshot();
+        Map<String, ?> snapshot = provider.diagnosticSnapshot();
 
         assertEquals("json", snapshot.get("backend"));
         assertEquals("state.json", snapshot.get("file"));

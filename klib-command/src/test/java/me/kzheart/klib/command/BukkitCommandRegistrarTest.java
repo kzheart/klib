@@ -1,27 +1,29 @@
 package me.kzheart.klib.command;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import me.kzheart.klib.scope.Disposable;
 import org.bukkit.Location;
+import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandException;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
-import org.bukkit.Server;
 import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.AbstractMap;
-import java.util.Collections;
-import java.util.Set;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -209,8 +211,8 @@ class BukkitCommandRegistrarTest {
         BukkitScheduler scheduler = proxy(BukkitScheduler.class, (instance, method, arguments) -> {
             if ("callSyncMethod".equals(method.getName())) {
                 @SuppressWarnings("unchecked")
-                java.util.concurrent.Callable<Object> action =
-                        (java.util.concurrent.Callable<Object>) arguments[1];
+                Callable<Object> action =
+                        (Callable<Object>) arguments[1];
                 FutureTask<Object> task = new FutureTask<Object>(() -> {
                     Thread.sleep(50L);
                     return action.call();
@@ -242,7 +244,7 @@ class BukkitCommandRegistrarTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, java.lang.reflect.InvocationHandler handler) {
+    private static <T> T proxy(Class<T> type, InvocationHandler handler) {
         return (T) Proxy.newProxyInstance(
                 type.getClassLoader(), new Class<?>[]{type}, handler);
     }

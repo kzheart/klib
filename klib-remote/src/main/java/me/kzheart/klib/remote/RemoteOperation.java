@@ -1,9 +1,10 @@
 package me.kzheart.klib.remote;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -157,7 +158,7 @@ public final class RemoteOperation implements AutoCloseable {
             this.phase = phase;
             this.outcome = outcome;
             this.startedAt = startedAt;
-            this.attributes = java.util.Collections.unmodifiableMap(
+            this.attributes = Collections.unmodifiableMap(
                     new LinkedHashMap<String, String>(attributes));
             this.ancestry = Collections.unmodifiableList(
                     new ArrayList<Context>(ancestry));
@@ -225,7 +226,7 @@ public final class RemoteOperation implements AutoCloseable {
         }
 
         private static int utf8(String value) {
-            return value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            return value.getBytes(StandardCharsets.UTF_8).length;
         }
     }
 

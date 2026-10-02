@@ -1,6 +1,7 @@
 package me.kzheart.klib.remote;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,7 +15,7 @@ public final class Breadcrumb {
         result.put("category", Texts.requireText(category, "category"));
         result.put("message", Texts.requireText(message, "message"));
         result.put("context", RemoteEvent.immutableCopy(context));
-        values = java.util.Collections.unmodifiableMap(result);
+        values = Collections.unmodifiableMap(result);
     }
 
     public Map<String, Object> toMap() { return values; }

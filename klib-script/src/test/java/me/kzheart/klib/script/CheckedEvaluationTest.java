@@ -1,14 +1,19 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import me.kzheart.klib.scope.ScopeImpl;
 import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestActionParser;
 import me.kzheart.klib.script.kether.core.QuestContext;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CheckedEvaluationTest {
     @Test void compilationFailsSynchronouslyWithoutChangingEvalContract() {

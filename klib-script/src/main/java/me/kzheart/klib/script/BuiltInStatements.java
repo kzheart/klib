@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -162,7 +163,7 @@ final class BuiltInStatements {
 
     private static CompletionStage<Object> type(StatementCall call, ScriptContext context) {
         require(call, 2, context, "value");
-        String type = call.argument(0).toLowerCase(java.util.Locale.ROOT);
+        String type = call.argument(0).toLowerCase(Locale.ROOT);
         String value = InlineValues.text(call.argument(1), context);
         if ("boolean".equals(type) || "bool".equals(type)) {
             if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
@@ -392,7 +393,7 @@ final class BuiltInStatements {
 
     private static Duration parseDuration(String value, ScriptContext context) {
         try {
-            String normalized = value.toLowerCase(java.util.Locale.ROOT);
+            String normalized = value.toLowerCase(Locale.ROOT);
             if (normalized.endsWith("ms")) {
                 return Duration.ofMillis(Long.parseLong(normalized.substring(0, normalized.length() - 2)));
             }

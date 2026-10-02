@@ -1,23 +1,29 @@
 package me.kzheart.klib.script;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+
 import me.kzheart.klib.scheduler.SchedulerFactory;
 import me.kzheart.klib.scheduler.Ticks;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
 import me.kzheart.klib.script.kether.core.ExitStatus;
 import me.kzheart.klib.script.kether.core.ParsedAction;
+import me.kzheart.klib.script.kether.core.QuestAction;
 import me.kzheart.klib.script.kether.core.QuestActionParser;
+import me.kzheart.klib.script.kether.core.QuestReader;
 
 /**
  * 在 Klib 与同服 TabooLib OpenContainer 之间双向共享 Kether action。
@@ -44,7 +50,7 @@ public final class TabooLibKetherInterop
             new LinkedHashMap<String, OpenContainer>();
     private final Map<String, ImportedRegistration> imports =
             new LinkedHashMap<String, ImportedRegistration>();
-    private final Set<String> exportKeys = new java.util.LinkedHashSet<String>();
+    private final Set<String> exportKeys = new LinkedHashSet<String>();
     private boolean closed;
 
     private TabooLibKetherInterop(
@@ -147,8 +153,8 @@ public final class TabooLibKetherInterop
         return new QuestActionParser() {
             @Override
             @SuppressWarnings("unchecked")
-            public <T> me.kzheart.klib.script.kether.core.QuestAction<T> resolve(
-                    me.kzheart.klib.script.kether.core.QuestReader reader
+            public <T> QuestAction<T> resolve(
+                    QuestReader reader
             ) {
                 refresh();
                 RuntimeException last = null;
@@ -162,7 +168,7 @@ public final class TabooLibKetherInterop
                                     normalized,
                                     namespace);
                             if (result.isSuccessful() && result.getValue() != null) {
-                                return (me.kzheart.klib.script.kether.core.QuestAction<T>)
+                                return (QuestAction<T>)
                                         new TabooLibKetherProtocol.RemoteQuestAction<Object>(
                                                 container, providerName, result.getValue());
                             }
@@ -386,8 +392,8 @@ public final class TabooLibKetherInterop
     }
 
     private static String key(String namespace, String name) {
-        return namespace.toLowerCase(java.util.Locale.ROOT) + ':'
-                + name.toLowerCase(java.util.Locale.ROOT);
+        return namespace.toLowerCase(Locale.ROOT) + ':'
+                + name.toLowerCase(Locale.ROOT);
     }
 
     private static List<String> strings(Object value) {
@@ -403,9 +409,9 @@ public final class TabooLibKetherInterop
         }
         if (value != null && value.getClass().isArray()) {
             List<String> result = new ArrayList<String>();
-            int length = java.lang.reflect.Array.getLength(value);
+            int length = Array.getLength(value);
             for (int index = 0; index < length; index++) {
-                result.add(String.valueOf(java.lang.reflect.Array.get(value, index)));
+                result.add(String.valueOf(Array.get(value, index)));
             }
             return result;
         }

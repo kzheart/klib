@@ -1,13 +1,15 @@
 package me.kzheart.klib.script;
 
+import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import me.kzheart.klib.scope.ScopeImpl;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-import me.kzheart.klib.scope.ScopeImpl;
-import org.junit.jupiter.api.Test;
 
 class StatementUnregisterOnRebuildTest {
     @Test
@@ -16,7 +18,7 @@ class StatementUnregisterOnRebuildTest {
         new KetherScriptEngine(registry);
         ScopeImpl scope = new ScopeImpl("override");
         registry.register(scope, "klib", "literal", (call, context) ->
-                java.util.concurrent.CompletableFuture.<Object>completedFuture("custom"));
+                CompletableFuture.<Object>completedFuture("custom"));
 
         KetherScriptEngine second = new KetherScriptEngine(registry);
 
@@ -50,11 +52,11 @@ class StatementUnregisterOnRebuildTest {
         assertEquals(1L, registry.registeredNames().stream()
                 .filter("demo:probe"::equals)
                 .count());
-        assertTrue(registry.resolve("probe", java.util.Collections.singletonList("demo")).isPresent());
+        assertTrue(registry.resolve("probe", Collections.singletonList("demo")).isPresent());
 
         scope.close();
 
-        assertFalse(registry.resolve("probe", java.util.Collections.singletonList("demo")).isPresent());
+        assertFalse(registry.resolve("probe", Collections.singletonList("demo")).isPresent());
     }
 
     private static Object eval(KetherScriptEngine engine, String source) {

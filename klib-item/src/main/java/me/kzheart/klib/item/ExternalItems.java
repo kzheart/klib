@@ -1,20 +1,21 @@
 package me.kzheart.klib.item;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.PluginManager;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginManager;
 
 /**
  * 用统一的 {@code prefix:id} 引用生成和识别外部物品。
@@ -122,7 +123,7 @@ public final class ExternalItems implements ExternalItemProvider {
         String text = reference.trim();
         int separator = text.indexOf(':');
         if (separator > 0) {
-            String prefix = text.substring(0, separator).toLowerCase(java.util.Locale.ROOT);
+            String prefix = text.substring(0, separator).toLowerCase(Locale.ROOT);
             if (sources.containsKey(prefix) || states.containsKey(prefix) || BUILTIN_PLUGINS.containsKey(prefix)) {
                 return ItemRef.of(prefix, text.substring(separator + 1));
             }

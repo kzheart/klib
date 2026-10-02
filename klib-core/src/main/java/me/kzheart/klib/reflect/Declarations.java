@@ -1,5 +1,6 @@
 package me.kzheart.klib.reflect;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -13,7 +14,7 @@ public final class Declarations {
         // Reject annotated non-public methods instead of silently ignoring them.
         for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) {
-                for (java.lang.annotation.Annotation a : m.getAnnotations()) {
+                for (Annotation a : m.getAnnotations()) {
                     String name = a.annotationType().getName();
                     if ((name.startsWith(libraryPrefix) || name.equals("org.bukkit.event.EventHandler"))
                             && (!Modifier.isPublic(m.getModifiers()) || Modifier.isStatic(m.getModifiers()))) {

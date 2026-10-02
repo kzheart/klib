@@ -1,18 +1,15 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.logging.Logger;
+
 import me.kzheart.klib.guard.PluginHost;
 import me.kzheart.klib.guard.kether.KetherInteropBroker;
 import me.kzheart.klib.guard.kether.KetherInteropEndpoint;
@@ -29,6 +26,11 @@ import me.kzheart.klib.script.kether.core.QuestReader;
 import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GuardKetherInteropTest {
 
@@ -236,7 +238,7 @@ class GuardKetherInteropTest {
 
         public CompletableFuture<Object> process(Object frame) {
             return CompletableFuture.<Object>completedFuture(
-                    value.toUpperCase(java.util.Locale.ROOT));
+                    value.toUpperCase(Locale.ROOT));
         }
     }
 

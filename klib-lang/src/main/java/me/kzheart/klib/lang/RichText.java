@@ -3,6 +3,7 @@ package me.kzheart.klib.lang;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /** 管线生成、不依赖 Adventure 的富消息。 */
 public final class RichText {
@@ -66,7 +67,7 @@ public final class RichText {
     }
 
     private static boolean sameStyle(RichTextSegment left, RichTextSegment right) {
-        return java.util.Objects.equals(left.color(), right.color())
+        return Objects.equals(left.color(), right.color())
                 && left.bold() == right.bold()
                 && left.italic() == right.italic()
                 && left.underlined() == right.underlined()

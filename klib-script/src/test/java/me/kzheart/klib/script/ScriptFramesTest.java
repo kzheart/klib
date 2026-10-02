@@ -1,7 +1,5 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -11,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+
 import me.kzheart.klib.scope.ScopeImpl;
 import me.kzheart.klib.script.kether.core.ParsedAction;
 import me.kzheart.klib.script.kether.core.QuestAction;
@@ -18,6 +17,16 @@ import me.kzheart.klib.script.kether.core.QuestActionParser;
 import me.kzheart.klib.script.kether.core.QuestContext;
 import me.kzheart.klib.script.kether.core.QuestFuture;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class ScriptFramesTest {
     private final StatementRegistry registry = new StatementRegistry();

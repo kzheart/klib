@@ -1,5 +1,25 @@
 package me.kzheart.klib.remote;
 
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import me.kzheart.klib.diagnostic.DiagnosticSource;
+import me.kzheart.klib.scope.Disposable;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -7,29 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.LinkedHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.Executor;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import me.kzheart.klib.diagnostic.DiagnosticSource;
-import me.kzheart.klib.scope.Disposable;
-import org.junit.jupiter.api.Test;
-
 class RemoteIncidentFrameworkTest {
     @Test
     void throwableSnapshotKeepsCauseSuppressedAndFrames() {
         IllegalArgumentException cause = new IllegalArgumentException("bad config");
         IllegalStateException failure = new IllegalStateException("failed", cause);
-        failure.addSuppressed(new java.io.IOException("flush interrupted"));
+        failure.addSuppressed(new IOException("flush interrupted"));
 
         Map<String, Object> snapshot = ThrowableSnapshot.capture(
                 failure, IncidentBudget.defaults()).toMap();
@@ -381,8 +384,8 @@ class RemoteIncidentFrameworkTest {
         fields.put("strings", new String[] {"a", "b"});
         RemoteEvent event = RemoteEvent.of("log", fields);
 
-        assertEquals(java.util.Arrays.asList(1, 2), event.toMap().get("numbers"));
-        assertEquals(java.util.Arrays.asList("a", "b"), event.toMap().get("strings"));
+        assertEquals(Arrays.asList(1, 2), event.toMap().get("numbers"));
+        assertEquals(Arrays.asList("a", "b"), event.toMap().get("strings"));
         assertThrows(IllegalArgumentException.class, () -> RemoteEvent.of("log",
                 Collections.<String, Object>singletonMap("number", Double.NaN)));
         assertThrows(IllegalArgumentException.class, () -> RemoteEvent.of("log",

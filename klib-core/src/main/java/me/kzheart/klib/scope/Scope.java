@@ -1,9 +1,11 @@
 package me.kzheart.klib.scope;
 
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+
 import me.kzheart.klib.command.api.CommandCapability;
 import me.kzheart.klib.command.api.CommandRegistration;
 import me.kzheart.klib.command.api.CommandSpec;
@@ -89,14 +91,14 @@ public interface Scope extends Disposable {
 
     /**
      * 把任务投递到服务器主线程执行，可从任意线程调用。
-     * 用于在异步回调（包括 JDK {@link java.util.concurrent.CompletionStage} 的回调）中安全访问 Bukkit API。
+     * 用于在异步回调（包括 JDK {@link CompletionStage} 的回调）中安全访问 Bukkit API。
      */
     default TaskHandle sync(Runnable task) {
         return requireCapability(SchedulerFactory.class).forScope(this).sync(task);
     }
 
     /**
-     * 返回投递到主线程的 {@link Executor}，用于与 JDK {@link java.util.concurrent.CompletionStage}
+     * 返回投递到主线程的 {@link Executor}，用于与 JDK {@link CompletionStage}
      * 组合，例如 {@code stage.thenAcceptAsync(action, scope.syncExecutor())}。
      * 作用域关闭后提交的命令不再执行。
      */

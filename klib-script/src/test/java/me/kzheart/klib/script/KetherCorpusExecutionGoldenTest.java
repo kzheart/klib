@@ -1,17 +1,20 @@
 package me.kzheart.klib.script;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KetherCorpusExecutionGoldenTest {
 
@@ -34,7 +37,7 @@ class KetherCorpusExecutionGoldenTest {
         ScriptContext context = base().service(MessageSink.class, (sender, text) -> messages.add(text)).build();
 
         assertEquals("这里是多行 Kether 示例", execute("high-frequency/02-fishx-reward.kether", context));
-        assertEquals(java.util.Arrays.asList("你触发了普通钓鱼奖励", "这里是多行 Kether 示例"), messages);
+        assertEquals(Arrays.asList("你触发了普通钓鱼奖励", "这里是多行 Kether 示例"), messages);
     }
 
     @Test
@@ -83,7 +86,7 @@ class KetherCorpusExecutionGoldenTest {
         ScriptContext context = base().service(MessageSink.class, (sender, text) -> messages.add(text)).build();
 
         assertEquals("日常奖励", execute("high-frequency/06-player-reset-reward.kether", context));
-        assertEquals(java.util.Collections.singletonList("日常奖励"), messages);
+        assertEquals(Collections.singletonList("日常奖励"), messages);
     }
 
     @Test
@@ -96,7 +99,7 @@ class KetherCorpusExecutionGoldenTest {
 
         assertEquals("selected", execute("long-tail/01-reference-and-literal.kether", context));
         assertEquals("resolved-target", context.variableOrNull("selected"));
-        assertEquals(java.util.Collections.singletonList("selected"), messages);
+        assertEquals(Collections.singletonList("selected"), messages);
     }
 
     @Test
@@ -105,7 +108,7 @@ class KetherCorpusExecutionGoldenTest {
         ScriptContext context = base().service(MessageSink.class, (sender, text) -> messages.add(text)).build();
 
         assertEquals("包含 空格 的单引号文本", execute("long-tail/02-single-quoted.kether", context));
-        assertEquals(java.util.Collections.singletonList("包含 空格 的单引号文本"), messages);
+        assertEquals(Collections.singletonList("包含 空格 的单引号文本"), messages);
     }
 
     @Test
@@ -114,7 +117,7 @@ class KetherCorpusExecutionGoldenTest {
         ScriptContext context = base().service(MessageSink.class, (sender, text) -> messages.add(text)).build();
 
         assertEquals("第一行\n第二行", execute("long-tail/03-triple-quoted.kether", context));
-        assertEquals(java.util.Collections.singletonList("第一行\n第二行"), messages);
+        assertEquals(Collections.singletonList("第一行\n第二行"), messages);
     }
 
     @Test
@@ -133,7 +136,7 @@ class KetherCorpusExecutionGoldenTest {
                 .build();
 
         assertEquals(Boolean.TRUE, execute("long-tail/04-named-block.kether", context));
-        assertEquals(java.util.Collections.singletonList("开始"), messages);
+        assertEquals(Collections.singletonList("开始"), messages);
         assertNull(senderSeen.get());
         assertEquals("say 完成", commandSeen.get());
     }

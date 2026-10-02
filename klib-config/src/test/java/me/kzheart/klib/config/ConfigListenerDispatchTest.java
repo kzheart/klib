@@ -1,5 +1,10 @@
 package me.kzheart.klib.config;
 
+import java.util.Collections;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+
 import me.kzheart.klib.config.api.ConfigDocument;
 import me.kzheart.klib.scheduler.AsyncTask;
 import me.kzheart.klib.scheduler.KScheduler;
@@ -7,16 +12,12 @@ import me.kzheart.klib.scheduler.SchedulerFactory;
 import me.kzheart.klib.scheduler.TaskHandle;
 import me.kzheart.klib.scheduler.Ticks;
 import me.kzheart.klib.scope.ScopeImpl;
+import me.kzheart.klib.scope.capability.ConfigCapability;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.CompletionStage;
-import java.util.function.Supplier;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigListenerDispatchTest {
@@ -27,7 +28,7 @@ class ConfigListenerDispatchTest {
         scope.registerCapability(SchedulerFactory.class, ignored -> scheduler);
         YamlConfigCapability capability = YamlConfigCapability.inMemory(
                 Collections.singletonMap("settings.yml", "name: klib\n"));
-        scope.registerCapability(me.kzheart.klib.scope.capability.ConfigCapability.class, capability);
+        scope.registerCapability(ConfigCapability.class, capability);
         ConfigDocument<Settings> document = scope.config(Settings.class, "settings.yml");
         AtomicInteger calls = new AtomicInteger();
         document.onChange(calls::incrementAndGet);
@@ -48,7 +49,7 @@ class ConfigListenerDispatchTest {
         scope.registerCapability(SchedulerFactory.class, ignored -> scheduler);
         YamlConfigCapability capability = YamlConfigCapability.inMemory(
                 Collections.singletonMap("settings.yml", "name: klib\n"));
-        scope.registerCapability(me.kzheart.klib.scope.capability.ConfigCapability.class, capability);
+        scope.registerCapability(ConfigCapability.class, capability);
 
         ConfigDocument<Settings> document = scope.config(Settings.class, "settings.yml");
         AtomicInteger calls = new AtomicInteger();
@@ -66,7 +67,7 @@ class ConfigListenerDispatchTest {
         scope.registerCapability(SchedulerFactory.class, ignored -> scheduler);
         YamlConfigCapability capability = YamlConfigCapability.inMemory(
                 Collections.singletonMap("settings.yml", "name: klib\n"));
-        scope.registerCapability(me.kzheart.klib.scope.capability.ConfigCapability.class, capability);
+        scope.registerCapability(ConfigCapability.class, capability);
         ConfigDocument<Settings> document = scope.config(Settings.class, "settings.yml");
         AtomicInteger calls = new AtomicInteger();
         document.onChange(calls::incrementAndGet);

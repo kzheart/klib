@@ -1,5 +1,9 @@
 # 更新日志
 
+## 未发布
+
+- 修复 Bukkit Kether 容器发现扫描无关插件公开方法、因其可选依赖（如 WorldGuard）未安装而触发 `NoClassDefFoundError`；现在先按插件入口类名筛选 TabooLib 容器。
+
 ## 0.9.1 - 2026-10-03
 
 - 修复安装 `TabooLibKetherInterop` 时，引号中的空白文本（如 `" "`）被交给远端解析而报 `action must not be blank`。

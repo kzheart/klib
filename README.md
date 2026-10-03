@@ -82,7 +82,7 @@ dependencies {
 | `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL 存储、pgJDBC 与事务迁移 |
 | `klib-ui` | 菜单、分页、投放区与聊天输入 |
-| `klib-script` | Kether 嵌套动作、同步编译检查、动态执行者、原生帧宿主接口、数值与比较动作、玩家/PAPI 查询、即时模板、异步组合与 Guard 商品互操作适配 |
+| `klib-script` | Kether 嵌套动作、同步编译检查、动态执行者、原生帧宿主接口、数值与比较动作、玩家/PAPI 查询、即时模板、异步组合与 TabooLib/Guard 商品互操作适配；容器发现先筛选插件入口 |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |
 | `klib-compat*` | Minecraft 版本能力、实现选择与按玩家发送的数据包侧边栏 |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 |

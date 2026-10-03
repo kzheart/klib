@@ -42,10 +42,14 @@ final class ReflectiveTabooLibContainers {
                     new ArrayList<TabooLibKetherInterop.OpenContainer>();
             for (int index = 0; index < length; index++) {
                 Object plugin = Array.get(plugins, index);
+                // 非容器插件可能在公开方法签名中引用未安装的可选依赖。
+                // getMethods() 会解析这些类型，必须先用类名排除无关插件。
+                if (!plugin.getClass().getName().endsWith(MAIN_SUFFIX)) {
+                    continue;
+                }
                 String name = String.valueOf(invoke(plugin, "getName"));
                 if (!providerName.equals(name)
-                        && Boolean.TRUE.equals(invoke(plugin, "isEnabled"))
-                        && plugin.getClass().getName().endsWith(MAIN_SUFFIX)) {
+                        && Boolean.TRUE.equals(invoke(plugin, "isEnabled"))) {
                     TabooLibKetherInterop.OpenContainer container = cache.get(plugin);
                     if (container == null) {
                         container = new ReflectionContainer(plugin, name);

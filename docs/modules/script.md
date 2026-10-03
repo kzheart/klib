@@ -323,6 +323,8 @@ KetherScriptEngine engine = new KetherScriptEngine(
 
 ## 与 TabooLib 共享语句互操作
 
+Bukkit 容器发现先按插件入口类名筛选 TabooLib 插件，再读取容器信息，避免解析无关插件公开方法中未安装的可选依赖类型。
+
 旧的 `OpenContainerBridge` 只能作为执行级 `UnknownStatementResolver`，适合由适配器自行处理的简单、
 扁平语句：
 

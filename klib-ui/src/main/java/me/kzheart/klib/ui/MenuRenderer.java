@@ -44,6 +44,7 @@ public final class MenuRenderer implements Listener, Disposable {
     private final Plugin plugin;
     private final KLogger logger;
     private final MenuErrorHandler errorHandler;
+    private final MenuInventoryFactory inventoryFactory;
     private final Set<MenuHolder> open = Collections.newSetFromMap(
             new IdentityHashMap<MenuHolder, Boolean>());
     // 未知音效名只警告一次，避免每次点击刷日志。
@@ -54,12 +55,14 @@ public final class MenuRenderer implements Listener, Disposable {
             Scope owner,
             Plugin plugin,
             KLogger logger,
-            MenuErrorHandler errorHandler
+            MenuErrorHandler errorHandler,
+            MenuInventoryFactory inventoryFactory
     ) {
         this.owner = owner;
         this.plugin = plugin;
         this.logger = logger;
         this.errorHandler = errorHandler;
+        this.inventoryFactory = inventoryFactory;
     }
 
     /** 注册一个生命周期归属给定作用域的统一监听器。 */
@@ -74,6 +77,15 @@ public final class MenuRenderer implements Listener, Disposable {
             Plugin plugin,
             MenuErrorHandler errorHandler
     ) {
+        return install(owner, plugin, MenuInventoryFactory.bukkit(), errorHandler);
+    }
+
+    /** Select a host title/inventory implementation without replacing Klib's event safeguards. */
+    public static MenuRenderer install(
+            Scope owner, Plugin plugin, MenuInventoryFactory inventoryFactory,
+            MenuErrorHandler errorHandler
+    ) {
+        Objects.requireNonNull(inventoryFactory, "inventoryFactory");
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(errorHandler, "errorHandler");
@@ -82,7 +94,7 @@ public final class MenuRenderer implements Listener, Disposable {
         }
         KLogger logger = owner.findCapability(KLogger.class)
                 .orElseGet(() -> new KLogger(plugin.getLogger()));
-        MenuRenderer renderer = new MenuRenderer(owner, plugin, logger, errorHandler);
+        MenuRenderer renderer = new MenuRenderer(owner, plugin, logger, errorHandler, inventoryFactory);
         plugin.getServer().getPluginManager().registerEvents(renderer, plugin);
         try {
             return owner.install(renderer);
@@ -90,6 +102,14 @@ public final class MenuRenderer implements Listener, Disposable {
             HandlerList.unregisterAll(renderer);
             throw failure;
         }
+    }
+
+    static Inventory createInventory(MenuInventoryFactory factory, InventoryHolder holder, MenuModel model) {
+        Inventory inventory = Objects.requireNonNull(factory.create(holder, model.size(), model.title()), "inventoryFactory returned null");
+        if (inventory.getSize() != model.size() || inventory.getHolder() != holder) {
+            throw new IllegalArgumentException("inventoryFactory must preserve the requested holder and size");
+        }
+        return inventory;
     }
 
     public MenuHolder open(Player player, String name, MenuModel model) {
@@ -124,7 +144,7 @@ public final class MenuRenderer implements Listener, Disposable {
         MenuHolder menuHolder = new MenuHolder(player.getUniqueId(), session, this);
         try {
             configure.accept(session);
-            Inventory inventory = Bukkit.createInventory(menuHolder, model.size(), model.title());
+            Inventory inventory = createInventory(inventoryFactory, menuHolder, model);
             menuHolder.attach(inventory);
             synchronized (this) {
                 ensureOpen();

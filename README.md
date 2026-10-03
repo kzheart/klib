@@ -72,8 +72,8 @@ dependencies {
 | --- | --- |
 | `klib-core` | `KPlugin`、`Scope`、调度、事件、资源释放、冷却与加权随机 |
 | `klib-config` | YAML 配置映射、第三方格式原值树、子节文本与创建、迁移及原子重载 |
-| `klib-lang` | 多语言消息、占位符和富文本 |
-| `klib-command` | 类型化命令树、权限、建议与内置管理命令 |
+| `klib-lang` | 多语言消息、占位符、富文本与 Paper 宿主 Adventure 适配 |
+| `klib-command` | 类型化命令树、Unicode 别名、权限、建议与内置管理命令 |
 | `klib-item` | 物品构建、标签、跨版本编解码与 MMOItems/NeigeItems/ItemsAdder/MythicMobs 物品适配 |
 | `klib-data` | 存储契约、迁移与玩家数据缓存，不包含存储实现或第三方运行时 |
 | `klib-data-json` | JSON 文件存储；使用宿主提供的 Gson |
@@ -81,7 +81,7 @@ dependencies {
 | `klib-data-sqlite` | SQLite 存储；使用宿主提供的 SQLite JDBC |
 | `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL 存储、pgJDBC 与事务迁移 |
-| `klib-ui` | 菜单、分页、投放区与聊天输入 |
+| `klib-ui` | 菜单、宿主物品栏工厂、分页、投放区与聊天输入 |
 | `klib-script` | Kether 嵌套动作、同步编译检查、动态执行者、原生帧宿主接口、数值与比较动作、玩家/PAPI 查询、即时模板、异步组合与 TabooLib/Guard 商品互操作适配；容器发现先筛选插件入口 |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |
 | `klib-compat*` | Minecraft 版本能力、实现选择与按玩家发送的数据包侧边栏 |

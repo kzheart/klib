@@ -20,6 +20,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AnnotatedCommandsTest {
+    @Command(value="demo",aliases={"邮箱"})
+    public static class UnicodeRoutes {
+        String value;
+        @Route("领取") @Permission("mail.claim") public void claim(CommandSender sender){value="claimed";}
+    }
+    @Test void unicodeAliasesSharePermissionsAndSuggestions(){
+        try(Fixture fixture=new Fixture()){
+            UnicodeRoutes routes=new UnicodeRoutes();fixture.register(routes);
+            CommandSender allowed=TestSenders.console("mail.claim").sender();
+            CommandSender denied=TestSenders.console().sender();
+            assertEquals(Collections.singletonList("领取"),fixture.registered.get("邮箱").complete(allowed,new String[]{""}));
+            assertTrue(fixture.registered.get("邮箱").complete(denied,new String[]{""}).isEmpty());
+            fixture.registered.get("邮箱").execute(allowed,new String[]{"领取"});assertEquals("claimed",routes.value);
+        }
+    }
     static class Fixture implements AutoCloseable {
         final ScopeImpl scope = new ScopeImpl("commands");
         final Map<String, CommandDispatcher> registered = new LinkedHashMap<String, CommandDispatcher>();

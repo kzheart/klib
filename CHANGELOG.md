@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.10.0 - 2026-10-04
+
+- PostgreSQL 集成测试不再复用构建缓存，避免把未配置数据库时的跳过报告当作已连接数据库的验证结果。
+
+- Lang 新增 `BukkitAdventure`，显式连接 Paper 自带的 Adventure；内嵌重定位不再污染调用宿主 API 的参数类型，支持富文本、物品名/lore、书本与菜单标题。
+- UI 新增 `MenuInventoryFactory` 与 `MenuRenderer.install` 工厂重载，保留框架的点击保护、会话和资源回收；校验工厂返回的 holder 与尺寸。
+- 注解命令的根名、别名、字面量支持 Unicode 字母与数字，中文别名与原命令共享权限、补全和生命周期。
+
 ## 0.9.2 - 2026-10-03
 
 - 修复 Bukkit Kether 容器发现扫描无关插件公开方法、因其可选依赖（如 WorldGuard）未安装而触发 `NoClassDefFoundError`；现在先按插件入口类名筛选 TabooLib 容器。

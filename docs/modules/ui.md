@@ -145,3 +145,21 @@ prompt.completionSync().thenAccept(outcome -> {
 - 点击动作抛出普通异常时，渲染器会记录错误并调用 `MenuErrorHandler`。可以在安装时提供统一的玩家提示，但错误处理器本身也应保持轻量。
 - 玩家在提示完成前可能下线；回调必须再次检查 `isOnline()`，且不要长期保存 `Player` 之外的可变菜单状态。
 
+
+## Paper 富文本标题
+
+需要组件标题时，可为 `MenuRenderer` 提供 `MenuInventoryFactory`，不替换框架的点击保护和会话管理。
+`BukkitAdventure` 来自 Lang 模块，使用 Paper 自带的 Adventure 类加载器，避免把内嵌的组件类型传给 Paper。
+
+```java
+import me.kzheart.klib.lang.BukkitAdventure;
+import me.kzheart.klib.ui.MenuRenderer;
+
+MenuRenderer menus = MenuRenderer.install(
+        context().scope(), this, BukkitAdventure::inventory,
+        (player, model, click, failure) -> lang.send(player, "menu.failed"));
+```
+
+此时 YAML 的 `title` 可以包含 MiniMessage 字体、颜色等标签。资源包专属的偏移语法由应用先展开成字体标签。
+自定义工厂必须返回具有指定 holder 和尺寸的物品栏，返回 null、替换 holder 或尺寸不符都会失败并清理会话。
+已有安装重载继续使用 Bukkit 字符串标题；工厂在主线程调用。

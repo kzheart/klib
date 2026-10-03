@@ -265,3 +265,21 @@ CommandModule.install(
 - [Command](command.md)：复用语言管线显示错误与帮助。
 - [Hook](hook.md)：PlaceholderAPI 等可选插件集成。
 - 完整接线方式见本页“快速开始”。
+
+## Paper 宿主 Adventure
+
+`BukkitAdventure` 处理 Paper 原生组件与插件内嵌组件的类加载隔离。`parse` 返回宿主组件的 `Object`，
+`miniMessage`、`plain` 与 `legacy` 将内容转成文本；调用方不要把该对象强转成内嵌的 Adventure 类型。
+
+```java
+import me.kzheart.klib.lang.BukkitAdventure;
+
+String plain = BukkitAdventure.plain(BukkitAdventure.parse("<gold>欢迎</gold>"));
+BukkitAdventure.actionbar(player, "<green>完成</green>");
+BukkitAdventure.book(player, "说明", "服务器", pages);
+```
+
+`displayName`、`lore` 读取物品的原生组件；`inventory` 创建组件标题的物品栏，可作为 UI 的
+`MenuInventoryFactory`。这些游戏对象操作要求主线程，纯文本序列化不访问服务器可变状态。
+`available()` 只检查宿主是否提供 Adventure；具体能力仍取决于 Paper API。旧版 Bukkit 缺少宿主组件时
+会明确失败，不会尝试把重定位后的类型传给服务器。反射同时处理泛型擦除后的序列化方法。

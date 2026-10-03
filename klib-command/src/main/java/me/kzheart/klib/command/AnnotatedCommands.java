@@ -260,7 +260,7 @@ public final class AnnotatedCommands {
     }
     private static String word(String value) {
         String word = CommandSpecImpl.requireSingleWord(value, "route word");
-        if (!word.matches("[a-z0-9_.:-]+")) throw new IllegalArgumentException("Invalid route word " + value);
+        if (!word.matches("[\\p{L}\\p{N}_.:-]+")) throw new IllegalArgumentException("Invalid route word " + value);
         return word;
     }
     private static Class<?> boxed(Class<?> type) {

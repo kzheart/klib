@@ -357,6 +357,9 @@ project(":klib-lang") {
         testSpigot.isTransitive = false
         add("compileOnly", compileSpigot)
         add("testImplementation", testSpigot)
+        add("testImplementation", "net.kyori:adventure-text-serializer-legacy:4.17.0")
+        add("testImplementation", "net.kyori:adventure-text-serializer-plain:4.17.0")
+        add("testImplementation", "com.google.guava:guava:21.0")
     }
 }
 
@@ -475,6 +478,11 @@ project(":klib-data-postgresql") {
     dependencies {
         add("api", project(":klib-data-jdbc"))
         add("runtimeOnly", postgresqlDriver)
+    }
+    tasks.withType<Test>().configureEach {
+        // A fresh database must be exercised, not replaced by a cached skipped test report.
+        outputs.upToDateWhen { false }
+        outputs.cacheIf("PostgreSQL integration tests depend on a live database") { false }
     }
 }
 

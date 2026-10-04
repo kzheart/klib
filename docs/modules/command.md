@@ -1,6 +1,6 @@
 # Command 模块
 
-注解命令可通过 `@Command(value = "mail", help = true)` 自动安装 `help [page]`，按权限与玩家限制过滤，并使用 `@Description` 显示用途；别名共享帮助，已有显式 `help` 路由保留，根命令的 GUI 行为不变。
+注解命令通过 `@Command(value = "mail", help = true)` 安装自动分页帮助；主命令和 GUI 的入口声明见下文的“自动帮助与主命令入口”。
 
 状态：稳定公开模块
 模块名：`command`
@@ -66,15 +66,17 @@ protected void setup() {
 
 ```java
 import me.kzheart.klib.command.annotation.Command;
+import me.kzheart.klib.command.annotation.Description;
 import me.kzheart.klib.command.annotation.Param;
 import me.kzheart.klib.command.annotation.Permission;
 import me.kzheart.klib.command.annotation.Route;
 
-@Command("coins")
+@Command(value = "coins", help = true)
 @Permission("myplugin.coins")
 public final class CoinCommands {
     @Route("give <target> <amount>")
     @Permission("myplugin.coins.give")
+    @Description("向玩家发放金币")
     public void give(CommandSender sender,
             @Param("target") Player target,
             @Param("amount") int amount) {
@@ -246,6 +248,27 @@ command.literal("admin", admin -> admin
 如果一个无权限 literal 与同级参数可能匹配同一输入，无权限 literal 不会遮蔽该参数；模块会先尝试发送者有权访问的参数分支。
 
 不要只依赖客户端补全隐藏敏感命令。服务端执行路径始终会重新检查权限，但业务处理器内部涉及具体对象授权时仍需自行校验。
+
+## 自动帮助与主命令入口
+
+注解入口设置 `@Command(value = "mail", aliases = {"m"}, help = true)` 后，会根据已注册路由生成 `help [page]`。`help` 默认是 `false`；同根处理类合并完成后安装一次，别名共享帮助。`@Description` 显示路由用途，权限与 `Player` 发送者限制决定哪些业务命令可见。
+
+主命令默认显示帮助时，不声明 `@Route("")`；GUI 单独声明为 `@Route("open")`。已有的 `@Route({"", "open"})` 应移除空字符串，变为 `@Route("open")`。自动帮助会保留已有根处理器，以及显式声明的 `help` 子命令。完整注解示例见 [组件与注解](../annotations.md#自动帮助与主命令入口)。
+
+程序化入口也应把 GUI 放到独立子命令：
+
+```java
+commands().register("mail", root -> {
+    root.description("邮件命令").permission("myplugin.mail");
+    CommandBuiltins.create().install(root);
+    root.route("open")
+            .description("打开邮件界面")
+            .playerOnly()
+            .executes(context -> openMailbox((Player) context.sender()));
+});
+```
+
+此处根节点没有 `executes`：`/mail` 显示帮助第一页，`/mail help 1` 显式指定页码，`/mail open` 打开界面。若根节点或无参数可匹配的默认分支保留 GUI 处理器，裸主命令仍会执行该处理器。`CommandBuiltins.create().install(root)` 只安装帮助，不会附带配置重载或调试操作。
 
 ## 内置帮助、重载与调试命令
 

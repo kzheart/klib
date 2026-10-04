@@ -1,6 +1,6 @@
 # 组件与注解 API
 
-注解命令可通过 `@Command(value = "mail", help = true)` 自动安装 `help [page]`，按权限与玩家限制过滤，并使用 `@Description` 显示用途；别名共享帮助，已有显式 `help` 路由保留，根命令的 GUI 行为不变。
+注解命令通过 `@Command(value = "mail", help = true)` 安装自动分页帮助；主命令和 GUI 的入口声明见下文的“自动帮助与主命令入口”。
 
 
 ## 默认作用域
@@ -62,17 +62,20 @@ feature.close();
 注解包为 `me.kzheart.klib.command.annotation`。`@Command` 与 Bukkit 的 Command 同名，建议显式 import。
 
 ```java
-@Command(value = "dungeonbridge", aliases = {"dbe"})
+@Command(value = "dungeonbridge", aliases = {"dbe"}, help = true)
 @Permission("bamdungeon.use")
 @Check("ready")
 public final class DungeonCommands {
-    @Route({"", "ui"})
+    @Route({"open", "ui"})
+    @Description("打开副本菜单")
     public void ui(Player player) { /* 打开菜单 */ }
 
     @Route("search <query>")
+    @Description("查询副本")
     public void search(Player player, @Param("query") @Greedy String query) { }
 
     @Route("select <dungeon> <difficulty>")
+    @Description("选择副本和难度")
     public void select(Player player,
             @Param("dungeon") String dungeon,
             @Param("difficulty") @Suggest("difficulty") String difficulty) { }
@@ -103,6 +106,16 @@ public final class DungeonCommands {
 - 所有声明方法须 public、非 static。路由须返回 void；继承方法按正常 Java override 规则处理，不隐式继承父类方法注解。
 - `CommandRejectedException` 是可直接展示的业务拒绝；其他异常仍由命令错误边界记录并提示内部错误。
 - 权限用于服务端执行、帮助、Tab 补全和可用的 Brigadier 客户端树；补全不代替业务对象授权。
+
+### 自动帮助与主命令入口
+
+`@Command` 的 `help` 默认是 `false`。设置 `help = true` 后，Klib 在合并路由后安装 `help [page]`；同根命令任一处理类启用即可，别名共享合并后的帮助。帮助按发送者权限与玩家限制过滤，不执行业务 `@CheckHandler`。
+
+上面的声明没有空字符串根路由，因此 `/dungeonbridge` 和 `/dbe` 显示帮助第一页，`/dbe help 1` 显式指定第一页，`/dbe open` 或 `/dbe ui` 才打开菜单。`@Description` 提供每条命令的用途。
+
+如果原来使用 `@Route({"", "open"})` 打开 GUI，需要改成 `@Route("open")`，移除空字符串路由；启用自动帮助会保留已有根处理器，裸主命令仍会执行该处理器。已显式声明的 `@Route("help")` 也会保留，Klib 不覆盖它或另外生成分页入口。
+
+挂载处理器的 `@Command(help = true)` 不会替目标根安装帮助；应在目标根的处理类启用，或在程序化根声明中安装 `CommandBuiltins`。程序化写法见 [Command 模块](modules/command.md#自动帮助与主命令入口)。
 
 异步使用一个明确的注册调用同时设置成功和失败回调，避免链式设置期间已经完成的 Future 丢失失败处理器：
 
@@ -221,7 +234,7 @@ public final class DungeonMenu {
 
 ## 验证
 
-见 [自动化与真实 Minecraft 验证记录](validation/annotations-0.5.0.md)。
+注解路由注册、权限与别名、自动帮助、根处理器及自定义帮助的测试见 [AnnotatedCommandsTest.java](../klib-command/src/test/java/me/kzheart/klib/command/AnnotatedCommandsTest.java)。
 
 ## 范围
 

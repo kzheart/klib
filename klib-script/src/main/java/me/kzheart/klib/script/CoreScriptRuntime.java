@@ -51,6 +51,7 @@ final class CoreScriptRuntime {
     private final UnknownStatementResolver unknownResolver;
     private final Executor continuationExecutor;
     private final boolean toleranceParser;
+    private final ScopedScriptRuntime owner;
     private final Object cacheLock = new Object();
     private final LinkedHashMap<CacheKey, CacheEntry> compiledScripts =
             new LinkedHashMap<CacheKey, CacheEntry>(16, 0.75F, true);
@@ -62,12 +63,14 @@ final class CoreScriptRuntime {
             StatementRegistry registry,
             UnknownStatementResolver unknownResolver,
             Executor continuationExecutor,
-            boolean toleranceParser
+            boolean toleranceParser,
+            ScopedScriptRuntime owner
     ) {
         this.registry = registry;
         this.unknownResolver = unknownResolver;
         this.continuationExecutor = continuationExecutor;
         this.toleranceParser = toleranceParser;
+        this.owner = owner;
     }
 
     CompletionStage<Object> eval(String source, ScriptContext scriptContext) {
@@ -91,6 +94,14 @@ final class CoreScriptRuntime {
         return execute(quest, scriptContext, evaluationState);
     }
 
+    void validate(String source, ScriptContext scriptContext) {
+        try {
+            compiledQuest(source, scriptContext.namespaces());
+        } catch (StackOverflowError failure) {
+            throw compilationFailure("syntax nesting exhausted the parser stack", failure);
+        }
+    }
+
     CompletionStage<Object> evalChecked(String source, ScriptContext scriptContext) {
         final Quest quest;
         try {
@@ -106,8 +117,9 @@ final class CoreScriptRuntime {
     ) {
         final SimpleQuestService service = new SimpleQuestService(continuationExecutor);
         service.setPropertyAccessor(ScriptProperties::read);
+        SimpleQuestContext context = service.newContext(quest);
+        CompletableFuture<Object> result = new CompletableFuture<Object>();
         try {
-            SimpleQuestContext context = service.newContext(quest);
             Map<String, Object> variablesBefore = scriptContext.variables();
             Map<Object, Object> borrowedVariables = new IdentityHashMap<Object, Object>();
             for (Map.Entry<String, Object> variable : variablesBefore.entrySet()) {
@@ -117,7 +129,14 @@ final class CoreScriptRuntime {
             }
             context.rootFrame().variables().set(CONTEXT_VARIABLE, scriptContext);
             context.rootFrame().variables().set(EVALUATION_STATE_VARIABLE, evaluationState);
-            CompletableFuture<Object> result = new CompletableFuture<Object>();
+            result.whenComplete((value, failure) -> {
+                if (result.isCancelled()) context.terminate();
+            });
+            if (owner != null) {
+                CompletableFuture<Void> idle = context.retainDetachedActions();
+                idle.whenComplete((value, failure) -> service.close());
+                if (!owner.track(context, result, idle)) return result;
+            }
             context.runActions().whenComplete((value, failure) -> {
                 Throwable completionFailure = failure;
                 try {
@@ -134,24 +153,29 @@ final class CoreScriptRuntime {
                     if (failure != null) syncFailure.addSuppressed(failure);
                     completionFailure = syncFailure;
                 } finally {
-                    service.close();
+                    if (owner == null) service.close();
                 }
                 if (completionFailure == null) result.complete(value);
-                else result.completeExceptionally(completionFailure);
+                else if (!ScriptFutures.cancelIfNeeded(result, completionFailure)) {
+                    result.completeExceptionally(completionFailure);
+                }
+                if (owner != null && completionFailure != null) context.terminate();
             });
             return result;
         } catch (RuntimeException failure) {
+            result.completeExceptionally(failure);
+            context.terminate();
             service.close();
-            CompletableFuture<Object> failed = new CompletableFuture<Object>();
-            failed.completeExceptionally(failure);
-            return failed;
+            return result;
         } catch (StackOverflowError failure) {
-            service.close();
-            return failed(actionFailure(
+            result.completeExceptionally(actionFailure(
                     failure,
                     scriptContext,
                     new StatementCall("kether", Collections.<String>emptyList(), 1, 1,
                             evaluationState::evalNested)));
+            context.terminate();
+            service.close();
+            return result;
         }
     }
 
@@ -272,7 +296,7 @@ final class CoreScriptRuntime {
         SimpleQuestService compiler = new SimpleQuestService(toleranceParser);
         Quest compiled;
         try {
-            int lineOffset = source.trim().startsWith("def ") ? 0 : 1;
+            int lineOffset = beginsWithDefinition(source) ? 0 : 1;
             installStatements(
                     compiler,
                     key.namespaces,
@@ -439,7 +463,9 @@ final class CoreScriptRuntime {
                                 call));
                     }
                     CompletableFuture<Object> result = new CompletableFuture<Object>();
+                    ScriptFutures.cancelWith(result, execution);
                     execution.whenComplete((value, failure) -> {
+                        if (ScriptFutures.cancelIfNeeded(result, failure)) return;
                         if (failure == null) {
                             result.complete(value);
                         } else {
@@ -591,7 +617,7 @@ final class CoreScriptRuntime {
             return new QuestAction<Object>() {
                 @Override
                 public CompletableFuture<Object> process(QuestContext.Frame frame) {
-                    return frame.newFrame(condition).run().thenCompose(value -> {
+                    return KetherSupport.follow(frame, frame.newFrame(condition).run(), value -> {
                         ParsedAction<?> selected = InlineValues.truthy(value) ? accepted : elseAction;
                         return selected == null
                                 ? CompletableFuture.completedFuture(null)
@@ -727,10 +753,28 @@ final class CoreScriptRuntime {
     private static String normalizeSource(String source) {
         String normalized = normalizeSeparators(source)
                 .replaceAll("(?m)^([ \\t]*)#", "$1//");
-        if (normalized.trim().startsWith("def ")) {
+        if (beginsWithDefinition(normalized)) {
             return normalized;
         }
         return "def main = {\n" + normalized + "\n}";
+    }
+
+    private static boolean beginsWithDefinition(String source) {
+        int index = 0;
+        while (index < source.length()) {
+            char current = source.charAt(index);
+            if (Character.isWhitespace(current)) {
+                index++;
+            } else if (current == '#' || (current == '/' && index + 1 < source.length()
+                    && source.charAt(index + 1) == '/')) {
+                while (index < source.length() && source.charAt(index) != '\n'
+                        && source.charAt(index) != '\r') index++;
+            } else {
+                return source.startsWith("def", index) && index + 3 < source.length()
+                        && Character.isWhitespace(source.charAt(index + 3));
+            }
+        }
+        return false;
     }
 
     private static void validateCompilationBudget(String source) {
@@ -871,8 +915,10 @@ final class CoreScriptRuntime {
                 return failed(failure);
             }
             CompletableFuture<Object> result = new CompletableFuture<Object>();
+            ScriptFutures.cancelWith(result, execution);
             execution.whenComplete((value, failure) -> {
                 nestedEvaluations.decrementAndGet();
+                if (ScriptFutures.cancelIfNeeded(result, failure)) return;
                 if (failure == null) {
                     result.complete(value);
                 } else {

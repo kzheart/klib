@@ -65,6 +65,11 @@ engine.evalCondition("gte &level 10", context)
 引擎会安装变量、比较、逻辑、算术、条件、列表和延迟等内置语句。`tell`、`command`、`papi`、`perm` 等语句只有在上下文中提供相应宿主服务时才能运行。
 
 
+只检查语法而不开始执行时，调用 `KetherScriptEngine.validate(source, context)` 或
+`ScopedScriptRuntime.validate(source, context)`。它复用编译缓存，编译所有具名块，错误同步抛出
+`ScriptException`；不注入 guard、不调用动作或宿主服务，重复的 `def main` 也不会绕过预检。
+`inline`、JavaScript 或其他动作在运行时才生成的字符串脚本仍需要执行测试，静态编译不等于验证其运行时结果。
+
 需要在进入业务流程前同步处理编译失败时，调用 `KetherScriptEngine.evalChecked(source, context)`。
 编译失败立即抛出本地化 `ScriptException`；动作执行失败（包括立即失败）仍通过返回的 `CompletionStage` 传播。
 它与 `eval` 共用编译缓存，每次调用只执行一次脚本，不先预检再重新解析。现有 `eval` 仍将编译失败放入返回阶段。
@@ -320,6 +325,66 @@ KetherScriptEngine engine = new KetherScriptEngine(
 ```
 
 没有显式续接执行器时，异步动作会快速失败并产生 `continuation-executor-required` 错误，避免后续脚本意外运行在数据库或网络线程。执行器决定动作完成后的脚本从哪里继续；若脚本包含 Bukkit 操作，应使用主线程执行器。
+
+## 作用域拥有的执行与可选 Bukkit 宿主
+
+插件生命周期内会运行 `wait`、`async`、`await` 或其他异步动作时，推荐使用 `ScopedScriptRuntime`。它保留原有 Kether 解析和上下文接口，额外把原生执行上下文归属到 `Scope`；不改变旧 `KetherScriptEngine` 构造器的默认解析模式。
+
+```java
+import me.kzheart.klib.script.BukkitScriptHost;
+import me.kzheart.klib.script.KetherCompatibility;
+import me.kzheart.klib.script.ScopedScriptRuntime;
+import me.kzheart.klib.script.ScriptContext;
+import me.kzheart.klib.script.StatementRegistry;
+
+StatementRegistry statements = new StatementRegistry();
+ScopedScriptRuntime scripts = new ScopedScriptRuntime(
+        context().scope(), statements, null, context().scope().syncExecutor(), true);
+BukkitScriptHost host = BukkitScriptHost.builder(this, context().scope())
+        .scoreboard(true)
+        .build();
+
+ScriptContext scriptContext = host.apply(ScriptContext.builder().sender(player)).build();
+scripts.eval("tell ready\nwait 1s\ntell done", scriptContext);
+```
+
+该示例使用 `KPlugin` 无参 `setup()` 所提供的 `context()`；自己的业务动作仍通过同一个注册表注册。成功安装新配置后调用 `scripts.cancelPending()`，旧脚本的等待和已排队续接不再操作旧配置；若配置验证失败，不调用它即可保留原执行。`close()` 随作用域释放，不应把关闭请求再投递到已经关闭的调度器。调用返回阶段的 `toCompletableFuture().cancel(false)` 会终止对应原生执行，而不只取消一层结果包装。取消直接在调用线程清理原生上下文；如果自定义帧清理动作会访问 Bukkit，也必须在主线程调用取消。即使主脚本已经返回，仍在运行的 detached `async` 子动作也由作用域持有，完成后释放。
+
+`await` 的失败与取消会传播至外层，避免成功回调没有执行而使结果永久挂起。`all [ ... ]` 和 `any [ ... ]` 消费完整动作树，支持文字、`check`、权限、自定义动作和嵌套组合；保持按列表顺序求值全部输入的既有策略，不新增短路副作用变化。空组结果分别为 true 和 false。嵌套 `player` 动作使用原生 `ScriptSenderQuery` 和 `PlayerQuery` 检查，自定义宿主需同时安装；`BukkitScriptHost` 已提供这两项。
+
+`BukkitScriptHost` 显式启用额外能力，复用一组带主线程和关闭检查的 Bukkit 服务；旧的 `BukkitScriptServices.apply(...)` 仍可使用。宿主构建、`apply`、服务调用和释放都要求主线程。可选项：
+
+- `scoreboard(true)`：首行为标题，随后最多 15 行，保留重复行和空行。null 或空列表移除；移除、退出或作用域关闭时，只有当前计分板仍属于该宿主才恢复先前计分板，不覆盖其他插件后来接管的计分板。文本长度遵循当前服务器 API 限制
+- `scoreboard((player, lines) -> ...)`：接入插件已有的共享侧边栏，例如任务追踪；回调替代原生侧边栏，外部计分板及其释放策略仍由调用者管理
+- `javascript(factory)`：第一次 `js` 动作才创建并复用求值器；`javascriptEngine("nashorn")` 通过插件类加载器的 JSR-223 发现实现，缺少引擎时明确失败
+
+未选择侧边栏或 JavaScript 时不启用相应额外能力。`PlaceholderResolver` 仍由插件根据自己的可选插件策略安装。
+
+Klib 公共产物及运行时依赖保持 Java 8，不强制捆绑 Nashorn。现代 Java 服务器的业务插件可自行打包兼容其 Java 版本的引擎，并显式传入：
+
+```java
+import me.kzheart.klib.script.ScriptJavaScriptEngines;
+import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
+
+BukkitScriptHost host = BukkitScriptHost.builder(this, context().scope())
+        .javascript(() -> ScriptJavaScriptEngines.using(
+                new NashornScriptEngineFactory().getScriptEngine()))
+        .build();
+```
+
+`NashornScriptEngineFactory` 来自业务插件选择的引擎依赖，不是 Klib API；使用独立 Nashorn 时应重定位 `org.openjdk.nashorn` 与其 `org.objectweb.asm` 依赖。`ScriptJavaScriptEngines.using(...)` 为每次执行建立独立变量映射，但不会深拷贝宿主对象，也不是不可信代码沙箱。脚本只能由可信插件管理员维护；变量中的 Java 对象仍可被脚本调用。
+
+### 显式旧配置 case 兼容
+
+兼容旧配置时，可在同一个注册表上调用：
+
+```java
+KetherCompatibility.installLegacyCases(context().scope(), statements);
+```
+
+它允许 `case` 的 `else -> value`，也保留默认支持的 `else value`；针对旧显示映射，允许一行分支结果中的连续大写文字标签，例如 `VERY SLOW`。注册过的动作、带引号字符串、嵌套表达式和注释不会按标签合并；新配置仍推荐给多词文字加引号。注册由作用域持有，释放后恢复默认 case 解析器。
+
+这项配置不打开全局容错，也不发现 TabooLib。需要旧框架宽松字面量行为时仍显式选择 `toleranceParser=true`；未知独立词元可能成为合法文字，已注册动作内部的语法错误仍失败。数字文字通常保留字符串，需数值结果时使用 `math`、`type` 或传入有类型的变量。不要把宽松模式当成拼写检查器。
 
 ## 与 TabooLib 共享语句互操作
 

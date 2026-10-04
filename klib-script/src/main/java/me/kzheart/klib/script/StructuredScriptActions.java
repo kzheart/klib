@@ -106,13 +106,18 @@ final class StructuredScriptActions {
     }
 
     private static QuestAction<Object> caseAction(QuestReader reader) {
+        return caseAction(reader, false, Collections.<String>emptyList());
+    }
+
+    static QuestAction<Object> caseAction(QuestReader reader, boolean legacy, List<String> names) {
         ParsedAction<?> input = reader.nextValue();
         reader.expect("[");
         List<Branch> branches = new ArrayList<Branch>();
         while (!consume(reader, "]")) {
             String token = reader.nextToken();
             if ("else".equals(token)) {
-                branches.add(new Branch(null, Collections.emptyList(), reader.nextValue()));
+                if (legacy) consume(reader, "->");
+                branches.add(new Branch(null, Collections.emptyList(), caseValue(reader, legacy, names)));
             } else if ("when".equals(token)) {
                 int index = reader.getIndex();
                 Operator operator = Operator.parse(reader.nextToken());
@@ -130,7 +135,7 @@ final class StructuredScriptActions {
                 if (!"->".equals(arrow) && !"then".equals(arrow)) {
                     throw new IllegalArgumentException("Expected then or ->, got " + arrow);
                 }
-                branches.add(new Branch(operator, conditions, reader.nextValue()));
+                branches.add(new Branch(operator, conditions, caseValue(reader, legacy, names)));
             } else {
                 throw new IllegalArgumentException("Expected when or else, got " + token);
             }
@@ -147,6 +152,32 @@ final class StructuredScriptActions {
             return follow(frame, selected, branch -> branch == null
                     ? completed(null) : frame.newFrame(branch.action).run());
         }));
+    }
+
+    private static ParsedAction<?> caseValue(QuestReader reader, boolean legacy, List<String> names) {
+        int start = reader.getIndex();
+        ParsedAction<?> parsed = reader.nextValue();
+        if (!legacy) return parsed;
+        String first = reader.source(start, reader.getIndex()).trim();
+        if (!caseLabel(first, names)) return parsed;
+        final StringBuilder label = new StringBuilder(first);
+        boolean joined = false;
+        while (reader.hasNext() && !reader.hasLineBreakBeforeNextToken()) {
+            int index = reader.getIndex();
+            String next = reader.nextToken();
+            if (!caseLabel(next, names)) { reader.setIndex(index); break; }
+            label.append(' ').append(next);
+            joined = true;
+        }
+        return joined ? new ParsedAction<Object>(action(frame -> completed(label.toString()))) : parsed;
+    }
+
+    private static boolean caseLabel(String value, List<String> names) {
+        if (!value.matches("[A-Z][A-Z0-9_-]*")) return false;
+        for (String name : names) {
+            if (name.substring(name.lastIndexOf(':') + 1).equalsIgnoreCase(value)) return false;
+        }
+        return true;
     }
 
     private static CompletableFuture<Object> interpolate(QuestContext.Frame frame, String source) {

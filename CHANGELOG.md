@@ -1,5 +1,15 @@
 # 更新日志
 
+## 0.11.0 - 2026-10-04
+
+- 新增真正只编译的 `validate(source, context)`，不执行动作、模板或宿主服务，避免通过执行哨兵模拟预检。
+- Script 新增 `ScopedScriptRuntime`，把原生执行与 detached async 子动作归属到作用域，支持配置重载取消、调用方取消、关闭后续接门禁和完成后的资源释放。
+- 修复 `await` 的异常及取消传播，避免等待链永久挂起，并保证流程动作的异步输入在指定执行器续接；`all`/`any` 改为保留原生动作树，支持嵌套 check、权限及业务动作，保持依次求值全部输入的策略。嵌套玩家动作使用原生 `ScriptSenderQuery`/`PlayerQuery` 校验，自定义宿主应安装完整玩家服务。
+- 修复具名脚本前置注释识别；明确 exit 会结束作用域持有的 detached async，避免完成主结果后继续持有等待。
+- Script 新增显式 `KetherCompatibility.installLegacyCases(...)`，可选接受 `else ->` 和旧显示映射的大写多词标签，不改变默认解析或容错选项。
+- Script 新增 `BukkitScriptHost`，缓存带主线程及关闭检查的宿主服务；原生侧边栏和外部共享侧边栏回调均显式启用，按所有权恢复计分板。
+- 新增 `ScriptJavaScriptEngines` 与懒加载 JavaScript 工厂接入，不捆绑 Nashorn、不提高公共库或运行时依赖的 Java 8 边界。
+
 ## 0.10.1 - 2026-10-05
 
 - Command 新增 `@Command(help = true)`，从注解路由生成权限过滤的 `help [page]`，保留自定义帮助与根命令行为。

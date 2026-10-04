@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -125,11 +126,17 @@ final class CollectionScriptActions {
     private static void joinNext(QuestContext.Frame frame, List<ParsedAction<?>> items, int index, List<Object> values,
                                  String separator, CompletableFuture<Object> future) {
         if (index >= items.size()) { future.complete(joined(values, separator)); return; }
-        run(frame, items.get(index)).whenComplete((value, failure) -> {
+        CompletableFuture<Object> input = run(frame, items.get(index));
+        BiConsumer<Object, Throwable> continuation = (value, failure) -> {
             if (failure != null) { future.complete(""); return; }
             values.add(value);
             if (takeBreak(frame)) future.complete(joined(values, separator));
             else joinNext(frame, items, index + 1, values, separator, future);
+        };
+        CompletableFuture<Object> observed = input.isDone() ? input.whenComplete(continuation)
+                : input.whenCompleteAsync(continuation, frame.context().getExecutor());
+        observed.whenComplete((value, failure) -> {
+            if (failure != null && !future.isDone()) future.completeExceptionally(ScriptFutures.unwrap(failure));
         });
     }
 

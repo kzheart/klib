@@ -31,7 +31,18 @@ public final class QuestFuture<T> {
     public static <T> Consumer<T> complete(CompletableFuture<T> future) {
         return value -> {
             if (value instanceof QuestFuture) {
-                ((QuestFuture<T>) value).getFuture().thenAccept(future::complete);
+                CompletableFuture<T> deferred = ((QuestFuture<T>) value).getFuture();
+                if (deferred == null) {
+                    future.completeExceptionally(new IllegalStateException("Awaited action has no active future"));
+                    return;
+                }
+                future.whenComplete((ignored, failure) -> {
+                    if (future.isCancelled()) deferred.cancel(false);
+                });
+                deferred.whenComplete((result, failure) -> {
+                    if (failure == null) future.complete(result);
+                    else future.completeExceptionally(failure);
+                });
             } else {
                 future.complete(value);
             }

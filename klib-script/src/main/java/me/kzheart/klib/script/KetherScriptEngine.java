@@ -57,13 +57,32 @@ public final class KetherScriptEngine implements ScriptEngine {
             Executor continuationExecutor,
             boolean toleranceParser
     ) {
+        this(registry, unknownResolver, continuationExecutor, toleranceParser, null);
+    }
+
+    KetherScriptEngine(StatementRegistry registry, UnknownStatementResolver unknownResolver,
+                       Executor continuationExecutor, boolean toleranceParser, ScopedScriptRuntime owner) {
         Objects.requireNonNull(registry, "registry");
         this.runtime = new CoreScriptRuntime(
                 registry,
                 unknownResolver,
                 Objects.requireNonNull(continuationExecutor, "continuationExecutor"),
-                toleranceParser);
+                toleranceParser, owner);
         BuiltInStatements.install(registry);
+    }
+
+    /**
+     * 仅编译并验证全部任务块，不创建执行上下文，也不运行任何动作或宿主服务。
+     * 与 eval / evalChecked 共用编译缓存；编译失败同步抛出 ScriptException。
+     */
+    public void validate(String script, ScriptContext context) {
+        Objects.requireNonNull(script, "script");
+        Objects.requireNonNull(context, "context");
+        try {
+            runtime.validate(script, context);
+        } catch (RuntimeException failure) {
+            throw localize(unwrap(failure), context.locale(), script);
+        }
     }
 
     @Override
@@ -93,7 +112,9 @@ public final class KetherScriptEngine implements ScriptEngine {
             CompletionStage<Object> execution, String script, ScriptContext context
     ) {
         CompletableFuture<Object> result = new CompletableFuture<Object>();
+        ScriptFutures.cancelWith(result, execution);
         execution.whenComplete((value, failure) -> {
+            if (ScriptFutures.cancelIfNeeded(result, failure)) return;
             if (failure == null) {
                 result.complete(value);
             } else {
@@ -108,20 +129,24 @@ public final class KetherScriptEngine implements ScriptEngine {
 
     @Override
     public CompletionStage<Boolean> evalCondition(String script, ScriptContext context) {
-        return eval(script, context).thenApply(value -> {
-            if (value instanceof Boolean) {
-                return (Boolean) value;
+        CompletionStage<Object> execution = eval(script, context);
+        CompletableFuture<Boolean> result = new CompletableFuture<Boolean>();
+        ScriptFutures.cancelWith(result, execution);
+        execution.whenComplete((value, failure) -> {
+            if (failure != null) {
+                if (!ScriptFutures.cancelIfNeeded(result, failure)) result.completeExceptionally(failure);
+            } else if (value instanceof Boolean) {
+                result.complete((Boolean) value);
+            } else if (value instanceof Number || value instanceof CharSequence || value == null) {
+                result.complete(Boolean.valueOf(InlineValues.truthy(value)));
+            } else {
+                result.completeExceptionally(new ScriptException(
+                        "invalid-condition",
+                        ScriptMessages.text(context.locale(), "invalid-condition", String.valueOf(value)),
+                        1, 1, null));
             }
-            if (value instanceof Number || value instanceof CharSequence || value == null) {
-                return Boolean.valueOf(InlineValues.truthy(value));
-            }
-            throw new ScriptException(
-                    "invalid-condition",
-                    ScriptMessages.text(context.locale(), "invalid-condition", String.valueOf(value)),
-                    1,
-                    1,
-                    null);
         });
+        return result;
     }
 
     private static ScriptException localize(Throwable failure, Locale locale, String source) {

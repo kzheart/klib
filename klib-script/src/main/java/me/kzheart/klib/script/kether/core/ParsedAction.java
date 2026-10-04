@@ -22,6 +22,20 @@ public final class ParsedAction<A> {
     }
 
     public CompletableFuture<A> process(QuestContext.Frame frame) {
+        if (frame.context() instanceof AbstractQuestContext) {
+            AbstractQuestContext<?> context = (AbstractQuestContext<?>) frame.context();
+            synchronized (context) {
+                if (context.isTerminated()) {
+                    CompletableFuture<A> cancelled = new CompletableFuture<A>();
+                    cancelled.cancel(false);
+                    return cancelled;
+                }
+                // Synchronous compound actions may request another input after an inner exit.
+                // Do not run that action merely because no executor hand-off occurred.
+                if (context.getExitStatus().isPresent()) return CompletableFuture.completedFuture(null);
+                return context.track(action.process(frame));
+            }
+        }
         return action.process(frame);
     }
 

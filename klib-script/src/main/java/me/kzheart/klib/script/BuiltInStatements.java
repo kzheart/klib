@@ -26,6 +26,7 @@ final class BuiltInStatements {
         StructuredScriptActions.install(registry);
         NativeValueActions.install(registry);
         NativeCheckActions.install(registry);
+        NativeLogicalActions.install(registry);
         FlowScriptActions.install(registry);
         CollectionScriptActions.install(registry);
         TextScriptActions.install(registry);
@@ -49,8 +50,6 @@ final class BuiltInStatements {
         registry.registerBuiltin("klib", "namespace", BuiltInStatements::namespace);
         registry.registerBuiltin("klib", "command", COMMAND);
         registry.registerBuiltin("klib", "perm", BuiltInStatements::permission);
-        registry.registerBuiltin("klib", "all", BuiltInStatements::all);
-        registry.registerBuiltin("klib", "any", BuiltInStatements::any);
         registry.registerBuiltin("klib", "type", BuiltInStatements::type);
         registry.registerBuiltin("klib", "delay", BuiltInStatements::delay);
         registry.registerBuiltin("klib", "list", BuiltInStatements::list);
@@ -183,14 +182,6 @@ final class BuiltInStatements {
                 InlineValues.text(call.argument(0), context))));
     }
 
-    private static CompletionStage<Object> all(StatementCall call, ScriptContext context) {
-        return completed(Boolean.valueOf(evaluateGroup(call.arguments(), context, true)));
-    }
-
-    private static CompletionStage<Object> any(StatementCall call, ScriptContext context) {
-        return completed(Boolean.valueOf(evaluateGroup(call.arguments(), context, false)));
-    }
-
     private static CompletionStage<Object> type(StatementCall call, ScriptContext context) {
         require(call, 2, context, "value");
         String type = call.argument(0).toLowerCase(Locale.ROOT);
@@ -266,122 +257,6 @@ final class BuiltInStatements {
             return new BigDecimal(String.valueOf(left)).compareTo(new BigDecimal(String.valueOf(right)));
         }
         return String.valueOf(left).compareTo(String.valueOf(right));
-    }
-
-    private static boolean evaluateCheck(List<String> arguments, ScriptContext context) {
-        if (arguments.size() < 4) {
-            throw new IllegalArgumentException("check requires a source, operator and expected value");
-        }
-        Object left;
-        int operatorIndex;
-        if ("papi".equalsIgnoreCase(arguments.get(0))) {
-            left = context.requireService(PlaceholderResolver.class).resolve(
-                    context.sender().orElse(null),
-                    InlineValues.text(arguments.get(1), context));
-            operatorIndex = 2;
-        } else if ("player".equalsIgnoreCase(arguments.get(0))) {
-            left = context.requireService(PlayerQuery.class).property(
-                    context.sender().orElse(null),
-                    arguments.get(1));
-            operatorIndex = 2;
-        } else {
-            left = InlineValues.value(arguments.get(0), context);
-            operatorIndex = 1;
-        }
-        if (operatorIndex + 1 >= arguments.size()) {
-            throw new IllegalArgumentException("check is missing its expected value");
-        }
-        String operator = arguments.get(operatorIndex);
-        Object right = InlineValues.value(arguments.get(operatorIndex + 1), context);
-        int compared = compareValues(coerceComparable(left), coerceComparable(right));
-        if ("==".equals(operator) || "=".equals(operator)) {
-            return compared == 0;
-        }
-        if ("!=".equals(operator)) {
-            return compared != 0;
-        }
-        if (">".equals(operator)) {
-            return compared > 0;
-        }
-        if (">=".equals(operator)) {
-            return compared >= 0;
-        }
-        if ("<".equals(operator)) {
-            return compared < 0;
-        }
-        if ("<=".equals(operator)) {
-            return compared <= 0;
-        }
-        throw new IllegalArgumentException("Unknown check operator: " + operator);
-    }
-
-    private static boolean evaluateGroup(
-            List<String> rawArguments,
-            ScriptContext context,
-            boolean requireAll
-    ) {
-        List<String> arguments = new ArrayList<String>(rawArguments);
-        if (!arguments.isEmpty() && "[".equals(arguments.get(0))) {
-            arguments.remove(0);
-        }
-        if (!arguments.isEmpty() && "]".equals(arguments.get(arguments.size() - 1))) {
-            arguments.remove(arguments.size() - 1);
-        }
-        if (arguments.isEmpty()) {
-            return requireAll;
-        }
-        int index = 0;
-        boolean result = requireAll;
-        while (index < arguments.size()) {
-            boolean value;
-            String action = arguments.get(index);
-            if ("check".equalsIgnoreCase(action)) {
-                int length = conditionLength(arguments, index + 1);
-                value = evaluateCheck(arguments.subList(index + 1, index + 1 + length), context);
-                index += length + 1;
-            } else if ("perm".equalsIgnoreCase(action)) {
-                if (index + 1 >= arguments.size()) {
-                    throw new IllegalArgumentException("perm is missing its permission");
-                }
-                value = context.requireService(PlayerQuery.class).hasPermission(
-                        context.sender().orElse(null),
-                        InlineValues.text(arguments.get(index + 1), context));
-                index += 2;
-            } else {
-                value = InlineValues.truthy(InlineValues.value(action, context));
-                index++;
-            }
-            result = requireAll ? result && value : result || value;
-        }
-        return result;
-    }
-
-    private static int conditionLength(List<String> arguments, int start) {
-        if (start >= arguments.size()) {
-            throw new IllegalArgumentException("check is missing its source");
-        }
-        String source = arguments.get(start);
-        if ("papi".equalsIgnoreCase(source) || "player".equalsIgnoreCase(source)) {
-            if (start + 3 >= arguments.size()) {
-                throw new IllegalArgumentException("check expression is incomplete");
-            }
-            return 4;
-        }
-        if (start + 2 >= arguments.size()) {
-            throw new IllegalArgumentException("check expression is incomplete");
-        }
-        return 3;
-    }
-
-    private static Object coerceComparable(Object value) {
-        if (value instanceof Number || value == null) {
-            return value;
-        }
-        try {
-            return new BigDecimal(String.valueOf(value));
-        } catch (NumberFormatException ignored) {
-            return value;
-        }
     }
 
     private static int indexOf(List<String> values, String expected, int start) {

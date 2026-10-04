@@ -15,7 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
@@ -35,6 +37,11 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
     protected volatile CompletableFuture<Object> future;
     private final AtomicLong steps = new AtomicLong();
     private volatile long stepLimit = DEFAULT_STEP_LIMIT;
+    private final Set<CompletableFuture<?>> pending = ConcurrentHashMap.newKeySet();
+    private final CompletableFuture<Void> idle = new CompletableFuture<Void>();
+    private boolean retainDetached;
+    private boolean rootFinished;
+    private volatile boolean terminated;
 
     protected AbstractQuestContext(QuestService<T> service, Quest quest, String playerIdentifier) {
         this.service = service;
@@ -57,21 +64,73 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
     @Override public Frame rootFrame() { return rootFrame; }
 
     @Override
-    public CompletableFuture<Object> runActions() {
-        checkState(future == null, "already running");
+    public synchronized CompletableFuture<Object> runActions() {
+        checkState(future == null && !terminated, "already running or terminated");
         future = rootFrame.run();
-        future.thenRun(() -> {
-            if (exitStatus == null) exitStatus = ExitStatus.success();
+        future.whenComplete((value, failure) -> {
+            synchronized (AbstractQuestContext.this) {
+                rootFinished = true;
+                if (!retainDetached && failure == null && exitStatus == null) exitStatus = ExitStatus.success();
+                finishIfIdle();
+            }
         });
         return future;
     }
 
+    /**
+     * 在首次执行前选择保留脱离根结果的 async 动作；返回所有原生动作结束时完成的阶段。
+     * 默认上下文仍在根结果成功后退出。宿主应在返回阶段完成后释放服务，并在卸载时 terminate。
+     */
+    public synchronized CompletableFuture<Void> retainDetachedActions() {
+        checkState(future == null && !terminated, "already running or terminated");
+        retainDetached = true;
+        return idle;
+    }
+
     @Override
-    public void terminate() {
+    public synchronized void terminate() {
+        if (terminated) return;
+        terminated = true;
+        exitStatus = ExitStatus.paused();
         CompletableFuture<Object> running = future;
         if (running != null && !running.isDone()) running.completeExceptionally(new QuestCloseException());
+        // 包括根动作的输入及已经脱离根结果的 async；不得依赖可能已关闭的宿主 scheduler。
+        for (CompletableFuture<?> action : new ArrayList<CompletableFuture<?>>(pending)) action.cancel(false);
         rootFrame.close();
-        future = null;
+        rootFinished = true;
+        finishIfIdle();
+    }
+
+    final boolean isTerminated() { return terminated; }
+
+    final <R> CompletableFuture<R> track(CompletableFuture<R> action) {
+        synchronized (this) {
+            if (terminated) {
+                action.cancel(false);
+                return action;
+            }
+            if (action.isDone()) return action;
+            pending.add(action);
+            action.whenComplete((value, failure) -> {
+                synchronized (AbstractQuestContext.this) {
+                    pending.remove(action);
+                    finishIfIdle();
+                }
+            });
+            return action;
+        }
+    }
+
+    private void finishIfIdle() {
+        if (retainDetached && rootFinished && !terminated && exitStatus != null && exitStatus.isRunning()) {
+            // exit / stop 也结束根结果之外的 async；不能等被退出执行器丢弃的子续接。
+            terminate();
+            return;
+        }
+        if (rootFinished && pending.isEmpty()) {
+            if (retainDetached && exitStatus == null) exitStatus = ExitStatus.success();
+            idle.complete(null);
+        }
     }
 
     /** 覆盖此上下文的 {@link #DEFAULT_STEP_LIMIT 执行步数限制}。 */
@@ -121,7 +180,7 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
 
         @Override
         public void execute(Runnable command) {
-            if (questContext.getExitStatus().isPresent()) {
+            if (questContext.terminated || questContext.getExitStatus().isPresent()) {
                 questContext.discardContinuation();
                 return;
             }
@@ -130,7 +189,16 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
                 resolved = questContext.createExecutor();
                 actual = resolved;
             }
-            resolved.execute(command);
+            resolved.execute(() -> {
+                synchronized (questContext) {
+                    // 续接排队后也可能发生 reload / close；执行前再次检查。
+                    if (questContext.terminated || questContext.getExitStatus().isPresent()) {
+                        questContext.discardContinuation();
+                        return;
+                    }
+                    command.run();
+                }
+            });
         }
     }
 
@@ -243,12 +311,12 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
             CompletableFuture<R> result = new CompletableFuture<>();
             future = result;
             process(null, result);
-            return result;
+            return track(context(), result);
         }
 
         private <R> void process(Object lastValue, CompletableFuture<R> result) {
             Object value = lastValue;
-            while (!context().getExitStatus().isPresent()) {
+            while (!result.isDone() && !context().getExitStatus().isPresent()) {
                 if (!tryStep(context())) {
                     result.completeExceptionally(stepLimitError(context()));
                     return;
@@ -273,6 +341,9 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
                         value = actionFuture.join();
                     } catch (CompletionException exception) {
                         result.completeExceptionally(exception.getCause());
+                        return;
+                    } catch (CancellationException exception) {
+                        result.cancel(false);
                         return;
                     }
                 } else {
@@ -317,7 +388,7 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
             checkState(future == null, "already running");
             varTable.initialize(this);
             future = action.process(this);
-            return (CompletableFuture<R>) future;
+            return track(context(), (CompletableFuture<R>) future);
         }
     }
 
@@ -378,6 +449,10 @@ public abstract class AbstractQuestContext<T extends AbstractQuestContext<T>> im
                 }
             }
         }
+    }
+
+    private static <R> CompletableFuture<R> track(QuestContext context, CompletableFuture<R> action) {
+        return context instanceof AbstractQuestContext ? ((AbstractQuestContext<?>) context).track(action) : action;
     }
 
     private static Throwable unwrap(Throwable error) {

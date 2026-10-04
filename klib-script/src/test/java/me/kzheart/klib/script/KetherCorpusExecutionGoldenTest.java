@@ -57,7 +57,11 @@ class KetherCorpusExecutionGoldenTest {
 
     @Test
     void executesEntranceAllCondition() throws IOException {
-        ScriptContext context = base().sender("player").service(PlayerQuery.class, new PlayerQuery() {
+        ScriptContext context = base().sender("Alex")
+                .service(ScriptSenderQuery.class, new ScriptSenderQuery() {
+                    @Override public boolean isPlayer(Object sender) { return true; }
+                    @Override public String name(Object sender) { return "Alex"; }
+                }).sender("player").service(PlayerQuery.class, new PlayerQuery() {
             @Override
             public Object property(Object sender, String name) {
                 assertEquals("level", name);

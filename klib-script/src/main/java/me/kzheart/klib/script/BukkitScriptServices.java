@@ -40,6 +40,12 @@ public final class BukkitScriptServices {
     /** @param scoreboard {@code scoreboard} 语句的侧边栏实现，lines 为 null 表示移除；为 null 时该语句不可用 */
     public static ScriptContext.Builder apply(ScriptContext.Builder builder, Plugin plugin,
                                               BiConsumer<Player, List<String>> scoreboard) {
+        return apply(builder, plugin, scoreboard, true);
+    }
+
+    /** Cached opt-in hosts supply their own lazy JavaScript provider. */
+    static ScriptContext.Builder apply(ScriptContext.Builder builder, Plugin plugin,
+            BiConsumer<Player, List<String>> scoreboard, boolean discoverJavascript) {
         builder.service(MessageSink.class, (sender, message) -> commandSender(sender).sendMessage(message));
         builder.service(CommandSink.class, new CommandSink() {
             @Override public Object dispatch(Object sender, String command) {
@@ -63,7 +69,7 @@ public final class BukkitScriptServices {
         builder.service(ScriptLogger.class, (level, message) -> plugin.getLogger().log(level, message));
         builder.service(ScriptPlatform.class, new BukkitPlatform(scoreboard));
         builder.service(ScriptPropertyAccess.class, new ItemProperties());
-        ScriptEngine javascript = javascript(plugin);
+        ScriptEngine javascript = discoverJavascript ? javascript(plugin) : null;
         if (javascript != null) builder.service(JavaScriptEvaluator.class, (source, values) -> {
             Bindings bindings = new SimpleBindings(values);
             try { return javascript.eval(source, bindings); }

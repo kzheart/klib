@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
+import java.util.function.BiConsumer;
 import me.kzheart.klib.script.kether.core.ArgTypes;
 import me.kzheart.klib.script.kether.core.ExitStatus;
 import me.kzheart.klib.script.kether.core.ParsedAction;
@@ -60,7 +61,9 @@ final class FlowScriptActions {
             Duration duration = reader.next(ArgTypes.DURATION);
             return action(frame -> {
                 ScriptContext context = CoreScriptRuntime.context(frame);
-                return context.requireService(DelayScheduler.class).delay(duration).toCompletableFuture().thenApply(ignored -> {
+                CompletableFuture<Object> source = context.requireService(DelayScheduler.class)
+                        .delay(duration).toCompletableFuture();
+                CompletableFuture<Object> result = follow(frame, source, ignored -> {
                     // 原框架：等待期间玩家离线则停止脚本。
                     Object sender = context.sender().orElse(null);
                     ScriptSenderQuery query = context.service(ScriptSenderQuery.class).orElse(null);
@@ -68,8 +71,10 @@ final class FlowScriptActions {
                             && !frame.context().getExitStatus().isPresent()) {
                         frame.context().setExitStatus(ExitStatus.paused());
                     }
-                    return (Object) null;
+                    return completed(null);
                 });
+                ScriptFutures.cancelWith(result, source);
+                return result;
             });
         });
         registry.registerBuiltinKether("wait", wait);
@@ -81,9 +86,24 @@ final class FlowScriptActions {
         registry.registerBuiltinKether("await", QuestActionParser.of(reader -> {
             ParsedAction<?> awaited = reader.nextValue();
             return action(frame -> {
-                CompletableFuture<Object> future = new CompletableFuture<Object>();
-                run(frame, awaited).thenAccept(QuestFuture.complete(future));
-                return future;
+                CompletableFuture<Object> result = new CompletableFuture<Object>();
+                CompletableFuture<Object> input = run(frame, awaited);
+                ScriptFutures.cancelWith(result, input);
+                CompletableFuture<Object> completion = follow(frame, input, value -> {
+                    if (!(value instanceof QuestFuture<?>)) return completed(value);
+                    CompletableFuture<?> deferred = ((QuestFuture<?>) value).getFuture();
+                    if (deferred == null) throw new IllegalStateException("Awaited action has no active future");
+                    ScriptFutures.cancelWith(result, deferred);
+                    return deferred.thenApply(output -> (Object) output);
+                });
+                ScriptFutures.cancelWith(result, completion);
+                completion.whenComplete((value, failure) -> {
+                    if (failure == null) result.complete(value);
+                    else if (!ScriptFutures.cancelIfNeeded(result, failure)) {
+                        result.completeExceptionally(ScriptFutures.unwrap(failure));
+                    }
+                });
+                return result;
             });
         }));
         registry.registerBuiltinKether("await_all", QuestActionParser.of(reader -> {
@@ -198,8 +218,15 @@ final class FlowScriptActions {
     /** 顺序执行并返回最后一个结果；出错时以已有的最后结果结束。 */
     private static CompletableFuture<Object> sequence(QuestContext.Frame frame, List<ParsedAction<?>> actions, int index, Object last) {
         if (index >= actions.size()) return completed(last);
-        return run(frame, actions.get(index)).handle((value, failure) -> failure == null
-                ? sequence(frame, actions, index + 1, value) : completed(last)).thenCompose(future -> future);
+        CompletableFuture<Object> result = new CompletableFuture<Object>();
+        onComplete(frame, run(frame, actions.get(index)), result, (value, failure) -> {
+            if (failure != null) { result.complete(last); return; }
+            sequence(frame, actions, index + 1, value).whenComplete((next, error) -> {
+                if (error == null) result.complete(next);
+                else result.completeExceptionally(error);
+            });
+        });
+        return result;
     }
 
     /** for / map 共用：遍历元素并写入 key、key-key、key-value 变量，结束或 break 后移除。 */
@@ -207,7 +234,7 @@ final class FlowScriptActions {
                                                      ParsedAction<?> body, boolean collect) {
         List<Object> results = new ArrayList<Object>();
         CompletableFuture<Object> future = new CompletableFuture<Object>();
-        run(frame, values).whenComplete((source, failure) -> {
+        onComplete(frame, run(frame, values), future, (source, failure) -> {
             if (failure != null) { finish(frame, key, future, collect ? results : null); return; }
             next(frame, key, elements(source), 0, body, collect ? results : null, future);
         });
@@ -227,12 +254,12 @@ final class FlowScriptActions {
             CompletableFuture<Object> step = run(frame, body);
             if (!step.isDone()) {
                 final int resume = index + 1;
-                step.whenCompleteAsync((value, failure) -> {
+                onComplete(frame, step, future, (value, failure) -> {
                     if (failure != null) { finish(frame, key, future, results); return; }
                     if (results != null && value != null) results.add(value);
                     if (takeBreak(frame)) finish(frame, key, future, results);
                     else next(frame, key, items, resume, body, results, future);
-                }, frame.context().getExecutor());
+                });
                 return;
             }
             Object value;
@@ -255,10 +282,10 @@ final class FlowScriptActions {
         while (true) {
             CompletableFuture<Object> check = run(frame, condition);
             if (!check.isDone()) {
-                check.whenCompleteAsync((value, failure) -> {
+                onComplete(frame, check, future, (value, failure) -> {
                     if (failure != null || !bool(value)) future.complete(null);
                     else afterCondition(frame, condition, body, future);
-                }, frame.context().getExecutor());
+                });
                 return;
             }
             Object value;
@@ -267,10 +294,10 @@ final class FlowScriptActions {
             if (!bool(value)) { future.complete(null); return; }
             CompletableFuture<Object> step = run(frame, body);
             if (!step.isDone()) {
-                step.whenCompleteAsync((ignored, failure) -> {
+                onComplete(frame, step, future, (ignored, failure) -> {
                     if (failure != null || takeBreak(frame)) future.complete(null);
                     else loop(frame, condition, body, future);
-                }, frame.context().getExecutor());
+                });
                 return;
             }
             try { step.join(); }
@@ -281,9 +308,20 @@ final class FlowScriptActions {
 
     private static void afterCondition(QuestContext.Frame frame, ParsedAction<?> condition, ParsedAction<?> body,
                                        CompletableFuture<Object> future) {
-        run(frame, body).whenCompleteAsync((ignored, failure) -> {
+        onComplete(frame, run(frame, body), future, (ignored, failure) -> {
             if (failure != null || takeBreak(frame)) future.complete(null);
             else loop(frame, condition, body, future);
-        }, frame.context().getExecutor());
+        });
+    }
+
+    /** 保留同步快速路径；异步完成与调度失败均必须结束对应动作。 */
+    private static <T> void onComplete(QuestContext.Frame frame, CompletableFuture<T> input,
+                                       CompletableFuture<?> result, BiConsumer<T, Throwable> continuation) {
+        CompletableFuture<T> observed = input.isDone()
+                ? input.whenComplete(continuation)
+                : input.whenCompleteAsync(continuation, frame.context().getExecutor());
+        observed.whenComplete((value, failure) -> {
+            if (failure != null && !result.isDone()) result.completeExceptionally(ScriptFutures.unwrap(failure));
+        });
     }
 }

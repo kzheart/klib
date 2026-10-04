@@ -86,7 +86,7 @@ dependencies {
 | `klib-data-mysql` | MySQL 存储与 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL 存储、pgJDBC 与事务迁移 |
 | `klib-ui` | 菜单、宿主物品栏工厂、分页、投放区与聊天输入 |
-| `klib-script` | Kether 嵌套动作、同步编译检查、作用域拥有的异步执行、显式旧配置 case 兼容、可选 Bukkit 侧边栏与懒加载 JavaScript 宿主、原生帧与 TabooLib/Guard 互操作；额外宿主能力显式启用 |
+| `klib-script` | Kether 嵌套动作、同步编译检查、作用域拥有的异步执行、显式旧配置 case 兼容、支持独立异步上下文安装的可选 Bukkit 侧边栏与懒加载 JavaScript 宿主、原生帧与 TabooLib/Guard 互操作；额外宿主能力显式启用 |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI，以及可退还的消耗与奖励 |
 | `klib-compat*` | Minecraft 版本能力、实现选择与按玩家发送的数据包侧边栏 |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 |

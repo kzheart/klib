@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -39,14 +40,16 @@ import org.bukkit.scheduler.BukkitTask;
  * 由作用域持有、可重复安装到脚本上下文的 Bukkit 宿主服务。
  * <p>基础服务只创建一次；侧边栏和 JavaScript 均显式启用，不改变
  * {@link BukkitScriptServices#apply(ScriptContext.Builder, Plugin)} 的默认行为。
- * 构建、上下文安装、所有服务调用和释放操作都必须在服务器主线程执行。
+ * 构建、所有服务调用和释放操作必须在服务器主线程执行；上下文安装可以在任意线程
+ * 对调用方独占的构建器执行，不访问 Bukkit，也不共享上下文的可变状态。
  */
 public final class BukkitScriptHost implements Disposable, AutoCloseable, Listener {
     private static final int MAX_LINES = 15;
     private final Plugin plugin;
     private final Scope scope;
     private final Supplier<? extends JavaScriptEvaluator> javascriptFactory;
-    private final List<Consumer<ScriptContext.Builder>> services = new ArrayList<Consumer<ScriptContext.Builder>>();
+    private final List<Consumer<ScriptContext.Builder>> services;
+    private final Object installationLock = new Object();
     private final Map<UUID, Sidebar> sidebars = new HashMap<UUID, Sidebar>();
     private final Map<CompletableFuture<Object>, BukkitTask> pendingDelays = new HashMap<CompletableFuture<Object>, BukkitTask>();
     private final Object delayCleanupLock = new Object();
@@ -59,17 +62,23 @@ public final class BukkitScriptHost implements Disposable, AutoCloseable, Listen
         plugin = options.plugin;
         scope = options.scope;
         javascriptFactory = options.javascriptFactory;
+        List<Consumer<ScriptContext.Builder>> installers = new ArrayList<Consumer<ScriptContext.Builder>>();
         ScriptContext defaults = BukkitScriptServices.apply(ScriptContext.builder(), plugin,
                 options.scoreboard ? this::scoreboard : options.scoreboardCallback, false).build();
-        cache(defaults, MessageSink.class);
-        cache(defaults, CommandSink.class);
-        cache(defaults, ScriptSenderQuery.class);
-        cache(defaults, PlayerQuery.class);
+        cache(installers, defaults, MessageSink.class);
+        cache(installers, defaults, CommandSink.class);
+        cache(installers, defaults, ScriptSenderQuery.class);
+        cache(installers, defaults, PlayerQuery.class);
         DelayScheduler delayScheduler = this::delay;
-        services.add(builder -> builder.service(DelayScheduler.class, delayScheduler));
-        cache(defaults, ScriptLogger.class);
-        cache(defaults, ScriptPlatform.class);
-        cache(defaults, ScriptPropertyAccess.class);
+        installers.add(builder -> builder.service(DelayScheduler.class, delayScheduler));
+        cache(installers, defaults, ScriptLogger.class);
+        cache(installers, defaults, ScriptPlatform.class);
+        cache(installers, defaults, ScriptPropertyAccess.class);
+        if (javascriptFactory != null) {
+            JavaScriptEvaluator evaluator = this::evaluate;
+            installers.add(builder -> builder.service(JavaScriptEvaluator.class, evaluator));
+        }
+        services = Collections.unmodifiableList(installers);
         Bukkit.getPluginManager().registerEvents(this, plugin);
         try {
             scope.install(this);
@@ -84,21 +93,26 @@ public final class BukkitScriptHost implements Disposable, AutoCloseable, Listen
         return new Builder(plugin, scope);
     }
 
-    /** 向一个新的脚本上下文安装共享服务，不重新发现或创建 JavaScript 引擎。 */
+    /**
+     * 向调用方独占的新构建器安装共享服务，可从任意线程调用；构建器本身不可跨线程共享。
+     * 安装不调用 Bukkit 或创建 JavaScript 引擎，不共享变量，且与关闭状态切换串行。
+     * 安装后宿主仍可立即关闭；已取得的服务继续检查主线程及宿主生命周期。
+     */
     public ScriptContext.Builder apply(ScriptContext.Builder builder) {
-        checkActive();
         Objects.requireNonNull(builder, "builder");
-        for (Consumer<ScriptContext.Builder> service : services) service.accept(builder);
-        if (javascriptFactory != null) builder.service(JavaScriptEvaluator.class, this::evaluate);
+        synchronized (installationLock) {
+            if (closed) throw new IllegalStateException("Bukkit script host services are closed");
+            for (Consumer<ScriptContext.Builder> service : services) service.accept(builder);
+        }
         return builder;
     }
 
-    private <T> void cache(ScriptContext defaults, Class<T> type) {
+    private <T> void cache(List<Consumer<ScriptContext.Builder>> installers, ScriptContext defaults, Class<T> type) {
         T delegate = defaults.requireService(type);
         // 在公开接口边界检查线程和生命周期，包括 retained context 中已拿到的服务。
         T guarded = type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type},
                 (proxy, method, arguments) -> invokeService(proxy, delegate, method, arguments)));
-        services.add(builder -> builder.service(type, guarded));
+        installers.add(builder -> builder.service(type, guarded));
     }
 
     private Object invokeService(Object proxy, Object delegate, Method method, Object[] arguments) throws Throwable {
@@ -260,10 +274,12 @@ public final class BukkitScriptHost implements Disposable, AutoCloseable, Listen
      */
     @Override public void dispose() {
         checkThread();
-        List<BukkitTask> cleanups;
-        synchronized (delayCleanupLock) {
+        synchronized (installationLock) {
             if (closed) return;
             closed = true;
+        }
+        List<BukkitTask> cleanups;
+        synchronized (delayCleanupLock) {
             cleanups = new ArrayList<BukkitTask>(delayCleanups);
             delayCleanups.clear();
         }
@@ -310,7 +326,6 @@ public final class BukkitScriptHost implements Disposable, AutoCloseable, Listen
         } finally {
             sidebars.clear();
             pendingDelays.clear();
-            services.clear();
             javascript = null;
             HandlerList.unregisterAll(this);
             scope.remove(this);

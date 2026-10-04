@@ -352,7 +352,7 @@ scripts.eval("tell ready\nwait 1s\ntell done", scriptContext);
 
 `await` 的失败与取消会传播至外层，避免成功回调没有执行而使结果永久挂起。`all [ ... ]` 和 `any [ ... ]` 消费完整动作树，支持文字、`check`、权限、自定义动作和嵌套组合；保持按列表顺序求值全部输入的既有策略，不新增短路副作用变化。空组结果分别为 true 和 false。嵌套 `player` 动作使用原生 `ScriptSenderQuery` 和 `PlayerQuery` 检查，自定义宿主需同时安装；`BukkitScriptHost` 已提供这两项。
 
-`BukkitScriptHost` 显式启用额外能力，复用一组带主线程和关闭检查的 Bukkit 服务；旧的 `BukkitScriptServices.apply(...)` 仍可使用。宿主构建、`apply`、服务调用和释放都要求主线程。可选项：
+`BukkitScriptHost` 显式启用额外能力，复用一组带主线程和关闭检查的 Bukkit 服务；旧的 `BukkitScriptServices.apply(...)` 仍可使用。宿主构建、实际服务调用和释放仍要求主线程。`apply` 只把构造期冻结的服务引用安装到调用方独占的新 `ScriptContext.Builder`，可从任意线程调用，不访问 Bukkit、不创建 JavaScript 引擎，也不共享变量或发送者状态；不要在线程之间共享可变构建器。同一宿主可供多个独立上下文并行安装，安装与关闭状态切换串行，关闭后安装失败；安装成功后宿主仍可能关闭，保留的服务引用也会拒绝调用。只使用字面量、局部变量和计算的即时纯表达式可在异步线程求值；一旦调用 Bukkit 服务（包括宿主属性访问）或宿主 JavaScript，仍须回到主线程。可选项：
 
 - `scoreboard(true)`：首行为标题，随后最多 15 行，保留重复行和空行。null 或空列表移除；移除、退出或作用域关闭时，只有当前计分板仍属于该宿主才恢复先前计分板，不覆盖其他插件后来接管的计分板。文本长度遵循当前服务器 API 限制
 - `scoreboard((player, lines) -> ...)`：接入插件已有的共享侧边栏，例如任务追踪；回调替代原生侧边栏，外部计分板及其释放策略仍由调用者管理

@@ -126,15 +126,15 @@ PromptSession<Integer> prompt = prompts.start(player, PromptSpec
         .invalidMessage("请输入正整数，或输入 cancel 取消")
         .build());
 
-prompt.completionSync().thenAccept(outcome -> {
+prompt.completionSync().thenAcceptAsync(outcome -> {
     if (outcome.status() == PromptStatus.ANSWERED && player.isOnline()) {
         int amount = outcome.value().get().intValue();
         openConfirmMenu(player, amount);
     }
-});
+}, scope.syncExecutor());
 ```
 
-同一玩家启动新提示会取消旧提示。框架会取消对应聊天消息，不会让业务插件再维护 `AsyncPlayerChatEvent` 监听器。`completionSync()` 会把完成结果切回作用域的同步调度器，适合继续访问玩家和打开菜单。
+同一玩家启动新提示会取消旧提示。框架会取消对应聊天消息，不会让业务插件再维护 `AsyncPlayerChatEvent` 监听器。示例同时为消费结果的回调指定 `scope.syncExecutor()`，保证即使提示已经完成，后续玩家操作也在主线程执行。
 
 ## 生命周期与错误边界
 

@@ -84,11 +84,13 @@ class ExternalItemsTest {
 
         ExternalItems detected = ExternalItems.detect(manager);
         List<ExternalItems.SourceState> report = detected.report();
-        assertEquals(ExternalItems.Status.AVAILABLE, report.get(0).status());
-        assertEquals(ExternalItems.Status.MISSING, report.get(1).status());
-        assertEquals(ExternalItems.Status.AVAILABLE, report.get(2).status());
-        assertEquals(ExternalItems.Status.FAILED, report.get(3).status());
-        assertTrue(report.get(3).detail().contains("Class not found"), report.get(3).detail());
+        assertEquals("zap", report.get(0).prefix());
+        assertEquals(ExternalItems.Status.MISSING, report.get(0).status());
+        assertEquals(ExternalItems.Status.AVAILABLE, report.get(1).status());
+        assertEquals(ExternalItems.Status.MISSING, report.get(2).status());
+        assertEquals(ExternalItems.Status.AVAILABLE, report.get(3).status());
+        assertEquals(ExternalItems.Status.FAILED, report.get(4).status());
+        assertTrue(report.get(4).detail().contains("Class not found"), report.get(4).detail());
         assertTrue(detected.available("mi"));
         assertFalse(detected.available("mm"));
     }

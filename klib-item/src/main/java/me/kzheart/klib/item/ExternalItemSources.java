@@ -1,12 +1,15 @@
 package me.kzheart.klib.item;
 
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 内置外部物品系统适配器。全部通过反射调用，业务插件无需在编译期依赖这些插件。
@@ -16,6 +19,54 @@ import java.util.Objects;
  */
 public final class ExternalItemSources {
     private ExternalItemSources() {
+    }
+
+    /** ZaphkielPlus Java API，唯一前缀 {@code zap}；直接使用实际插件对象解析公共服务。 */
+    public static ExternalItemSource zaphkiel(Plugin plugin) {
+        return new ZaphkielSource(plugin);
+    }
+
+    private static final class ZaphkielSource implements ExternalItemSource {
+        private final Plugin owner;
+        private final Method items;
+        private final Method registry;
+        private final Method find;
+        private final Method generate;
+        private final Method identify;
+
+        ZaphkielSource(Plugin plugin) {
+            owner = Objects.requireNonNull(plugin, "plugin");
+            items = method(plugin.getClass(), "items");
+            Object service = requireValue(invoke(items, owner), "ZaphkielPlus item service");
+            generate = method(service.getClass(), "generateItemStack", String.class, Player.class);
+            identify = method(service.getClass(), "id", ItemStack.class);
+            registry = method(service.getClass(), "registry");
+            Object definitions = requireValue(invoke(registry, service), "ZaphkielPlus definition registry");
+            find = method(definitions.getClass(), "find", String.class);
+        }
+
+        @Override public String prefix() { return "zap"; }
+        @Override public String plugin() { return "ZaphkielPlus"; }
+        @Override public ItemStack create(String id) { return create(id, (Player) null); }
+
+        @Override public ItemStack create(String id, Player player) {
+            if (!owner.isEnabled()) return null;
+            Object service = requireValue(invoke(items, owner), "ZaphkielPlus item service");
+            Object definitions = requireValue(invoke(registry, service), "ZaphkielPlus definition registry");
+            Object found = invoke(find, definitions, id);
+            if (!(found instanceof Optional<?>)) throw new IllegalStateException("ZaphkielPlus find must return Optional");
+            if (!((Optional<?>) found).isPresent()) return null;
+            return (ItemStack) invoke(generate, service, id, player);
+        }
+
+        @Override public ItemStack createStack(String id, int amount, Player player) {
+            if (amount != 1) throw new IllegalArgumentException("Zap instances must be generated per unit; use ExternalItems.createBatch");
+            return create(id, player);
+        }
+
+        @Override public String identify(ItemStack item) {
+            return (String) invoke(identify, requireValue(invoke(items, owner), "ZaphkielPlus item service"), item);
+        }
     }
 
     /** MMOItems 6.x，ID 形如 {@code TYPE:ID}，前缀 {@code mi}。 */

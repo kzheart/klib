@@ -14,6 +14,7 @@ import java.util.function.Predicate;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
@@ -27,20 +28,22 @@ import org.bukkit.plugin.PluginManager;
  */
 public final class ExternalItems implements ExternalItemProvider {
     private static final Map<String, String> BUILTIN_PLUGINS;
-    private static final Map<String, Function<ClassLoader, ExternalItemSource>> BUILTIN_FACTORIES;
+    private static final Map<String, Function<Plugin, ExternalItemSource>> BUILTIN_FACTORIES;
 
     static {
         Map<String, String> plugins = new LinkedHashMap<String, String>();
-        Map<String, Function<ClassLoader, ExternalItemSource>> factories =
-                new LinkedHashMap<String, Function<ClassLoader, ExternalItemSource>>();
+        Map<String, Function<Plugin, ExternalItemSource>> factories =
+                new LinkedHashMap<String, Function<Plugin, ExternalItemSource>>();
+        plugins.put("zap", "ZaphkielPlus");
+        factories.put("zap", ExternalItemSources::zaphkiel);
         plugins.put("mi", "MMOItems");
-        factories.put("mi", ExternalItemSources::mmoItems);
+        factories.put("mi", plugin -> ExternalItemSources.mmoItems(plugin.getClass().getClassLoader()));
         plugins.put("ni", "NeigeItems");
-        factories.put("ni", ExternalItemSources::neigeItems);
+        factories.put("ni", plugin -> ExternalItemSources.neigeItems(plugin.getClass().getClassLoader()));
         plugins.put("ia", "ItemsAdder");
-        factories.put("ia", ExternalItemSources::itemsAdder);
+        factories.put("ia", plugin -> ExternalItemSources.itemsAdder(plugin.getClass().getClassLoader()));
         plugins.put("mm", "MythicMobs");
-        factories.put("mm", ExternalItemSources::mythicMobs);
+        factories.put("mm", plugin -> ExternalItemSources.mythicMobs(plugin.getClass().getClassLoader()));
         BUILTIN_PLUGINS = Collections.unmodifiableMap(plugins);
         BUILTIN_FACTORIES = Collections.unmodifiableMap(factories);
     }
@@ -53,7 +56,7 @@ public final class ExternalItems implements ExternalItemProvider {
         this.states = Collections.unmodifiableMap(new LinkedHashMap<String, SourceState>(states));
     }
 
-    /** 探测已启用的 MMOItems、NeigeItems、ItemsAdder 与 MythicMobs。应在这些插件启用之后调用。 */
+    /** 探测已启用的 ZaphkielPlus、MMOItems、NeigeItems、ItemsAdder 与 MythicMobs。应在这些插件启用之后调用。 */
     public static ExternalItems detect() {
         return detect(Bukkit.getPluginManager());
     }
@@ -71,7 +74,7 @@ public final class ExternalItems implements ExternalItemProvider {
                 continue;
             }
             try {
-                sources.put(prefix, BUILTIN_FACTORIES.get(prefix).apply(plugin.getClass().getClassLoader()));
+                sources.put(prefix, BUILTIN_FACTORIES.get(prefix).apply(plugin));
                 states.put(prefix, new SourceState(prefix, pluginName, Status.AVAILABLE, "已挂钩"));
             } catch (RuntimeException | LinkageError failure) {
                 states.put(prefix, new SourceState(prefix, pluginName, Status.FAILED, describe(failure)));
@@ -141,12 +144,40 @@ public final class ExternalItems implements ExternalItemProvider {
     }
 
     public Optional<ItemStack> create(String reference, int amount) {
+        return create(reference, amount, null);
+    }
+
+    public Optional<ItemStack> create(String reference, int amount, Player player) {
         if (amount < 1) {
             throw new IllegalArgumentException("Amount must be positive");
         }
-        Optional<ItemStack> created = create(reference);
-        created.ifPresent(item -> item.setAmount(amount));
-        return created;
+        ItemRef ref = parse(reference);
+        if (ref.vanilla()) return Optional.of(new ItemStack(Items.resolveMaterial(ref.id()), amount));
+        ExternalItemSource source = sources.get(ref.prefix());
+        if (source == null) return Optional.empty();
+        ItemStack created = source.createStack(ref.id(), amount, player);
+        return InventoryItems.isAir(created) ? Optional.<ItemStack>empty() : Optional.of(created.clone());
+    }
+
+    /** 按单位分别生成；全部完成后返回独立快照，任一缺失时返回空列表，调用方负责先准备再发放。 */
+    public List<ItemStack> createBatch(String reference, int amount, Player player) {
+        if (amount < 1) throw new IllegalArgumentException("Amount must be positive");
+        ItemRef ref = parse(reference);
+        List<ItemStack> result = new ArrayList<ItemStack>();
+        for (int index = 0; index < amount; index++) {
+            ItemStack item;
+            if (ref.vanilla()) item = new ItemStack(Items.resolveMaterial(ref.id()));
+            else {
+                ExternalItemSource source = sources.get(ref.prefix());
+                if (source == null) return Collections.emptyList();
+                item = source.create(ref.id(), player);
+            }
+            if (InventoryItems.isAir(item)) return Collections.emptyList();
+            item = item.clone();
+            item.setAmount(1);
+            result.add(item);
+        }
+        return Collections.unmodifiableList(result);
     }
 
     public Optional<ItemStack> create(ItemRef reference) {

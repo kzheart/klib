@@ -134,10 +134,11 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 
 ## 外部物品系统
 
-`ExternalItems` 用统一的 `prefix:id` 引用生成和识别外部物品。内置四个反射适配器，业务插件不需要在编译期依赖这些插件：
+`ExternalItems` 用统一的 `prefix:id` 引用生成和识别外部物品。内置五个反射适配器，业务插件不需要在编译期依赖这些插件：
 
 | 前缀 | 插件 | ID 形式 | 识别已有物品 |
 | --- | --- | --- | --- |
+| `zap` | ZaphkielPlus | 物品 ID，例如 `zap:heal_potion` | 支持 |
 | `mi` | MMOItems 6.x | `TYPE:ID`，例如 `mi:SWORD:FLAME_BLADE` | 支持 |
 | `ni` | NeigeItems | 物品 ID，例如 `ni:heal_potion` | 支持 |
 | `ia` | ItemsAdder | `namespace:id`，例如 `ia:ruby:gem` | 支持 |
@@ -152,9 +153,9 @@ import me.kzheart.klib.item.ExternalItems;
 
 ExternalItems items = ExternalItems.detect();
 items.report().forEach(state -> logger().info("外部物品：" + state));
-// mi(MMOItems)=AVAILABLE、ni(NeigeItems)=MISSING: 未安装或未启用、mm(MythicMobs)=FAILED: ...
+// zap(ZaphkielPlus)=AVAILABLE、mi(MMOItems)=AVAILABLE、ni(NeigeItems)=MISSING: 未安装或未启用、mm(MythicMobs)=FAILED: ...
 
-ItemStack potion = items.create("ni:heal_potion", 3).orElse(null);
+List<ItemStack> potions = items.createBatch("zap:heal_potion", 3, player);
 Optional<ItemRef> ref = items.identify(player.getInventory().getItemInMainHand());
 boolean isBlade = items.matches("mi:SWORD:FLAME_BLADE", item);
 Predicate<ItemStack> matcher = items.matcher("mi:MATERIAL:SOUL_GEM");   // 预先解析，可重复使用
@@ -167,6 +168,8 @@ ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 It
 - 内置前缀对应的插件未安装时，`create` 返回空、`matches` 返回 `false`，不会抛出异常；`report()` 给出每个前缀的状态与失败原因。
 - 原版引用只匹配**不被任何已注册外部系统识别**的物品，因此 MMOItems 的钻石不会被当作普通钻石扣除。
 - 实例不可变。`with(source)` 返回追加了自定义 `ExternalItemSource` 的新实例；前缀 `minecraft` 保留给原版材质。
+- `create(reference, amount, player)` 传入玩家上下文；`createBatch(reference, amount, player)` 逐件生成，全部准备成功后返回只读列表，任一 ID 缺失返回空列表，生成异常继续传播。调用方先验证容量，再统一发放，并自行限定批量上限。
+- Zap 的 `create(reference, amount, player)` 只接受数量 1，多件必须使用 `createBatch`，避免复制实例 UUID 和随机属性；识别按 Zap 优先，插件停用后现有适配器仍可只读识别身份，停止生成。
 - 生成与识别会调用外部插件，遵守这些插件自身的线程要求，通常应在主线程调用。
 
 接入其他物品系统时实现 `ExternalItemSource`（前缀、插件名、`create(id)`、`identify(item)`），再通过 `with(...)` 注册。

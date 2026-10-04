@@ -52,6 +52,20 @@ final class ServerCommandSync {
         mutations.add(mutation);
         if (mutating) return;
         mutating = true;
+        // Plugin bootstrap may run for a long time before the server consumes this queue.
+        // Start the exclusion lease only when the server can actually process command work.
+        mainQueue.add(new Runnable() {
+            @Override public void run() { beginMutation(); }
+        });
+    }
+
+    private void beginMutation() {
+        if (stopping.getAsBoolean()) {
+            mutations.clear();
+            mutating = false;
+            pending = false;
+            return;
+        }
         try {
             CommandMutationGate.submit(builders, mainQueue, new Runnable() {
                 @Override public void run() {
@@ -72,13 +86,15 @@ final class ServerCommandSync {
                     @Override public void run() {
                         mutations.clear();
                         mutating = false;
+                        pending = false;
                     }
                 });
             });
         } catch (RuntimeException failure) {
             mutations.clear();
             mutating = false;
-            throw failure;
+            pending = false;
+            LOGGER.log(Level.SEVERE, "无法开始安全命令变更", failure);
         }
     }
 

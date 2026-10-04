@@ -21,6 +21,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandException;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginIdentifiableCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.Test;
@@ -237,6 +238,162 @@ class BukkitCommandRegistrarTest {
         assertTrue(command.tabComplete(sender, "live", new String[0]).isEmpty());
         assertFalse(command.testPermissionSilent(sender));
         queue.remove(0).run(); assertTrue(known.isEmpty());
+    }
+
+    @Test
+    void explicitReplaceCapturesACommandInsertedAfterRegistrationWasQueued() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known);
+        BukkitCommandRegistrar registrar = replacing(map, known, "custom", queue);
+        Disposable registration = registrar.register("help", spec("help"), new CommandDispatcher(spec("help")));
+        Command original = inert("help"); original.register(map);
+        known.put("help", original); known.put("bukkit:help", original);
+        queue.remove(0).run();
+        assertFalse(known.get("help") == original); assertSame(original, known.get("bukkit:help"));
+        registration.dispose(); queue.remove(0).run();
+        assertSame(original, known.get("help")); assertSame(original, known.get("bukkit:help"));
+        assertFalse(known.containsKey("custom:help"));
+    }
+
+    @Test
+    void failedReplaceRestoresOriginalAndRemovesPartialOwnedKeys() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known, false);
+        Command original = inert("help"); original.register(map); known.put("help", original); known.put("bukkit:help", original);
+        BukkitCommandRegistrar registrar = replacing(map, known, "custom", queue);
+        registrar.register("help", spec("help"), new CommandDispatcher(spec("help")));
+        assertThrows(IllegalStateException.class, () -> queue.remove(0).run());
+        assertSame(original, known.get("help")); assertSame(original, known.get("bukkit:help"));
+        assertFalse(known.containsKey("custom:help")); assertFalse(map.lastRegistered.isRegistered());
+    }
+
+    @Test
+    void throwingReplaceRollsBackPartialRootAndNamespaceWrites() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        CommandMap map = proxy(CommandMap.class, (instance, method, arguments) -> {
+            if ("register".equals(method.getName())) {
+                Command command = (Command) arguments[1]; command.register((CommandMap) instance);
+                known.put(command.getName(), command); known.put("custom:" + command.getName(), command);
+                throw new IllegalStateException("partial registration failure");
+            }
+            throw new UnsupportedOperationException(method.getName());
+        });
+        Command original = inert("help"); original.register(map); known.put("help", original); known.put("bukkit:help", original);
+        BukkitCommandRegistrar registrar = replacing(map, known, "custom", queue);
+        registrar.register("help", spec("help"), new CommandDispatcher(spec("help")));
+        assertThrows(IllegalStateException.class, () -> queue.remove(0).run());
+        assertEquals(2, known.size()); assertSame(original, known.get("help")); assertSame(original, known.get("bukkit:help"));
+    }
+
+    @Test
+    void laterOwnerIsPreservedWhenTheReplacingBindingCloses() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known);
+        Command original = inert("help"); original.register(map); known.put("help", original);
+        Disposable registration = replacing(map, known, "custom", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run();
+        Command later = inert("later"); later.register(map); known.put("help", later);
+        registration.dispose(); queue.remove(0).run();
+        assertSame(later, known.get("help")); assertFalse(known.containsKey("custom:help"));
+    }
+
+    @Test
+    void closingAnOlderOwnerBeforeANewerOwnerDoesNotReviveTheClosedCommand() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known);
+        Command original = inert("help"); original.register(map); known.put("help", original); known.put("bukkit:help", original);
+        Disposable first = replacing(map, known, "first", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run(); Command older = known.get("help");
+        Disposable second = replacing(map, known, "second", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run(); Command newer = known.get("help");
+        first.dispose(); queue.remove(0).run(); assertSame(newer, known.get("help")); assertFalse(older.isRegistered());
+        second.dispose(); queue.remove(0).run(); assertFalse(known.containsKey("help")); assertSame(original, known.get("bukkit:help"));
+    }
+
+    @Test
+    void aliasesAreIndependentBareBindingsAndCancelledPendingReplaceLeavesTheOriginalUntouched() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known);
+        Command original = inert("help"); original.register(map); known.put("help", original); known.put("帮助", original);
+        BukkitCommandRegistrar registrar = replacing(map, known, "custom", queue);
+        Disposable root = registrar.register("help", spec("help"), new CommandDispatcher(spec("help")));
+        Disposable alias = registrar.register("帮助", spec("帮助"), new CommandDispatcher(spec("帮助")));
+        for (Runnable task : new ArrayList<Runnable>(queue)) task.run(); queue.clear();
+        assertFalse(known.get("help") == original); assertFalse(known.get("帮助") == original);
+        root.dispose(); alias.dispose(); for (Runnable task : queue) task.run(); queue.clear();
+        assertSame(original, known.get("help")); assertSame(original, known.get("帮助"));
+        Disposable pending = registrar.register("help", spec("help"), new CommandDispatcher(spec("help"))); pending.dispose();
+        for (Runnable task : queue) task.run(); assertSame(original, known.get("help"));
+    }
+
+    @Test
+    void explicitReplaceDoesNotCaptureNamespacedLabels() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known, false);
+        Command original = inert("qualified"); original.register(map); known.put("foreign:entry", original);
+        replacing(map, known, "custom", queue).register("foreign:entry", spec("foreign:entry"), new CommandDispatcher(spec("foreign:entry")));
+        assertThrows(IllegalStateException.class, () -> queue.remove(0).run());
+        assertSame(original, known.get("foreign:entry")); assertEquals(1, known.size());
+    }
+
+    @Test
+    void restoreSkipsARegisteredCommandWhosePluginWasDisabled() {
+        Map<String, Command> known = new HashMap<String, Command>(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known); AtomicBoolean enabled = new AtomicBoolean(true);
+        Plugin owner = proxy(Plugin.class, (instance, method, arguments) -> {
+            if ("isEnabled".equals(method.getName())) return enabled.get();
+            throw new UnsupportedOperationException(method.getName());
+        });
+        Command original = new OwnedCommand("help", owner); original.register(map); known.put("help", original);
+        Disposable registration = replacing(map, known, "custom", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run(); enabled.set(false); assertTrue(original.isRegistered());
+        registration.dispose(); queue.remove(0).run(); assertFalse(known.containsKey("help"));
+    }
+
+    private static final class OwnedCommand extends Command implements PluginIdentifiableCommand {
+        private final Plugin plugin;
+        private OwnedCommand(String name, Plugin plugin) { super(name); this.plugin = plugin; }
+        @Override public Plugin getPlugin() { return plugin; }
+        @Override public boolean execute(CommandSender sender, String label, String[] args) { return true; }
+    }
+
+    @Test
+    void forwardingHashMapFacadeDeletesActualNodesAndRestoresWithoutUsingInheritedPutIfAbsent() {
+        ForwardingCommands known = new ForwardingCommands(); List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap map = new FakeCommandMap(known);
+        Command original = inert("help"); original.register(map); known.put("help", original); known.put("bukkit:help", original);
+        Disposable registration = replacing(map, known, "custom", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run(); assertFalse(known.actual.get("help") == original); assertTrue(known.actual.containsKey("custom:help"));
+        registration.dispose(); queue.remove(0).run();
+        assertSame(original, known.actual.get("help")); assertSame(original, known.actual.get("bukkit:help"));
+        assertFalse(known.actual.containsKey("custom:help")); assertEquals(2, known.actual.size());
+        Command later = inert("later"); later.register(map);
+        Disposable second = replacing(map, known, "custom", queue).register("help", spec("help"), new CommandDispatcher(spec("help")));
+        queue.remove(0).run(); known.put("help", later); second.dispose(); queue.remove(0).run();
+        assertSame(later, known.actual.get("help")); assertFalse(known.actual.containsKey("custom:help"));
+    }
+
+    /** Mirrors a Paper-style facade: visible nodes live elsewhere; HashMap's optimized methods do not delegate. */
+    private static final class ForwardingCommands extends HashMap<String, Command> {
+        private static final long serialVersionUID = 1L;
+        private final transient Map<String, Command> actual = new HashMap<String, Command>();
+        @Override public Command get(Object key) { return actual.get(key); }
+        @Override public boolean containsKey(Object key) { return actual.containsKey(key); }
+        @Override public Command put(String key, Command command) { return actual.put(key, command); }
+        @Override public Command remove(Object key) { return actual.remove(key); }
+        @Override public Set<Entry<String, Command>> entrySet() { return Collections.unmodifiableMap(actual).entrySet(); }
+    }
+
+    private static BukkitCommandRegistrar replacing(CommandMap map, Map<String, Command> known, String prefix, List<Runnable> queue) {
+        return new BukkitCommandRegistrar(map, known, prefix, () -> {}, queue::add, CommandRegistrationPolicy.REPLACE_UNQUALIFIED);
+    }
+    private static CommandSpecImpl spec(String name) {
+        CommandSpecImpl spec = CommandSpecImpl.command(name); spec.executes(context -> {}); return spec;
+    }
+    private static Command inert(String name) {
+        return new Command(name) {
+            @Override public boolean execute(CommandSender sender, String label, String[] args) { return true; }
+        };
     }
 
     @Test

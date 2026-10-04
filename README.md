@@ -7,6 +7,8 @@ Klib 是面向 Bukkit/Paper 插件的 Java 8 模块化基础库，提供生命�
 [kzheart/klib-gradle-plugin](https://github.com/kzheart/klib-gradle-plugin) 独立维护；Guard runtime、
 Native、Collector 和生产部署配置不在本仓库中。
 
+注解命令可通过 `@Command(value = "mail", help = true)` 自动安装 `help [page]`，按权限与玩家限制过滤，并使用 `@Description` 显示用途；别名共享帮助，已有显式 `help` 路由保留，根命令的 GUI 行为不变。
+
 ## 最小接入
 
 版本记录见 [CHANGELOG.md](CHANGELOG.md)，下文中的 `<...-version>` 填写 Maven Central 上已发布的版本。Java 源码与示例使用显式 import 和简单类名；嵌套类型使用 Outer.Inner。

@@ -1,5 +1,7 @@
 # 组件与注解 API
 
+注解命令可通过 `@Command(value = "mail", help = true)` 自动安装 `help [page]`，按权限与玩家限制过滤，并使用 `@Description` 显示用途；别名共享帮助，已有显式 `help` 路由保留，根命令的 GUI 行为不变。
+
 
 ## 默认作用域
 

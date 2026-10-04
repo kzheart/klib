@@ -28,6 +28,7 @@ public final class AnnotatedCommands {
             Map<String, CommandSpecImpl> roots = new LinkedHashMap<String, CommandSpecImpl>();
             Map<CommandNode, String> signatures = new IdentityHashMap<CommandNode, String>();
             Map<String, String> names = new LinkedHashMap<String, String>();
+            Set<String> helpRoots = new LinkedHashSet<String>();
             for (Object entry : handlers) {
                 Objects.requireNonNull(entry, "handler");
                 MountedCommand mount = entry instanceof MountedCommand ? (MountedCommand) entry : null;
@@ -35,6 +36,7 @@ public final class AnnotatedCommands {
                 Command command = target.getClass().getAnnotation(Command.class);
                 if (mount == null && command == null) throw new IllegalArgumentException(target.getClass().getName() + ": missing @Command");
                 String canonical = word(mount == null ? command.value() : mount.command());
+                if (mount == null && command.help()) helpRoots.add(canonical);
                 Set<String> labels = new LinkedHashSet<String>();
                 labels.add(canonical);
                 List<String> prefixes = new ArrayList<String>();
@@ -97,6 +99,14 @@ public final class AnnotatedCommands {
                     }
                 }
                 if (!found) throw new IllegalArgumentException(target.getClass().getName() + ": no @Route methods");
+            }
+            for (String name : helpRoots) {
+                CommandSpecImpl spec = roots.get(name);
+                boolean declared = false;
+                for (CommandNode childNode : spec.root().children) {
+                    if ("help".equals(childNode.literal)) declared = true;
+                }
+                if (!declared) CommandBuiltins.create().install(spec);
             }
             for (CommandSpecImpl spec : roots.values()) setVisibility(spec.root());
             for (Map.Entry<String, String> entry : names.entrySet()) {
@@ -253,7 +263,7 @@ public final class AnnotatedCommands {
         node.playerOnly = node.handler == null || node.handlerPlayerOnly;
         for (CommandNode child : node.children) node.playerOnly &= child.playerOnly;
         node.branchAccess = sender -> {
-            if (node.handlerAccess != null && node.handlerAccess.test(sender)) return true;
+            if (node.handler != null && (node.handlerAccess == null || node.handlerAccess.test(sender))) return true;
             for (CommandNode child : node.children) if (child.branchAccess.test(sender)) return true;
             return false;
         };

@@ -35,6 +35,46 @@ class AnnotatedCommandsTest {
             fixture.registered.get("邮箱").execute(allowed,new String[]{"领取"});assertEquals("claimed",routes.value);
         }
     }
+    @Command(value = "demo", aliases = {"mail"}, help = true)
+    public static class HelpRoutes {
+        int opens;
+        @Route({"", "open"}) @Permission("mail.use") @Description("打开邮箱")
+        public void open(Player player) { opens++; }
+        @Route("admin") @Permission("mail.admin") @Description("管理邮件")
+        public void admin(CommandSender sender) { }
+    }
+    @Command(value = "demo", help = true)
+    public static class CustomHelp {
+        int calls;
+        @Route("help") public void help(CommandSender sender) { calls++; }
+    }
+    @Test void generatedHelpPreservesGuiAndFiltersPermissionsAcrossAliases() {
+        try (Fixture fixture = new Fixture()) {
+            HelpRoutes routes = new HelpRoutes();
+            fixture.register(routes);
+            TestSenders.SenderFixture player = TestSenders.player("p", "mail.use");
+            fixture.registered.get("mail").execute(player.sender(), new String[0]);
+            assertEquals(1, routes.opens);
+            fixture.registered.get("mail").execute(player.sender(), new String[]{"help"});
+            String output = String.join("\n", player.messages());
+            assertTrue(output.contains("打开邮箱"));
+            assertFalse(output.contains("管理邮件"));
+            assertEquals(1, routes.opens);
+            TestSenders.SenderFixture console = TestSenders.console();
+            assertEquals(CommandResult.Status.SUCCESS,
+                    fixture.dispatcher().execute(console.sender(), new String[]{"help", "1"}).status());
+            assertTrue(fixture.dispatcher().complete(console.sender(), new String[]{""}).contains("help"));
+            assertEquals(CommandResult.Status.INVALID_ARGUMENT,
+                    fixture.dispatcher().execute(console.sender(), new String[]{"help", "0"}).status());
+        }
+    }
+    @Test void generatedHelpDoesNotReplaceExplicitHelp() {
+        try (Fixture fixture = new Fixture()) {
+            CustomHelp custom = new CustomHelp(); fixture.register(custom);
+            fixture.dispatcher().execute(TestSenders.console().sender(), new String[]{"help"});
+            assertEquals(1, custom.calls);
+        }
+    }
     static class Fixture implements AutoCloseable {
         final ScopeImpl scope = new ScopeImpl("commands");
         final Map<String, CommandDispatcher> registered = new LinkedHashMap<String, CommandDispatcher>();

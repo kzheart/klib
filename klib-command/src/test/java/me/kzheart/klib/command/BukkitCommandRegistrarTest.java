@@ -206,6 +206,40 @@ class BukkitCommandRegistrarTest {
     }
 
     @Test
+    void closeCancelsAnUnfinishedRegistration() {
+        Map<String, Command> known = new HashMap<String, Command>();
+        List<Runnable> queue = new ArrayList<Runnable>();
+        FakeCommandMap commands = new FakeCommandMap(known);
+        BukkitCommandRegistrar registrar = new BukkitCommandRegistrar(commands, known, "test", () -> {}, queue::add);
+        CommandSpecImpl spec = CommandSpecImpl.command("pending"); spec.executes(context -> {});
+        Disposable registration = registrar.register("pending", spec, new CommandDispatcher(spec));
+        assertTrue(known.isEmpty()); registration.dispose();
+        for (Runnable task : queue) task.run();
+        assertTrue(known.isEmpty()); assertEquals(null, commands.lastRegistered);
+    }
+
+    @Test
+    void closingImmediatelyRejectsExecutionCompletionAndPermissionBeforeQueuedRemoval() {
+        Map<String, Command> known = new HashMap<String, Command>();
+        List<Runnable> queue = new ArrayList<Runnable>(); AtomicInteger calls = new AtomicInteger();
+        FakeCommandMap commands = new FakeCommandMap(known);
+        BukkitCommandRegistrar registrar = new BukkitCommandRegistrar(commands, known, "test", () -> {}, queue::add);
+        CommandSpecImpl spec = CommandSpecImpl.command("live"); spec.executes(context -> calls.incrementAndGet());
+        Disposable registration = registrar.register("live", spec, new CommandDispatcher(spec));
+        queue.remove(0).run(); Command command = known.get("live");
+        CommandSender sender = proxy(CommandSender.class, (instance, method, arguments) -> {
+            if ("hasPermission".equals(method.getName())) return true;
+            return null;
+        });
+        assertTrue(command.execute(sender, "live", new String[0])); assertEquals(1, calls.get());
+        registration.dispose(); assertTrue(known.containsKey("live"));
+        assertFalse(command.execute(sender, "live", new String[0])); assertEquals(1, calls.get());
+        assertTrue(command.tabComplete(sender, "live", new String[0]).isEmpty());
+        assertFalse(command.testPermissionSilent(sender));
+        queue.remove(0).run(); assertTrue(known.isEmpty());
+    }
+
+    @Test
     void offThreadPrimaryActionDoesNotReturnBeforeScheduledWorkCompletes() {
         AtomicBoolean completed = new AtomicBoolean();
         BukkitScheduler scheduler = proxy(BukkitScheduler.class, (instance, method, arguments) -> {

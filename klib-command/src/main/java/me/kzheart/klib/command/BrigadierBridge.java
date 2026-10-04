@@ -29,8 +29,6 @@ public final class BrigadierBridge implements CommandBridge {
 
     interface Registry {
         Disposable register(String name, BrigadierTree tree);
-
-        void refresh();
     }
 
     private final CommandBridge fallback;
@@ -68,8 +66,7 @@ public final class BrigadierBridge implements CommandBridge {
                     duplicate);
             return fallback.register(name, spec, dispatcher);
         }
-        // 分两段 try：fallback 失败必须回滚 brigadier，refresh 失败只降级为警告，
-        // 避免已成功的 CommandMap Disposable 被丢弃造成注册泄漏。
+        // CommandMap 负责唯一的刷新入口；失败时回滚本桥的投影注册。
         final Disposable commandMap;
         try {
             commandMap = fallback.register(name, spec, dispatcher);
@@ -77,7 +74,6 @@ public final class BrigadierBridge implements CommandBridge {
             brigadier.dispose();
             throw failure;
         }
-        refreshQuietly();
         return new Disposable() {
             private boolean disposed;
 
@@ -89,17 +85,8 @@ public final class BrigadierBridge implements CommandBridge {
                 disposed = true;
                 brigadier.dispose();
                 commandMap.dispose();
-                refreshQuietly();
-            }
+                    }
         };
-    }
-
-    private void refreshQuietly() {
-        try {
-            registry.refresh();
-        } catch (RuntimeException failure) {
-            LOGGER.log(Level.WARNING, "刷新客户端命令树失败", failure);
-        }
     }
 
     private static final class PaperRegistry implements Registry, EventExecutor {
@@ -194,11 +181,6 @@ public final class BrigadierBridge implements CommandBridge {
                 HandlerList.unregisterAll(listener);
                 listening = false;
             }
-        }
-
-        @Override
-        public void refresh() {
-            ServerCommandSync.trySyncCommands();
         }
 
         @Override

@@ -44,40 +44,8 @@ class BrigadierUnregisterOnRebuildTest {
 
         assertEquals(1, commandMapActive.get());
         assertEquals(1, registry.active.size());
-        assertEquals(3, registry.refreshes.get());
 
         scope.close();
-        assertEquals(0, commandMapActive.get());
-        assertEquals(0, registry.active.size());
-        assertEquals(4, registry.refreshes.get());
-    }
-
-    @Test
-    void refreshFailureDoesNotLeakCommandMapRegistration() {
-        AtomicInteger commandMapActive = new AtomicInteger();
-        CommandBridge commandMap = (name, spec, dispatcher) -> {
-            commandMapActive.incrementAndGet();
-            return commandMapActive::decrementAndGet;
-        };
-        RecordingRegistry registry = new RecordingRegistry() {
-            @Override
-            public void refresh() {
-                super.refresh();
-                throw new IllegalStateException("sync failed");
-            }
-        };
-        BrigadierBridge bridge = new BrigadierBridge(commandMap, registry);
-        CommandSpecImpl spec = CommandSpecImpl.command("demo");
-        spec.executes(context -> {
-        });
-
-        Disposable registration = bridge.register("demo", spec, new CommandDispatcher(spec));
-
-        // refresh 抛异常不再导致注册泄漏，两侧均成功注册
-        assertEquals(1, commandMapActive.get());
-        assertEquals(1, registry.active.size());
-
-        registration.dispose();
         assertEquals(0, commandMapActive.get());
         assertEquals(0, registry.active.size());
     }
@@ -117,7 +85,6 @@ class BrigadierUnregisterOnRebuildTest {
 
     private static class RecordingRegistry implements BrigadierBridge.Registry {
         final Map<String, BrigadierTree> active = new HashMap<String, BrigadierTree>();
-        final AtomicInteger refreshes = new AtomicInteger();
 
         @Override
         public Disposable register(final String name, BrigadierTree tree) {
@@ -125,9 +92,5 @@ class BrigadierUnregisterOnRebuildTest {
             return () -> active.remove(name);
         }
 
-        @Override
-        public void refresh() {
-            refreshes.incrementAndGet();
-        }
     }
 }

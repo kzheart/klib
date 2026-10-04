@@ -16,20 +16,26 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public final class BukkitCommandRegistrar implements CommandBridge {
+    private static final Logger LOGGER = Logger.getLogger(BukkitCommandRegistrar.class.getName());
     private static final long MAIN_THREAD_TIMEOUT_SECONDS = 30L;
     private static final Runnable DEFAULT_CLIENT_SYNC = new Runnable() {
         @Override
         public void run() {
-            ServerCommandSync.trySyncCommands();
+            ServerCommandSync.requestSyncCommands();
         }
     };
 
@@ -37,6 +43,7 @@ public final class BukkitCommandRegistrar implements CommandBridge {
     private final Map<String, Command> knownCommands;
     private final String fallbackPrefix;
     private final Runnable clientSync;
+    private final Consumer<Runnable> mutations;
 
     public BukkitCommandRegistrar(
             CommandMap commandMap,
@@ -53,6 +60,11 @@ public final class BukkitCommandRegistrar implements CommandBridge {
             String fallbackPrefix,
             Runnable clientSync
     ) {
+        this(commandMap, knownCommands, fallbackPrefix, clientSync, ServerCommandSync::mutate);
+    }
+
+    BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands, String fallbackPrefix,
+                           Runnable clientSync, Consumer<Runnable> mutations) {
         if (commandMap == null) {
             throw new NullPointerException("commandMap");
         }
@@ -69,6 +81,7 @@ public final class BukkitCommandRegistrar implements CommandBridge {
         this.knownCommands = knownCommands;
         this.fallbackPrefix = fallbackPrefix.trim().toLowerCase(Locale.ROOT);
         this.clientSync = clientSync;
+        this.mutations = Objects.requireNonNull(mutations, "mutations");
     }
 
     public static CommandBridge discover(String fallbackPrefix) {
@@ -129,17 +142,28 @@ public final class BukkitCommandRegistrar implements CommandBridge {
             }
             command.setUsage("/" + name);
         }
-        boolean registered = commandMap.register(fallbackPrefix, command);
-        if (!registered) {
-            command.unregister(commandMap);
-            removeByIdentity(knownCommands, command);
-            throw new IllegalStateException(
-                    "Bukkit rejected command registration: " + name
-                            + " (namespaced fallback was rolled back)");
-        }
-        // 注册后刷新客户端命令树，与注销路径对称；Spigot 等无 syncCommands 的服务端静默降级。
-        clientSync.run();
-        return new BukkitRegistration(commandMap, knownCommands, command, clientSync);
+        final BukkitRegistration registration = new BukkitRegistration(commandMap, knownCommands, command, clientSync, mutations);
+        command.active = false;
+        mutations.accept(new Runnable() {
+            @Override public String toString() { return "register " + fallbackPrefix + ":" + name; }
+            @Override public void run() {
+                if (registration.disposed) return;
+                if (!commandMap.register(fallbackPrefix, command)) {
+                    command.unregister(commandMap);
+                    removeByIdentity(knownCommands, command);
+                    throw new IllegalStateException("Bukkit rejected command registration: " + name
+                        + " (namespaced fallback was rolled back)");
+                }
+                command.active = true;
+                syncQuietly(clientSync);
+            }
+        });
+        return registration;
+    }
+
+    private static void syncQuietly(Runnable clientSync) {
+        try { clientSync.run(); }
+        catch (RuntimeException failure) { LOGGER.log(Level.WARNING, "命令变更已完成，但客户端命令树刷新失败", failure); }
     }
 
     /** 按引用移除 knownCommands 中指向该命令的所有键。 */
@@ -226,6 +250,11 @@ public final class BukkitCommandRegistrar implements CommandBridge {
 
     private static final class DispatchingCommand extends Command {
         private final CommandDispatcher dispatcher;
+        private volatile boolean active = true;
+
+        @Override public boolean testPermissionSilent(CommandSender sender) {
+            return active && super.testPermissionSilent(sender);
+        }
 
         private DispatchingCommand(String name, CommandDispatcher dispatcher) {
             super(name);
@@ -234,12 +263,14 @@ public final class BukkitCommandRegistrar implements CommandBridge {
 
         @Override
         public boolean execute(CommandSender sender, String commandLabel, String[] args) {
+            if (!active) return false;
             dispatcher.execute(sender, args);
             return true;
         }
 
         @Override
         public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
+            if (!active) return Collections.emptyList();
             return dispatcher.complete(sender, args);
         }
     }
@@ -249,18 +280,20 @@ public final class BukkitCommandRegistrar implements CommandBridge {
         private final Map<String, Command> knownCommands;
         private final Command command;
         private final Runnable clientSync;
-        private boolean disposed;
+        private final Consumer<Runnable> mutations;
+        private volatile boolean disposed;
 
         private BukkitRegistration(
                 CommandMap commandMap,
                 Map<String, Command> knownCommands,
                 Command command,
-                Runnable clientSync
+                Runnable clientSync, Consumer<Runnable> mutations
         ) {
             this.commandMap = commandMap;
             this.knownCommands = knownCommands;
             this.command = command;
             this.clientSync = clientSync;
+            this.mutations = mutations;
         }
 
         @Override
@@ -268,13 +301,19 @@ public final class BukkitCommandRegistrar implements CommandBridge {
             if (disposed) {
                 return;
             }
+            disposed = true;
+            ((DispatchingCommand) command).active = false;
             runOnPrimaryThread(new Runnable() {
                 @Override
                 public void run() {
-                    command.unregister(commandMap);
-                    removeByIdentity(knownCommands, command);
-                    // 注销后刷新客户端命令树（Paper syncCommands 可用时）。
-                    clientSync.run();
+                    mutations.accept(new Runnable() {
+                        @Override public String toString() { return "unregister " + command.getName(); }
+                        @Override public void run() {
+                            command.unregister(commandMap);
+                            removeByIdentity(knownCommands, command);
+                            syncQuietly(clientSync);
+                        }
+                    });
                 }
             });
             disposed = true;

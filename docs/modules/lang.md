@@ -236,7 +236,7 @@ LangRuntime lang = LangModule.install(
 
 CommandModule.install(
         root,
-        BukkitCommandRegistrar.discover("myplugin"),
+        BukkitCommandRegistrar.discover(this, "myplugin"),
         lang.pipeline());
 ```
 

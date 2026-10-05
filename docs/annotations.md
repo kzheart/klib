@@ -23,7 +23,7 @@ public final class ExamplePlugin extends KPlugin {
 
 `commands()`、`configs()`、`events()`、`tasks()`、`components()` 绑定当前插件实例的生命周期。
 没有全局当前 Scope、线程变量、类路径扫描或自动依赖注入。依赖通过构造器传入。
-`context()` 在 setup 期间可用，插件构造阶段不可用；重建后需重新构造依赖对象，不能继续使用旧服务入口。
+`context()` 在 setup 期间可用，插件构造阶段不可用；业务资源重建后需重新构造依赖对象，不能继续使用旧服务入口。命令只在启动时声明，配置重载不重建含命令的根作用域或组件。
 现有 `setup(Scope)` 仍可用；新代码选择无参 setup，不要同时覆盖两种入口。
 高级集成可通过 `context().scope()` 访问底层 Scope。
 
@@ -54,12 +54,14 @@ feature.close();
 先检查生命周期方法签名，再 attach 上下文、调用 `@OnStart`，最后执行 setup。
 关闭时先逆序释放 setup 中的注册资源，再调用 `@OnStop`；初始化中途失败也走同样的清理路径。
 `@OnStop` 必须能处理只初始化了一部分的状态。每类最多一个有效 `@OnStart` 和一个 `@OnStop`，均为 public、非 static、无参 void。
-同一个 KComponent 实例不能重复安装；重新开启功能应创建新实例。普通对象也可仅通过生命周期注解安装，不必继承 KComponent。
-组件不会自动扫描、注册字段里的对象；命令、事件和任务仍在 setup 中显式注册一次。
+同一个 KComponent 实例不能重复安装；重新开启不含命令声明的业务组件应创建新实例。含命令的组件必须在插件启动时安装，其关闭只保证命令立即逻辑停用，不支持通过运行时重新安装组件恢复命令。普通对象也可仅通过生命周期注解安装，不必继承 KComponent。
+组件不会自动扫描、注册字段里的对象；命令、事件和任务仍在 setup 中显式注册一次。可随配置重建的事件、任务等业务资源应与启动时声明的命令分开管理。
 
 ## 命令
 
 注解包为 `me.kzheart.klib.command.annotation`。`@Command` 与 Bukkit 的 Command 同名，建议显式 import。
+
+根名、别名与路由在启动时一次声明。配置重载只更新处理器读取的配置、语言和业务状态；作用域关闭立即停用执行、补全和权限检查，物理节点可能保留到服务端生命周期重建或重启。同一插件不得将相同标签交给 Klib 与其他注册器共同管理，完整规则见 [Command 模块](modules/command.md#启动注册配置重载与逻辑停用)。
 
 ```java
 @Command(value = "dungeonbridge", aliases = {"dbe"}, help = true)
@@ -102,7 +104,7 @@ public final class DungeonCommands {
 - 同根命令的多个处理类必须放在同一次 `register(playerCommands, adminCommands)` 中；所有别名共享合并后的完整树。
 - `MountedCommand.of("main", questCommands, "quest", "q")` 把一个处理类的全部路由再挂到 `/main quest ...` 与 `/main q ...` 下，处理类自身的根命令照常注册（同一实例同时传入即可）；子命令可写多级，如 `"quest data"`。挂载忽略处理类的 `@Command` 名称、别名与类级 `@Description`，权限、Check 与补全照常生效；挂载项须与目标根的处理类放在同一次 `register(...)` 中，不支持嵌套挂载。
 - 共享参数路径必须保持名称、类型和补全声明一致；绑定到不同对象的补全器不能占用同一个共享参数节点。
-- 注册前校验整个批次；重复路由、缺失参数、未知补全器、错误签名会在触碰 Bukkit 前失败。注册桥接中途失败会回滚已注册的命令和别名。
+- 注册前校验整个批次；重复路由、缺失参数、未知补全器、错误签名会在触碰 Bukkit 前失败。注册桥接中途失败会逻辑关闭本批次已成功绑定的命令和别名，不保证物理节点立即清理或恢复原标签。旧 Bukkit 启动注册中，单个尚未成功的注册尝试会清理自己的部分写入。
 - 所有声明方法须 public、非 static。路由须返回 void；继承方法按正常 Java override 规则处理，不隐式继承父类方法注解。
 - `CommandRejectedException` 是可直接展示的业务拒绝；其他异常仍由命令错误边界记录并提示内部错误。
 - 权限用于服务端执行、帮助、Tab 补全和可用的 Brigadier 客户端树；补全不代替业务对象授权。
@@ -131,7 +133,7 @@ public void reviews(CommandCall call) {
 两种回调均回到主线程，注册所属功能关闭后不再执行。reply 对已离线玩家不发送消息。
 这不会撤销已提交的数据库事务，也不会强行终止外部 CompletionStage。
 
-动态命令也可平铺声明。`route` 返回路径末尾节点，单参数版本 `argument` 返回追加的参数节点：
+启动时构建的程序化命令也可平铺声明。`route` 返回路径末尾节点，单参数版本 `argument` 返回追加的参数节点：
 
 ```java
 Arg<String> token = Arguments.string("token");

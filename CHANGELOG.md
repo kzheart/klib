@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.12.0 - 2026-10-05
+
+- Command 改为启动声明模型：支持公开命令生命周期 API 的 Paper 通过 `JavaPlugin.onEnable` 中的 `LifecycleEvents.COMMANDS` 安装 `BasicCommand` 原始参数入口；无该 API 的 Bukkit/Paper 保留启动期 `CommandMap` 注册。通过宿主能力发现保持公共 Java 8 制品，不引入 Java 21 硬依赖。
+- 删除依赖 NMS `COMMAND_SENDING_POOL`、`processQueue` 的协调机制及 `CommandMutationGate`、`ServerCommandSync`。配置重载不重建命令；作用域关闭立即停用执行、补全和权限检查，物理节点可能保留到服务端生命周期重建或重启，不再承诺运行时新增根或即时物理注销。
+- 默认冲突策略仍为 `REJECT`；显式 `REPLACE_UNQUALIFIED` 仅接管裸标签，不覆盖其他插件命名空间，关闭后不承诺恢复原绑定。现代 Paper 使用实际插件名的命名空间，`discover` 前缀仅用于旧 Bukkit 注册路径；同一插件不得混用其他注册器管理相同标签。
+- 新增显式宿主的 `BukkitCommandRegistrar.discover(plugin, prefix[, policy])`；`CommandModule.install(plugin)` 直接使用已知宿主，不依赖 Klib 与插件共享 ClassLoader。
+- Brigadier 仅在 `AsyncPlayerSendCommandsEvent` 的同步回调中修改玩家树副本，并逐节点过滤权限。原始参数服务端分发保留中文标签、含冒号参数、本地化错误和大小写不敏感的 literal 匹配。
+- Core 的 `Scope.syncExecutor()` 复用同步任务句柄，作用域关闭会取消尚在排队的回调；保持原有同步排队顺序，不增加额外 tick 延迟。
+
 ## 0.11.4 - 2026-10-05
 
 - Item 新增 ZaphkielPlus 通用适配器，以 `zap:ID` 生成、识别物品；通过实际插件对象取得公共服务，停用期间保留只读身份识别。

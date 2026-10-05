@@ -6,13 +6,13 @@
 模块名：`command`
 制品：`me.kzheart.klib:klib-command`
 
-`klib-command` 用类型化树描述 Bukkit 命令，统一完成参数解析、补全、权限、玩家限制、帮助、错误定位和作用域注销。在支持的服务端上，它还会尽力同步 Brigadier 客户端命令树。
+`klib-command` 用类型化树描述 Bukkit 命令，统一完成参数解析、补全、权限、玩家限制、帮助、错误定位和作用域关闭后的逻辑停用。命令在插件启动时声明；支持公开命令生命周期 API 的 Paper 使用该 API 安装执行入口，并在发送客户端命令树时按玩家权限生成 Brigadier 展示树。
 
 ## 注解与平铺声明
 
 `commands().register(new PlayerCommands(), new AdminCommands())` 将 `@Command`、`@Route` 方法编译为同一套命令树。
 支持参数注入、Permission、Check、Greedy、带前置参数上下文的 Suggest/Suggestions，以及 CommandCall.await 主线程回调。
-同根的处理器在一次调用中合并，别名共享完整命令树；`MountedCommand.of(根命令, 处理器, 子命令, 别名...)` 可把已有处理器的全部路由再挂到另一根命令的子命令下。注册失败回滚，命令随功能关闭注销。
+同根的处理器在一次调用中合并，别名共享完整命令树；`MountedCommand.of(根命令, 处理器, 子命令, 别名...)` 可把已有处理器的全部路由再挂到另一根命令的子命令下。所有声明在启动阶段完成，失败绑定不启用，命令随所属作用域关闭立即逻辑停用；物理节点不保证同时消失。
 
 程序化声明可使用 `root.route("action start").argument(token).executes(handler)`，无需按层嵌套 lambda。
 领域参数解析用 `Arguments.contextual`；原有 Arguments.custom 保持两参数补全器语义。
@@ -25,7 +25,7 @@
 - 不想手工拆分 `String[] args`；
 - 需要整数范围、枚举、在线玩家、可选值或贪婪文本等类型化参数；
 - 希望补全、帮助和执行共享同一棵命令树；
-- 命令应在插件重载时完整注销并重新注册；
+- 希望配置重载后命令读取最新业务状态，而不用重新注册命令；
 - 希望命令错误与业务消息共用 Lang 语言文件。
 
 ## 接入
@@ -54,7 +54,7 @@ dependencies {
 
 ## 快速开始
 
-最常用的写法是注解声明。安装命令能力后，用 `commands().register(...)` 注册处理类：
+最常用的写法是注解声明。在 `KPlugin.setup()` 中安装命令能力，再用 `commands().register(...)` 一次声明处理类；这个初始化入口由 `JavaPlugin.onEnable` 阶段调用：
 
 ```java
 @Override
@@ -85,10 +85,10 @@ public final class CoinCommands {
 }
 ```
 
-`CommandModule.install(this)` 按插件名发现 `plugin.yml` 中的命令并使用默认命令消息。注解的完整规则见
+`CommandModule.install(this)` 发现当前服务端支持的注册方式，并使用默认命令消息；命令来自代码声明，不需要在 `plugin.yml` 重复声明相同标签。注解的完整规则见
 [组件与注解](../annotations.md)。
 
-需要让命令错误与帮助复用语言文件，或在运行时动态构建命令树时，先安装语言能力，再通过 `Scope.command` 注册：
+需要让命令错误与帮助复用语言文件，或在启动时以程序化方式构建命令树时，先安装语言能力，再通过 `Scope.command` 声明：
 
 ```java
 @Override
@@ -104,7 +104,7 @@ protected void setup() {
 
     CommandModule.install(
             root,
-            BukkitCommandRegistrar.discover("myplugin"),
+            BukkitCommandRegistrar.discover(this, "myplugin"),
             lang.pipeline());
 
     Arg<Player> target = Arguments.player("target");
@@ -143,7 +143,7 @@ Optional<Object> raw = context.find("amount");
 
 按实例读取仍是推荐写法，它在编译期就带上类型；按名读取用于跨类传递和包装参数场景。
 
-`BukkitCommandRegistrar.discover("myplugin")` 的参数是 Bukkit 命令冲突时使用的命名空间前缀，建议使用插件 ID 的小写稳定形式。
+`BukkitCommandRegistrar.discover(this, "myplugin")` 显式传入所属插件，避免依赖库与宿主共享 ClassLoader；`CommandModule.install(this)` 已自动使用这个入口。省略插件参数的 `discover(prefix)` 仅用于 Klib 已打包在所属插件 ClassLoader 内的情况。字符串参数是旧 Bukkit 注册路径使用的命名空间前缀，建议使用插件 ID 的小写稳定形式。支持公开生命周期 API 的 Paper 使用实际插件名对应的命名空间，这个参数不会替换 Paper 的插件命名空间。
 
 ## 构建命令树
 
@@ -312,14 +312,14 @@ CommandBuiltins.standardAsync(
 ```java
 CommandModule.install(
         root,
-        BukkitCommandRegistrar.discover("myplugin"),
+        BukkitCommandRegistrar.discover(this, "myplugin"),
         lang.pipeline());
 ```
 
 不需要自定义语言时，可以使用简化安装：
 
 ```java
-CommandModule.install(root, BukkitCommandRegistrar.discover("myplugin"));
+CommandModule.install(root, BukkitCommandRegistrar.discover(this, "myplugin"));
 ```
 
 此形式使用内置消息、在线玩家解析器和 Spigot 富文本输出。高级适配场景可以传入自己的 `PlayerResolver`、`RichTextSink` 与 `CommandMessages`。
@@ -330,51 +330,58 @@ CommandModule.install(root, BukkitCommandRegistrar.discover("myplugin"));
 异常类型，不记录发送者、命令参数或玩家身份。需要把命令状态附到 Remote Incident 时，由开发者显式注册
 `new KlibDiagnosticContributor(dispatcher)`；Command 模块本身不依赖 Remote，也不会自动上传数据。
 
-## 注册、重载与注销
+## 启动注册、配置重载与逻辑停用
 
-模块在支持的 Paper 服务端上合并刷新客户端命令树，在线玩家无需重新登录即可获得补全；同一次主线程处理中的多个变更只排队刷新一次，Brigadier 投影不重复触发刷新。不暴露该能力的服务端保留 Bukkit 执行和 Tab 补全，客户端树在下次登录时生效。
+所有根命令、别名和路由都在插件启动时声明。使用 `KPlugin` 时放在 `setup()`，不要覆盖框架管理的 `onEnable`；使用普通 `JavaPlugin` 的高级集成则在 `onEnable` 中安装和声明。注册入口会按当前服务端能力选择路径：
 
-Paper 的异步命令构建器可能仍持有旧节点及重定向引用。因此动态注册和注销会先异步取得构建器排他窗口，再在服务端主线程队列中按顺序修改 CommandMap；主线程不会等待异步构建器。已排队的注册完成前不可执行，关闭后立即拒绝执行、权限检查与补全，实际节点移除稍后完成；关闭前尚未注册的绑定直接取消。排队注册冲突或变更失败会记录含命令名的错误，不会将失败绑定启用。未暴露异步构建器的平台保留原有基础行为；不支持的异步执行器形态会明确拒绝节点变更。
+- 暴露公开命令生命周期 API 的 Paper：在 `JavaPlugin.onEnable` 阶段通过 `LifecycleEvents.COMMANDS` 安装 `BasicCommand` 原始参数执行入口。服务端决定何时重建和重新发布命令注册，不直接修改正在使用的服务端 Brigadier 树。
+- 没有该 API 的 Bukkit/Paper：保留启动阶段的 `CommandMap` 注册，执行和 Tab 补全交给同一套 Klib 分发器。
 
-排他与刷新使用服务端队列，不依赖调用方插件继续启用。插件启动阶段先登记变更，待服务端实际消费队列时才开始取得构建器排他窗口及超时计时，因此后续插件的启动耗时不会导致正常命令注册过期。全服停止时不再刷新客户端；未消费的排他任务会过期并释放构建器线程，迟到回调不能修改节点。这里只协调本库发起的变更，第三方绕过本库直接修改 Brigadier 的行为仍由其自身负责。
+公开 API 通过宿主能力发现接入，Klib 的公共制品仍保持 Java 8 字节码与 API 边界，不硬依赖 Java 21 或现代 Paper API 类。目标服务端自身需要的 Java 版本由服务端决定。
 
-`Scope.command` 返回的 `CommandRegistration` 归传入作用域持有。作用域关闭或重建时，它会：
+配置重载只更新命令处理器读取的配置、语言和业务状态，不重建命令树，也不通过 `root.rebuild()` 或关闭再创建命令作用域来实现。需要重建监听器、任务或其他业务资源时，将它们放在不含命令声明的独立子作用域；启动时声明的处理器从稳定服务入口读取最新状态。调整根名、别名或路由声明后应重启插件所在服务端。
 
-1. 从 Bukkit `CommandMap` 注销命令；
-2. 按对象身份清理命名空间及别名键；
-3. 在支持的 Paper 服务端上刷新客户端命令树。
+`Scope.command` 返回的 `CommandRegistration` 归传入作用域持有。关闭注册句柄或其作用域会立即禁止该绑定的执行、补全和权限检查；关闭后不会重新启用旧处理器。这个保证是逻辑停用：物理命令节点可能仍留在服务端或玩家已收到的命令树里，直到服务端生命周期重建或重启才消失。Klib 不承诺运行时新增根命令、即时物理注销，也不会为了关闭作用域强制刷新在线玩家的命令树。
 
-因此动态功能应把命令注册在对应子作用域，而不是根作用域：
+仍可用子作用域管理命令的逻辑存活期，但必须在启动时创建并声明：
 
 ```java
-root.scope("arena", arena -> {
+root.scope("arena-commands", arena -> {
     arena.command("arena", command -> configureArenaCommand(command));
 });
 ```
 
-重建作用域后旧绑定先立即停用，实际注销与新树注册按排队顺序完成，不会累积可执行处理器；完成后合并刷新客户端命令树。
+关闭这个作用域会立即停用 `/arena`，不等于支持运行时重新注册它。对于可随配置启停的功能，通常应保留启动时的命令声明，并在业务入口检查功能状态。
+
+### 客户端展示树与服务端执行
+
+Brigadier 集成只在 `AsyncPlayerSendCommandsEvent` 的同步回调中处理事件提供的当前玩家树副本。投影时逐节点检查权限与玩家限制，不修改服务端共享根树，不在异步回调中查询 Bukkit 权限，也不接管 Paper 的内部构建线程或队列。
+
+服务端始终通过原始命令参数调用 Klib 分发器，保留中文命令、含冒号参数（如 `zap:ID`）、本地化错误和大小写不敏感的 literal 匹配。客户端树用于显示用法和补全，不能替代服务端的参数解析与权限校验。关闭作用域后，即使客户端还显示旧节点，执行入口和补全入口也已停用。
 
 ### 显式覆盖未命名空间的标签
 
-默认 `CommandRegistrationPolicy.REJECT` 保留原绑定并拒绝冲突。需要接管已有裸命令时，显式选择公开注册策略：
+默认 `CommandRegistrationPolicy.REJECT` 保留已有绑定并拒绝根名或别名冲突。确实需要在启动时接管已有裸命令时，显式选择公开注册策略：
 
 ```java
 CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
-        getName().toLowerCase(Locale.ROOT), CommandRegistrationPolicy.REPLACE_UNQUALIFIED));
+        this, getName().toLowerCase(Locale.ROOT), CommandRegistrationPolicy.REPLACE_UNQUALIFIED));
 ```
 
-策略在**实际注册发生时**捕获并移除裸标签，不在调用方提前读取或删除命令。声明别名各自作为独立标签注册，同样参与此策略；含命名空间的标签不被捕获，其他插件的命名空间入口保持可用。注册返回失败或抛出异常时，清理本次部分写入并恢复原绑定。关闭时先按身份移除自己的所有键，再仅在标签空缺时通过映射公开写入恢复快照；旧命令已注销、绑定已停用或其声明的所属插件已关闭时不复活，标签已被后来持有者占用时不覆盖。这里不提供多个插件覆盖同名命令的全局栈仲裁。
+`REPLACE_UNQUALIFIED` 只接管不含命名空间的标签，根名和声明的别名各自参与冲突判断；不会覆盖其他插件的 `namespace:label` 入口。现代 Paper 的命名空间仍由实际插件名决定，`discover` 的前缀只用于旧 Bukkit 路径。
 
-捕获、替换、失败回滚及关闭恢复均在同一个安全命令变更窗口执行。调用方不应自行修改 `knownCommands` 或用固定 tick 延时替代这项策略；注册尚未完成就关闭的绑定不会移除原标签。
+关闭替换后的绑定只保证立即逻辑停用，不保证恢复被覆盖的裸标签，也不提供多个插件覆盖同名命令的恢复栈。不要依赖关闭顺序重新交还标签；需要恢复原命令时应移除冲突声明并重启服务端。注册失败不启用失败绑定，但不应把一次注册当成可恢复任意第三方标签的全局事务。
+
+同一插件内不得让 Klib 与其他注册器同时管理相同标签，包括重复的 `plugin.yml` 命令声明。不要直接修改 `knownCommands`、服务端 Brigadier 根树，或用固定 tick 延时模拟运行时替换。
 
 ## 生命周期与线程约束
 
-- Bukkit 命令注册必须在服务器主线程执行；从异步线程调用会失败。
-- 注销立即停用绑定；若从非主线程触发，会等待主线程接受清理操作，实际 Paper 节点清理仍异步排队。无法安全调度时会显式失败，已停用绑定不会恢复执行。
+- 安装与命令声明必须在插件启动阶段的服务器主线程执行；从异步线程调用注册会失败。
+- 注册句柄允许从其他线程关闭；关闭立即逻辑停用绑定，不等待 Paper 构建器，也不保证物理节点立即清理。
 - Bukkit 命令处理器通常运行在主线程。处理器中不要执行数据库、网络或大文件 I/O；使用 `scope.async(...).thenSync(...)`。
 - 异步工作完成后，只有回到主线程才能修改玩家、世界或背包。
 - 自定义 `CompletionStage` 用于内置异步重载时，应确保完成回调能够安全发送 Bukkit 消息；Config 的 `reloadAsync()` 在 `KPlugin` 环境中会在主线程监听器完成后结束。
-- 命令能力、注册与语言管线都必须在所属作用域仍打开时使用。
+- 命令能力、注册与语言管线都必须在所属作用域仍打开时使用；配置重载不重新声明命令。
 
 ## 注意事项
 
@@ -382,8 +389,9 @@ CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
 - `greedyString` 必须位于路径末尾，之后不能添加 literal 或参数。
 - literal 优先于同级参数；具体值与命令词冲突时，应调整树结构避免歧义。
 - 命令模块只解析 Bukkit 交给它的命令 token，不负责 shell 风格引号或转义。
-- Brigadier 集成是发现式增强；即使当前服务端不暴露对应接口，Bukkit 执行和 Tab 补全仍是基础能力。
-- 根命令冲突时 Bukkit 可能只保留命名空间形式；选择稳定且唯一的 fallback prefix。
+- 公开生命周期 API 与 Brigadier 客户端投影按宿主能力发现；缺少生命周期 API 时使用启动期 Bukkit 注册，缺少客户端事件时保留基础执行与 Tab 补全。
+- 默认拒绝根名或别名冲突，不以“只剩命名空间入口”作为注册成功；仅在确实需要接管裸标签时选择 `REPLACE_UNQUALIFIED`。
+- 同一插件的同一个标签只能由一个注册入口管理，不要将 Klib 与 `plugin.yml`、其他命令框架或直接注册器混用。
 
 ## 相关模块
 
@@ -395,5 +403,5 @@ CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
 ## Unicode 命令标签
 
 注解命令根名、别名和字面量支持 Unicode 字母与数字，例如 `@Command(value="mail", aliases={"邮箱"})`
-和 `@Route("领取")`。中文别名与原命令共用权限、补全、客户端命令树与作用域注销，不需要另写转发命令。
+和 `@Route("领取")`。中文别名与原命令共用权限、补全、客户端命令树与作用域逻辑停用，不需要另写转发命令。
 标签仍不得包含空白、参数括号或其他控制符；标点范围为 `_ . : -`。

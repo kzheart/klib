@@ -9,6 +9,8 @@ Native、Collector 和生产部署配置不在本仓库中。
 
 注解命令通过 `@Command(value = "mail", help = true)` 安装自动分页帮助，按权限与玩家限制过滤路由，并使用 `@Description` 显示用途。主命令默认显示帮助、GUI 使用独立子命令的完整声明见 [Command 模块](docs/modules/command.md#自动帮助与主命令入口)。
 
+命令在插件启动时一次声明：支持公开生命周期 API 的 Paper 使用 `LifecycleEvents.COMMANDS` 与 `BasicCommand`，其他 Bukkit/Paper 保留启动期 `CommandMap` 注册。配置重载只更新业务状态；作用域关闭立即停用执行、补全与权限检查，但物理节点可能保留到服务端生命周期重建或重启。公共制品仍保持 Java 8 边界，完整注册与冲突契约见 [Command 模块](docs/modules/command.md#启动注册配置重载与逻辑停用)。
+
 ## 最小接入
 
 版本记录见 [CHANGELOG.md](CHANGELOG.md)，下文中的 `<...-version>` 填写 Maven Central 上已发布的版本。Java 源码与示例使用显式 import 和简单类名；嵌套类型使用 Outer.Inner。
@@ -77,7 +79,7 @@ dependencies {
 | `klib-core` | `KPlugin`、`Scope`、调度、事件、资源释放、冷却与加权随机 |
 | `klib-config` | YAML 配置映射、第三方格式原值树、子节文本与创建、迁移及原子重载 |
 | `klib-lang` | 多语言消息、占位符、富文本与 Paper 宿主 Adventure 适配 |
-| `klib-command` | 类型化命令树、Unicode 别名、权限、建议、内置管理命令、安全合并客户端刷新与显式裸标签覆盖 |
+| `klib-command` | 类型化命令树、Unicode 别名、权限、建议、启动期生命周期注册、按玩家过滤的客户端树与显式裸标签覆盖 |
 | `klib-item` | 物品构建、标签、跨版本编解码与 ZaphkielPlus/MMOItems/NeigeItems/ItemsAdder/MythicMobs 物品适配 |
 | `klib-data` | 存储契约、迁移与玩家数据缓存，不包含存储实现或第三方运行时 |
 | `klib-data-json` | JSON 文件存储；使用宿主提供的 Gson |

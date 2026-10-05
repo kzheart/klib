@@ -10,6 +10,11 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         maven {
+            name = "minecraftLibraries"
+            url = uri("https://libraries.minecraft.net")
+            content { includeGroup("com.mojang") }
+        }
+        maven {
             name = "spigotSnapshots"
             url = uri("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
             content {

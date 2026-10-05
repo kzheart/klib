@@ -368,6 +368,7 @@ project(":klib-command") {
         add("api", project(":klib-core"))
         add("api", project(":klib-lang"))
         add("testImplementation", project(":klib-config"))
+        add("testImplementation", "com.mojang:brigadier:1.3.10")
         val compileSpigot = create(spigotApi.get()) as ModuleDependency
         val testSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false

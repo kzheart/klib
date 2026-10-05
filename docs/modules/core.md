@@ -124,15 +124,22 @@ root.scope("arena", arena -> {
 
 ### 重建插件资源图
 
-`root.rebuild()` 会先逆序释放当前资源，再重新执行创建根作用域时的初始化逻辑。使用 `KPlugin` 时，通常通过 `root::rebuild` 响应配置变化：
+`Scope.rebuild()` 会先逆序释放当前作用域的资源，再重新执行创建它时的初始化逻辑。配置重载通常只更新配置值和业务状态；确实需要重建监听器、任务等资源时，将它们放在不含命令声明的子作用域中：
 
 ```java
-config.onChange(root::rebuild);
+Scope gameplay = root.scope("gameplay", scope -> {
+    ArenaRuntime runtime = scope.install(new ArenaRuntime());
+    scope.on(PlayerJoinEvent.class, event -> runtime.handleJoin(event.getPlayer()));
+    scope.every(Ticks.seconds(1), runtime::tick);
+});
+config.onChange(gameplay::rebuild);
 ```
 
-也可以从插件实例调用 `rebuild()`。它返回是否成功；重建失败时，残留资源会被清理且插件会被禁用，不能继续使用旧资源图。
+命令在插件启动时一次声明，处理器通过稳定的服务入口读取最新配置和业务状态。不要将命令放入上面的可重建子作用域，也不要用 `config.onChange(root::rebuild)` 重建含命令的根资源图。命令作用域关闭只保证立即停用执行、补全与权限检查，不保证物理节点立即消失或支持再次注册；详见 [Command 模块](command.md#启动注册配置重载与逻辑停用)。
 
-所有需要跨重建保留的状态都应放在作用域之外，或者从持久化数据重新构造。不要把已经被旧作用域释放的对象继续缓存到静态字段中。
+对于不含命令的资源图，仍可使用 `root.rebuild()`，也可以从插件实例调用 `rebuild()`。后者返回是否成功；重建失败时，残留资源会被清理且插件会被禁用，不能继续使用旧资源图。
+
+所有需要跨重建保留的状态都应放在被重建的作用域之外，或者从持久化数据重新构造。不要把已经被旧作用域释放的对象继续缓存到静态字段中。
 
 ### 生命周期锁模型
 
@@ -208,6 +215,9 @@ root.sync(() -> player.sendMessage("数据已加载"));
 `klib-data`、`klib-script` 和 `klib-remote` 返回 JDK `CompletionStage`。**它的 `thenApply`、`thenAccept` 等非 `Async` 回调运行在完成该阶段的线程（JDBC、文件 I/O 或诊断线程），不会自动切回主线程**，在其中直接调用 Bukkit API 是典型的崩溃来源。
 
 `Scope.syncExecutor()` 返回投递到主线程的 `Executor`，可直接与 JDK 组合子搭配：
+
+它与 `Scope.sync(...)` 共用作用域任务句柄：提交时已关闭会跳过，提交后、执行前关闭也会取消回调，
+不会在失效作用域上产生副作用。Bukkit 后端保持同步调度器原有的排队顺序，不因这个适配器增加一轮延迟。
 
 ```java
 storage.get("profile", playerId)
@@ -354,7 +364,7 @@ logger().warn("arena", "竞技场配置缺少出生点");
 
 ## 生命周期与线程约束
 
-- `KPlugin.setup`、Bukkit 命令注册以及绝大多数 Bukkit API 操作应在服务器主线程完成。
+- `KPlugin.setup`、Bukkit 命令注册以及绝大多数 Bukkit API 操作应在服务器主线程完成；命令在插件启动时声明，配置重载不重复注册。
 - `after`、`every`、`sync`、`thenSync` 和 `onError` 的回调运行在同步调度器；`async` 的供应器不在主线程。
 - 不要在 `async` 供应器中读写世界、实体、背包等要求主线程的 Bukkit 状态；先完成纯 I/O 或计算，再在 `thenSync` 中应用结果。
 - JDK `CompletionStage` 的 `thenApply`/`thenAccept`/`thenCompose` 等非 `Async` 回调运行在完成该阶段的线程，**不是主线程**；触碰 Bukkit 状态前必须经 `Scope.sync`、`Scope.syncExecutor()` 或 `AsyncTasks` 切回主线程。

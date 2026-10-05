@@ -30,7 +30,7 @@ public final class BukkitSchedulerAdapter implements KScheduler, DiagnosticSourc
             scheduler.runTask(plugin, command);
         }
     };
-    // 对外暴露的同步执行器额外跳过已关闭作用域，避免关闭后的回调继续触碰服务器状态。
+    // 复用 sync 的作用域句柄，关闭时也取消已经排队的回调。
     private final Executor scopedSyncExecutor = new Executor() {
         @Override
         public void execute(Runnable command) {
@@ -38,7 +38,7 @@ public final class BukkitSchedulerAdapter implements KScheduler, DiagnosticSourc
             if (scope.isClosed()) {
                 return;
             }
-            scheduler.runTask(plugin, observed(command));
+            sync(command);
         }
     };
 

@@ -1,101 +1,52 @@
 package me.kzheart.klib.command;
 
-import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.command.api.CommandSpec;
+import me.kzheart.klib.scope.Disposable;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginIdentifiableCommand;
-
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Collections;
-import java.util.Objects;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
-import java.util.logging.Logger;
-import java.util.logging.Level;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.Objects;
 
+/** 启动时声明命令；关闭句柄只停用绑定，不修改服务端正在使用的命令树。 */
 public final class BukkitCommandRegistrar implements CommandBridge {
-    private static final Logger LOGGER = Logger.getLogger(BukkitCommandRegistrar.class.getName());
-    private static final long MAIN_THREAD_TIMEOUT_SECONDS = 30L;
-    private static final Runnable DEFAULT_CLIENT_SYNC = new Runnable() {
-        @Override
-        public void run() {
-            ServerCommandSync.requestSyncCommands();
-        }
-    };
-
     private final CommandMap commandMap;
     private final Map<String, Command> knownCommands;
     private final String fallbackPrefix;
-    private final Runnable clientSync;
-    private final Consumer<Runnable> mutations;
     private final CommandRegistrationPolicy policy;
+    private final Plugin plugin;
 
-    public BukkitCommandRegistrar(
-            CommandMap commandMap,
-            Map<String, Command> knownCommands,
-            String fallbackPrefix
-    ) {
-        this(commandMap, knownCommands, fallbackPrefix, DEFAULT_CLIENT_SYNC);
+    public BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands,
+                                  String fallbackPrefix) {
+        this(commandMap, knownCommands, fallbackPrefix, CommandRegistrationPolicy.REJECT);
     }
 
     public BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands,
                                   String fallbackPrefix, CommandRegistrationPolicy policy) {
-        this(commandMap, knownCommands, fallbackPrefix, DEFAULT_CLIENT_SYNC, ServerCommandSync::mutate, policy);
+        this(commandMap, knownCommands, fallbackPrefix, policy, null);
     }
 
-    /** 注入客户端命令树同步动作，仅供测试观测同步时机。 */
-    BukkitCommandRegistrar(
-            CommandMap commandMap,
-            Map<String, Command> knownCommands,
-            String fallbackPrefix,
-            Runnable clientSync
-    ) {
-        this(commandMap, knownCommands, fallbackPrefix, clientSync, ServerCommandSync::mutate);
-    }
-
-    BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands, String fallbackPrefix,
-                           Runnable clientSync, Consumer<Runnable> mutations) {
-        this(commandMap, knownCommands, fallbackPrefix, clientSync, mutations, CommandRegistrationPolicy.REJECT);
-    }
-
-    BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands, String fallbackPrefix,
-                           Runnable clientSync, Consumer<Runnable> mutations, CommandRegistrationPolicy policy) {
-        if (commandMap == null) {
-            throw new NullPointerException("commandMap");
-        }
-        if (knownCommands == null) {
-            throw new NullPointerException("knownCommands");
-        }
+    private BukkitCommandRegistrar(CommandMap commandMap, Map<String, Command> knownCommands,
+                                   String fallbackPrefix, CommandRegistrationPolicy policy, Plugin plugin) {
+        this.commandMap = Objects.requireNonNull(commandMap, "commandMap");
+        this.knownCommands = Objects.requireNonNull(knownCommands, "knownCommands");
         if (fallbackPrefix == null || fallbackPrefix.trim().isEmpty()) {
             throw new IllegalArgumentException("fallbackPrefix must not be blank");
         }
-        if (clientSync == null) {
-            throw new NullPointerException("clientSync");
-        }
-        this.commandMap = commandMap;
-        this.knownCommands = knownCommands;
         this.fallbackPrefix = fallbackPrefix.trim().toLowerCase(Locale.ROOT);
-        this.clientSync = clientSync;
-        this.mutations = Objects.requireNonNull(mutations, "mutations");
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.plugin = plugin;
     }
 
     public static CommandBridge discover(String fallbackPrefix) {
@@ -103,273 +54,131 @@ public final class BukkitCommandRegistrar implements CommandBridge {
     }
 
     public static CommandBridge discover(String fallbackPrefix, CommandRegistrationPolicy policy) {
+        return discover(JavaPlugin.getProvidingPlugin(BukkitCommandRegistrar.class), fallbackPrefix, policy);
+    }
+
+    /** 已知宿主时显式传入插件，避免依赖库与宿主必须由同一 ClassLoader 提供。 */
+    public static CommandBridge discover(Plugin plugin, String fallbackPrefix) {
+        return discover(plugin, fallbackPrefix, CommandRegistrationPolicy.REJECT);
+    }
+
+    public static CommandBridge discover(Plugin plugin, String fallbackPrefix, CommandRegistrationPolicy policy) {
+        requirePrimaryThread();
+        Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(policy, "policy");
-        Server server = Bukkit.getServer();
-        if (server == null) {
-            throw new IllegalStateException("Bukkit server is not available");
+        if (fallbackPrefix == null || fallbackPrefix.trim().isEmpty()) {
+            throw new IllegalArgumentException("fallbackPrefix must not be blank");
         }
-        try {
-            Method accessor = server.getClass().getMethod("getCommandMap");
-            Object value = accessor.invoke(server);
-            if (!(value instanceof CommandMap)) {
-                throw new IllegalStateException("getCommandMap did not return CommandMap");
-            }
-            CommandMap commandMap = (CommandMap) value;
-            Field field = findField(commandMap.getClass(), "knownCommands");
-            field.setAccessible(true);
-            Object known = field.get(commandMap);
-            if (!(known instanceof Map<?, ?>)) {
-                throw new IllegalStateException("knownCommands is not a map");
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Command> commands = (Map<String, Command>) known;
-            BukkitCommandRegistrar fallback = new BukkitCommandRegistrar(
-                    commandMap,
-                    commands,
-                    fallbackPrefix, policy);
-            return BrigadierBridge.discover(fallback);
-        } catch (NoSuchMethodException exception) {
-            throw new IllegalStateException("Server does not expose getCommandMap", exception);
-        } catch (IllegalAccessException exception) {
-            throw new IllegalStateException("Cannot access Bukkit command registry", exception);
-        } catch (InvocationTargetException exception) {
-            throw new IllegalStateException("Cannot obtain Bukkit command map", exception.getCause());
+        Server server = Objects.requireNonNull(Bukkit.getServer(), "Bukkit server is not available");
+        CommandMap map = (CommandMap) PublicCommandReflection.invoke(server, "getCommandMap");
+        CommandBridge bridge = PaperLifecycleCommandBridge.discover(plugin, map, policy);
+        if (bridge == null) {
+            bridge = new BukkitCommandRegistrar(map, knownCommands(map), fallbackPrefix, policy, plugin);
         }
+        return BrigadierBridge.discover(bridge, plugin, map);
     }
 
     @Override
-    public Disposable register(
-            String name,
-            CommandSpec spec,
-            CommandDispatcher dispatcher
-    ) {
-        Server server = Bukkit.getServer();
-        if (server != null && !server.isPrimaryThread()) {
-            throw new IllegalStateException("Bukkit 命令注册必须在服务器主线程执行");
+    public Disposable register(String name, CommandSpec spec, CommandDispatcher dispatcher) {
+        requirePrimaryThread();
+        Objects.requireNonNull(dispatcher, "dispatcher");
+        String label = name.toLowerCase(Locale.ROOT);
+        String namespaced = fallbackPrefix + ":" + label;
+        Command previous = knownCommands.get(label);
+        if (knownCommands.containsKey(namespaced) || previous != null
+                && (policy == CommandRegistrationPolicy.REJECT || label.indexOf(':') >= 0)) {
+            throw new IllegalStateException("Command label already registered: " + label);
         }
-        if (dispatcher == null) {
-            throw new NullPointerException("dispatcher");
-        }
-        DispatchingCommand command = new DispatchingCommand(name, dispatcher);
+        DispatchingCommand command = plugin == null
+                ? new DispatchingCommand(name, dispatcher, null)
+                : new OwnedDispatchingCommand(name, dispatcher, plugin);
         if (spec instanceof CommandSpecImpl) {
             CommandNode root = ((CommandSpecImpl) spec).root();
-            if (root.permission != null) {
-                command.setPermission(root.permission);
-            }
-            if (!root.description.isEmpty()) {
-                command.setDescription(root.description);
-            }
-            command.setUsage("/" + name);
+            command.setPermission(root.permission);
+            command.setDescription(root.description);
         }
-        final BukkitRegistration registration = new BukkitRegistration(commandMap, knownCommands, command, clientSync, mutations);
-        command.active = false;
-        mutations.accept(new Runnable() {
-            @Override public String toString() { return "register " + fallbackPrefix + ":" + name; }
-            @Override public void run() {
-                if (registration.disposed) return;
-                try {
-                    if (policy == CommandRegistrationPolicy.REPLACE_UNQUALIFIED) registration.captureBareLabel(name);
-                    if (!commandMap.register(fallbackPrefix, command)) {
-                        throw new IllegalStateException("Bukkit rejected command registration: " + name
-                            + " (namespaced fallback was rolled back)");
-                    }
-                } catch (RuntimeException | Error failure) {
-                    command.unregister(commandMap);
-                    removeByIdentity(knownCommands, command);
-                    registration.restorePriorBindings();
-                    throw failure;
-                }
-                command.active = true;
-                syncQuietly(clientSync);
+        command.setUsage("/" + name);
+        // 仅在旧服务端启动注册阶段替换裸标签；关闭时不再回写共享命令树。
+        if (previous != null) knownCommands.remove(label);
+        try {
+            if (!commandMap.register(fallbackPrefix, command)) {
+                throw new IllegalStateException("Bukkit rejected command registration: " + name);
             }
-        });
-        return registration;
-    }
-
-    private static void syncQuietly(Runnable clientSync) {
-        try { clientSync.run(); }
-        catch (RuntimeException failure) { LOGGER.log(Level.WARNING, "命令变更已完成，但客户端命令树刷新失败", failure); }
-    }
-
-    /** 按引用移除 knownCommands 中指向该命令的所有键。 */
-    static void removeByIdentity(Map<String, Command> knownCommands, Command command) {
-        List<String> ownedKeys = new ArrayList<String>();
-        for (Entry<String, Command> entry : knownCommands.entrySet()) {
-            if (entry.getValue() == command) {
-                ownedKeys.add(entry.getKey());
-            }
-        }
-        for (String key : ownedKeys) {
-            if (knownCommands.get(key) == command) {
-                knownCommands.remove(key);
-            }
+            command.active = true;
+            return command;
+        } catch (RuntimeException | Error failure) {
+            command.unregister(commandMap);
+            removeByIdentity(knownCommands, command);
+            if (previous != null && !knownCommands.containsKey(label)) knownCommands.put(label, previous);
+            throw failure;
         }
     }
 
-    /**
-     * knownCommands 无并发保护，注销必须在主线程执行；
-     * 非主线程调用时调度回主线程，无法调度时显式失败，绝不并发修改。
-     */
-    static void runOnPrimaryThread(Runnable action) {
+    static void requirePrimaryThread() {
         Server server = Bukkit.getServer();
-        if (server == null || server.isPrimaryThread()) {
-            action.run();
-            return;
-        }
-        try {
-            Plugin plugin = JavaPlugin.getProvidingPlugin(BukkitCommandRegistrar.class);
-            runOnPrimaryThread(server, plugin, action);
-        } catch (RuntimeException failure) {
-            throw new IllegalStateException("无法将命令注销调度到主线程", failure);
+        if (server != null && !server.isPrimaryThread()) {
+            throw new IllegalStateException("Bukkit 命令操作必须在服务器主线程执行");
         }
     }
 
-    static void runOnPrimaryThread(Server server, Plugin plugin, final Runnable action) {
-        if (server == null) {
-            throw new NullPointerException("server");
-        }
-        if (action == null) {
-            throw new NullPointerException("action");
-        }
-        if (server.isPrimaryThread()) {
-            action.run();
-            return;
-        }
-        if (plugin == null) {
-            throw new NullPointerException("plugin");
-        }
-        Future<Void> completion = server.getScheduler().callSyncMethod(plugin, () -> {
-            action.run();
-            return null;
-        });
-        try {
-            completion.get(MAIN_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException failure) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("等待主线程注销命令时被中断", failure);
-        } catch (TimeoutException failure) {
-            throw new IllegalStateException("等待主线程注销命令超时", failure);
-        } catch (ExecutionException failure) {
-            Throwable cause = failure.getCause();
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            throw new IllegalStateException("主线程注销命令失败", cause);
+    static void removeByIdentity(Map<String, Command> commands, Command command) {
+        for (String label : new ArrayList<String>(commands.keySet())) {
+            if (commands.get(label) == command) commands.remove(label);
         }
     }
 
-    private static Field findField(Class<?> type, String name) {
-        Class<?> current = type;
-        while (current != null) {
+    @SuppressWarnings("unchecked")
+    private static Map<String, Command> knownCommands(CommandMap map) {
+        for (Class<?> type = map.getClass(); type != null; type = type.getSuperclass()) {
             try {
-                return current.getDeclaredField(name);
+                Field field = type.getDeclaredField("knownCommands");
+                field.setAccessible(true);
+                return (Map<String, Command>) field.get(map);
             } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
+                // 旧 Bukkit 的命令表没有公开 accessor；只在启动注册路径读取此字段。
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException("Cannot access Bukkit command registry", failure);
             }
         }
-        throw new IllegalStateException("Cannot find Bukkit field: " + name);
+        throw new IllegalStateException("Cannot find Bukkit knownCommands");
     }
 
-    private static final class DispatchingCommand extends Command {
+    private static class DispatchingCommand extends Command implements Disposable {
         private final CommandDispatcher dispatcher;
-        private volatile boolean active = true;
+        private final Plugin plugin;
+        private volatile boolean active;
 
-        @Override public boolean testPermissionSilent(CommandSender sender) {
-            return active && super.testPermissionSilent(sender);
-        }
-
-        private DispatchingCommand(String name, CommandDispatcher dispatcher) {
+        private DispatchingCommand(String name, CommandDispatcher dispatcher, Plugin plugin) {
             super(name);
             this.dispatcher = dispatcher;
+            this.plugin = plugin;
         }
 
-        @Override
-        public boolean execute(CommandSender sender, String commandLabel, String[] args) {
-            if (!active) return false;
+        private boolean active() { return active && (plugin == null || plugin.isEnabled()); }
+        @Override public void dispose() { active = false; }
+        @Override public boolean testPermissionSilent(CommandSender sender) {
+            return active() && super.testPermissionSilent(sender);
+        }
+        @Override public boolean execute(CommandSender sender, String label, String[] args) {
+            if (!active()) return false;
+            requirePrimaryThread();
             dispatcher.execute(sender, args);
             return true;
         }
-
-        @Override
-        public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
-            if (!active) return Collections.emptyList();
+        @Override public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
+            if (!active()) return Collections.emptyList();
+            requirePrimaryThread();
             return dispatcher.complete(sender, args);
         }
     }
 
-    private static final class BukkitRegistration implements Disposable {
-        private final CommandMap commandMap;
-        private final Map<String, Command> knownCommands;
-        private final Command command;
-        private final Runnable clientSync;
-        private final Consumer<Runnable> mutations;
-        private volatile boolean disposed;
-        private final Map<String, Command> priorBindings = new LinkedHashMap<String, Command>();
-
-        private BukkitRegistration(
-                CommandMap commandMap,
-                Map<String, Command> knownCommands,
-                Command command,
-                Runnable clientSync, Consumer<Runnable> mutations
-        ) {
-            this.commandMap = commandMap;
-            this.knownCommands = knownCommands;
-            this.command = command;
-            this.clientSync = clientSync;
-            this.mutations = mutations;
+    private static final class OwnedDispatchingCommand extends DispatchingCommand implements PluginIdentifiableCommand {
+        private final Plugin owner;
+        private OwnedDispatchingCommand(String name, CommandDispatcher dispatcher, Plugin owner) {
+            super(name, dispatcher, owner);
+            this.owner = owner;
         }
-
-        private void captureBareLabel(String label) {
-            label = label.toLowerCase(Locale.ROOT);
-            if (label.indexOf(':') >= 0) return;
-            Command prior = knownCommands.get(label);
-            if (prior != null) {
-                priorBindings.put(label, prior);
-                knownCommands.remove(label);
-            }
-        }
-
-        private void restorePriorBindings() {
-            for (Entry<String, Command> entry : priorBindings.entrySet()) {
-                Command prior = entry.getValue();
-                if (!prior.isRegistered()) continue;
-                if (prior instanceof PluginIdentifiableCommand) {
-                    Plugin owner = ((PluginIdentifiableCommand) prior).getPlugin();
-                    if (owner == null || !owner.isEnabled()) continue;
-                }
-                if (prior instanceof DispatchingCommand && !((DispatchingCommand) prior).active) continue;
-                // A forwarding facade may inherit HashMap.putIfAbsent without forwarding it.
-                // The lease and main-thread ownership make this check + virtual put indivisible.
-                if (!knownCommands.containsKey(entry.getKey())) knownCommands.put(entry.getKey(), prior);
-            }
-            priorBindings.clear();
-        }
-
-        @Override
-        public synchronized void dispose() {
-            if (disposed) {
-                return;
-            }
-            disposed = true;
-            ((DispatchingCommand) command).active = false;
-            runOnPrimaryThread(new Runnable() {
-                @Override
-                public void run() {
-                    mutations.accept(new Runnable() {
-                        @Override public String toString() { return "unregister " + command.getName(); }
-                        @Override public void run() {
-                            command.unregister(commandMap);
-                            removeByIdentity(knownCommands, command);
-                            restorePriorBindings();
-                            syncQuietly(clientSync);
-                        }
-                    });
-                }
-            });
-            disposed = true;
-        }
+        @Override public Plugin getPlugin() { return owner; }
     }
+
 }

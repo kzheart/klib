@@ -17,7 +17,7 @@ public final class ExecutorScheduler implements KScheduler, DiagnosticSource {
     private final ScheduledExecutorService timerExecutor;
     private final ExecutorService asyncExecutor;
     private final Executor syncExecutor;
-    // 对外暴露的同步执行器额外跳过已关闭作用域，语义与 AsyncTask 回调一致。
+    // 复用 sync 的作用域句柄，关闭时也取消已经排队的回调。
     private final Executor scopedSyncExecutor = new Executor() {
         @Override
         public void execute(Runnable command) {
@@ -27,7 +27,7 @@ public final class ExecutorScheduler implements KScheduler, DiagnosticSource {
             if (scope.isClosed()) {
                 return;
             }
-            syncExecutor.execute(command);
+            sync(command);
         }
     };
 

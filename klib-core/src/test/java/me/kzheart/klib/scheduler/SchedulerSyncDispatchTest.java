@@ -1,6 +1,11 @@
 package me.kzheart.klib.scheduler;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -159,5 +164,65 @@ class SchedulerSyncDispatchTest {
         syncExecutor.execute(drained::countDown);
         assertTrue(drained.await(5L, TimeUnit.SECONDS));
         assertFalse(executed.get());
+    }
+
+    @Test
+    void syncExecutorCancelsCommandsQueuedBeforeScopeCloses() {
+        ScopeImpl scope = new ScopeImpl("queued-sync");
+        Queue<Runnable> queued = new ArrayDeque<Runnable>();
+        ExecutorScheduler scheduler = new ExecutorScheduler(scope, timerExecutor, asyncExecutor, queued::add);
+        AtomicBoolean executed = new AtomicBoolean();
+
+        scheduler.syncExecutor().execute(() -> executed.set(true));
+        assertEquals(1, queued.size());
+        scope.close();
+        queued.remove().run();
+
+        assertFalse(executed.get());
+    }
+
+    @Test
+    void syncExecutorPreservesInlineExecutorReentrancy() {
+        ScopeImpl scope = new ScopeImpl("inline-sync");
+        ExecutorScheduler scheduler = new ExecutorScheduler(scope, timerExecutor, asyncExecutor, Runnable::run);
+        List<String> calls = new ArrayList<String>();
+
+        calls.add("before");
+        scheduler.syncExecutor().execute(() -> {
+            calls.add("outer-start");
+            scheduler.syncExecutor().execute(() -> calls.add("nested"));
+            calls.add("outer-end");
+        });
+        calls.add("after");
+
+        assertEquals(Arrays.asList("before", "outer-start", "nested", "outer-end", "after"), calls);
+        scope.close();
+    }
+
+    @Test
+    void syncAndSyncExecutorShareOneQueueAndPreserveSubmissionOrder() {
+        ScopeImpl scope = new ScopeImpl("ordered-sync");
+        Queue<Runnable> queued = new ArrayDeque<Runnable>();
+        ExecutorScheduler scheduler = new ExecutorScheduler(scope, timerExecutor, asyncExecutor, queued::add);
+        List<String> calls = new ArrayList<String>();
+
+        scheduler.syncExecutor().execute(() -> {
+            calls.add("first-start");
+            scheduler.syncExecutor().execute(() -> calls.add("nested"));
+            calls.add("first-end");
+        });
+        scheduler.sync(() -> calls.add("second"));
+        assertEquals(2, queued.size());
+        assertTrue(calls.isEmpty());
+
+        queued.remove().run();
+        assertEquals(Arrays.asList("first-start", "first-end"), calls);
+        assertEquals(2, queued.size());
+        queued.remove().run();
+        queued.remove().run();
+
+        assertEquals(Arrays.asList("first-start", "first-end", "second", "nested"), calls);
+        assertTrue(queued.isEmpty());
+        scope.close();
     }
 }

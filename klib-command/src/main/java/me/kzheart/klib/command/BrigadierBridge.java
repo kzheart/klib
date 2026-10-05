@@ -3,343 +3,184 @@ package me.kzheart.klib.command;
 import me.kzheart.klib.command.api.CommandSpec;
 import me.kzheart.klib.scope.Disposable;
 import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandMap;
+import org.bukkit.command.PluginIdentifiableCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
-import org.bukkit.plugin.java.JavaPlugin;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Predicate;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
+/** 只投影玩家即将接收的树，不触碰服务端执行树或异步构建器。 */
 public final class BrigadierBridge implements CommandBridge {
-    private static final Logger LOGGER = Logger.getLogger(BrigadierBridge.class.getName());
-
-    interface Registry {
-        Disposable register(String name, BrigadierTree tree);
-    }
-
+    interface Registry { Disposable register(String name, BrigadierTree tree); }
     private final CommandBridge fallback;
     private final Registry registry;
 
     BrigadierBridge(CommandBridge fallback, Registry registry) {
-        if (fallback == null) {
-            throw new NullPointerException("fallback");
-        }
-        if (registry == null) {
-            throw new NullPointerException("registry");
-        }
         this.fallback = fallback;
         this.registry = registry;
     }
 
-    static CommandBridge discover(CommandBridge fallback) {
-        Registry registry = PaperRegistry.discover();
+    static CommandBridge discover(CommandBridge fallback, Plugin plugin, CommandMap map) {
+        Registry registry = PaperRegistry.discover(plugin, map);
         return registry == null ? fallback : new BrigadierBridge(fallback, registry);
     }
 
     @Override
-    public Disposable register(
-            String name,
-            CommandSpec spec,
-            CommandDispatcher dispatcher
-    ) {
-        final Disposable brigadier;
+    public Disposable register(String name, CommandSpec spec, CommandDispatcher dispatcher) {
+        final Disposable projection = registry.register(name, BrigadierTree.from(spec));
+        final Disposable raw;
         try {
-            brigadier = registry.register(name, BrigadierTree.from(spec));
-        } catch (IllegalStateException duplicate) {
-            // Brigadier 投影重名时降级：仅走 CommandMap fallback 注册。
-            LOGGER.log(Level.WARNING,
-                    "Brigadier 命令重名，降级为仅 CommandMap 注册: " + name,
-                    duplicate);
-            return fallback.register(name, spec, dispatcher);
-        }
-        // CommandMap 负责唯一的刷新入口；失败时回滚本桥的投影注册。
-        final Disposable commandMap;
-        try {
-            commandMap = fallback.register(name, spec, dispatcher);
-        } catch (RuntimeException failure) {
-            brigadier.dispose();
+            raw = fallback.register(name, spec, dispatcher);
+        } catch (RuntimeException | Error failure) {
+            projection.dispose();
             throw failure;
         }
-        return new Disposable() {
-            private boolean disposed;
-
-            @Override
-            public synchronized void dispose() {
-                if (disposed) {
-                    return;
-                }
-                disposed = true;
-                brigadier.dispose();
-                commandMap.dispose();
-                    }
-        };
+        return () -> { raw.dispose(); projection.dispose(); };
     }
 
-    private static final class PaperRegistry implements Registry, EventExecutor {
-        private static final String EVENT_CLASS =
-                "com.destroystokyo.paper.event.brigadier.CommandRegisteredEvent";
-        private static final String ARGUMENT_BUILDER_CLASS =
-                "com.mojang.brigadier.builder.ArgumentBuilder";
-        private static final String LITERAL_BUILDER_CLASS =
-                "com.mojang.brigadier.builder.LiteralArgumentBuilder";
-        private static final String REQUIRED_BUILDER_CLASS =
-                "com.mojang.brigadier.builder.RequiredArgumentBuilder";
-        private static final String STRING_ARGUMENT_CLASS =
-                "com.mojang.brigadier.arguments.StringArgumentType";
-
+    static final class PaperRegistry implements Registry, EventExecutor {
+        private static final String EVENT = "com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent";
+        private static final String LITERAL = "com.mojang.brigadier.builder.LiteralArgumentBuilder";
+        private static final String ARGUMENT = "com.mojang.brigadier.builder.RequiredArgumentBuilder";
+        private static final String STRING = "com.mojang.brigadier.arguments.StringArgumentType";
         private final Plugin plugin;
-        private final PluginManager pluginManager;
-        private final Class<? extends Event> eventClass;
-        private final Listener listener = new Listener() {
-        };
-        private final Map<String, BrigadierTree> trees = new HashMap<String, BrigadierTree>();
-        private boolean listening;
+        private final CommandMap commands;
+        private final Map<String, Projection> trees = new HashMap<String, Projection>();
+        private final Object executionMarker;
 
-        private PaperRegistry(
-                Plugin plugin,
-                PluginManager pluginManager,
-                Class<? extends Event> eventClass
-        ) {
+        PaperRegistry(Plugin plugin, CommandMap commands) {
             this.plugin = plugin;
-            this.pluginManager = pluginManager;
-            this.eventClass = eventClass;
+            this.commands = commands;
+            try {
+                Class<?> command = PublicCommandReflection.type("com.mojang.brigadier.Command");
+                executionMarker = Proxy.newProxyInstance(command.getClassLoader(), new Class<?>[]{command},
+                        (proxy, method, args) -> {
+                            if ("run".equals(method.getName())) return 1;
+                            if ("hashCode".equals(method.getName())) return System.identityHashCode(proxy);
+                            if ("equals".equals(method.getName())) return proxy == args[0];
+                            return "Klib client command marker";
+                        });
+            } catch (ClassNotFoundException failure) {
+                throw new IllegalStateException("Missing Brigadier API", failure);
+            }
         }
 
-        static Registry discover() {
+        static Registry discover(Plugin plugin, CommandMap map) {
             try {
-                if (!isAtLeastOneNineteen(Bukkit.getBukkitVersion())) {
-                    return null;
-                }
-                Class<?> candidate = Class.forName(EVENT_CLASS, false,
-                        BrigadierBridge.class.getClassLoader());
-                Class.forName(LITERAL_BUILDER_CLASS, false,
-                        BrigadierBridge.class.getClassLoader());
-                if (!Event.class.isAssignableFrom(candidate)) {
-                    return null;
-                }
-                @SuppressWarnings("unchecked")
-                Class<? extends Event> typed = (Class<? extends Event>) candidate;
-                Plugin plugin = JavaPlugin.getProvidingPlugin(BrigadierBridge.class);
-                return new PaperRegistry(plugin, Bukkit.getPluginManager(), typed);
-            } catch (RuntimeException ignored) {
-                return null;
-            } catch (LinkageError ignored) {
-                return null;
-            } catch (ClassNotFoundException ignored) {
+                Class<?> candidate = PublicCommandReflection.type(EVENT);
+                PublicCommandReflection.type(LITERAL);
+                // Paper 的公开补丁方法用于替换副本根；旧平台缺失时保留原始客户端树。
+                PublicCommandReflection.type("com.mojang.brigadier.tree.CommandNode")
+                        .getMethod("removeCommand", String.class);
+                if (!Event.class.isAssignableFrom(candidate)) return null;
+                @SuppressWarnings("unchecked") Class<? extends Event> event = (Class<? extends Event>) candidate;
+                PaperRegistry registry = new PaperRegistry(plugin, map);
+                PluginManager manager = Bukkit.getPluginManager();
+                manager.registerEvent(event, new Listener() { }, EventPriority.NORMAL, registry, plugin, true);
+                return registry;
+            } catch (ClassNotFoundException | NoSuchMethodException unavailableOnOlderServer) {
                 return null;
             }
         }
 
         @Override
-        public synchronized Disposable register(final String name, BrigadierTree tree) {
-            final String normalized = normalize(name);
-            if (trees.containsKey(normalized)) {
-                throw new IllegalStateException("duplicate Brigadier command: " + normalized);
-            }
-            if (!listening) {
-                pluginManager.registerEvent(
-                        eventClass,
-                        listener,
-                        EventPriority.NORMAL,
-                        this,
-                        plugin,
-                        true);
-                listening = true;
-            }
-            trees.put(normalized, tree);
-            return new Disposable() {
-                private boolean disposed;
-
-                @Override
-                public synchronized void dispose() {
-                    if (disposed) {
-                        return;
-                    }
-                    disposed = true;
-                    remove(normalized);
-                }
-            };
-        }
-
-        private synchronized void remove(String name) {
-            trees.remove(name);
-            if (trees.isEmpty() && listening) {
-                HandlerList.unregisterAll(listener);
-                listening = false;
-            }
+        public Disposable register(String name, BrigadierTree tree) {
+            BukkitCommandRegistrar.requirePrimaryThread();
+            String label = name.toLowerCase(Locale.ROOT);
+            if (trees.containsKey(label)) throw new IllegalStateException("Command already declared: " + label);
+            Projection projection = new Projection(tree);
+            trees.put(label, projection);
+            return () -> projection.active = false;
         }
 
         @Override
         public void execute(Listener ignored, Event event) {
+            // Paper 同一份事件先异步后同步发出；只在同步回调读取 Bukkit 权限/命令所有权。
+            if (event.isAsynchronous()) return;
+            BukkitCommandRegistrar.requirePrimaryThread();
             try {
-                // 查找按 normalize 后的名字，构建时用事件原始 label，
-                // 保证 namespaced 别名（如 klib:cmd）投影到正确的根 literal。
-                String rawLabel = (String) invoke(event, "getCommandLabel");
-                BrigadierTree tree;
-                synchronized (this) {
-                    tree = trees.get(normalize(rawLabel));
-                }
-                if (tree == null || !isKlibCommand(invoke(event, "getCommand"))) {
-                    return;
-                }
-                Object delegate = invoke(event, "getBrigadierCommand");
-                Object built = build(rawLabel, tree, delegate);
-                invoke(event, "setLiteral", built);
-                invoke(event, "setRawCommand", Boolean.TRUE);
+                project((Player) PublicCommandReflection.invoke(event, "getPlayer"),
+                        PublicCommandReflection.invoke(event, "getCommandNode"));
             } catch (RuntimeException failure) {
-                plugin.getLogger().log(
-                        Level.WARNING,
-                        "Unable to project klib command tree to Paper Brigadier",
-                        failure);
+                plugin.getLogger().log(Level.WARNING, "Unable to project klib client command tree", failure);
             }
         }
 
-        private Object build(String label, BrigadierTree tree, Object delegate) {
-            Object builder = literal(label);
-            configure(builder, tree, delegate);
-            return invoke(builder, "build");
-        }
-
-        private void configure(Object builder, BrigadierTree tree, Object delegate) {
-            invoke(builder, "requires", requirement(tree));
-            invoke(builder, "executes", delegate);
-            for (BrigadierTree child : tree.children()) {
-                Object childBuilder = child.kind() == BrigadierTree.Kind.LITERAL
-                        ? literal(child.token())
-                        : argument(child);
-                configure(childBuilder, child, delegate);
-                if (child.kind() == BrigadierTree.Kind.ARGUMENT) {
-                    invoke(childBuilder, "suggests", delegate);
+        void project(Player player, Object root) {
+            BukkitCommandRegistrar.requirePrimaryThread();
+            @SuppressWarnings("unchecked") Collection<Object> children =
+                    (Collection<Object>) PublicCommandReflection.invoke(root, "getChildren");
+            for (Object original : new ArrayList<Object>(children)) {
+                String label = (String) PublicCommandReflection.invoke(original, "getName");
+                String normalized = label.toLowerCase(Locale.ROOT);
+                Projection projection = trees.get(normalized);
+                if (projection == null) {
+                    String prefix = plugin.getName().toLowerCase(Locale.ROOT) + ":";
+                    if (normalized.startsWith(prefix)) projection = trees.get(normalized.substring(prefix.length()));
                 }
-                invoke(builder, "then", childBuilder);
-            }
-        }
-
-        private Object literal(String name) {
-            return invokeStatic(LITERAL_BUILDER_CLASS, "literal", name);
-        }
-
-        private Object argument(BrigadierTree tree) {
-            Object argumentType = invokeStatic(
-                    STRING_ARGUMENT_CLASS,
-                    tree.greedy() ? "greedyString" : "word");
-            return invokeStatic(REQUIRED_BUILDER_CLASS, "argument", tree.token(), argumentType);
-        }
-
-        private Predicate<Object> requirement(final BrigadierTree tree) {
-            return new Predicate<Object>() {
-                @Override
-                public boolean test(Object source) {
-                    Object value = invoke(source, "getBukkitSender");
-                    if (!(value instanceof CommandSender)) {
-                        return false;
-                    }
-                    CommandSender sender = (CommandSender) value;
-                    return tree.accessible(sender);
-                }
-            };
-        }
-
-        private static boolean isKlibCommand(Object command) {
-            return command != null && command.getClass().getName().equals(
-                    BukkitCommandRegistrar.class.getName() + "$DispatchingCommand");
-        }
-
-        private static boolean isAtLeastOneNineteen(String version) {
-            if (version == null) {
-                return false;
-            }
-            String[] parts = version.split("\\.");
-            try {
-                int major = Integer.parseInt(parts[0].replaceAll("[^0-9].*$", ""));
-                int minor = parts.length < 2
-                        ? 0
-                        : Integer.parseInt(parts[1].replaceAll("[^0-9].*$", ""));
-                return major > 1 || major == 1 && minor >= 19;
-            } catch (NumberFormatException ignored) {
-                return false;
-            }
-        }
-
-        private static String normalize(String name) {
-            String normalized = name.toLowerCase(Locale.ROOT);
-            int namespace = normalized.indexOf(':');
-            return namespace < 0 ? normalized : normalized.substring(namespace + 1);
-        }
-
-        private static Object invoke(Object target, String name, Object... arguments) {
-            Method method = findMethod(target.getClass(), name, false, arguments);
-            try {
-                return method.invoke(target, arguments);
-            } catch (IllegalAccessException exception) {
-                throw new IllegalStateException("Cannot invoke " + name, exception);
-            } catch (InvocationTargetException exception) {
-                throw new IllegalStateException("Cannot invoke " + name, exception.getCause());
-            }
-        }
-
-        private static Object invokeStatic(String type, String name, Object... arguments) {
-            try {
-                Class<?> owner = Class.forName(type, true, BrigadierBridge.class.getClassLoader());
-                Method method = findMethod(owner, name, true, arguments);
-                return method.invoke(null, arguments);
-            } catch (ClassNotFoundException exception) {
-                throw new IllegalStateException("Missing Paper Brigadier type: " + type, exception);
-            } catch (IllegalAccessException exception) {
-                throw new IllegalStateException("Cannot invoke " + name, exception);
-            } catch (InvocationTargetException exception) {
-                throw new IllegalStateException("Cannot invoke " + name, exception.getCause());
-            }
-        }
-
-        private static Method findMethod(
-                Class<?> type,
-                String name,
-                boolean requireStatic,
-                Object[] arguments
-        ) {
-            for (Method method : type.getMethods()) {
-                if (!method.getName().equals(name)
-                        || Modifier.isStatic(method.getModifiers()) != requireStatic
-                        || method.getParameterTypes().length != arguments.length) {
+                if (projection == null || !owned(label)) continue;
+                if (!projection.active || !plugin.isEnabled() || !projection.tree.accessible(player)) {
+                    PublicCommandReflection.invoke(root, "removeCommand", label);
                     continue;
                 }
-                Class<?>[] parameters = method.getParameterTypes();
-                boolean matches = true;
-                for (int index = 0; index < parameters.length; index++) {
-                    if (arguments[index] != null
-                            && !box(parameters[index]).isInstance(arguments[index])) {
-                        matches = false;
-                        break;
-                    }
-                }
-                if (matches) {
-                    return method;
-                }
+                Object suggestions = suggestions(original);
+                Object builder = PublicCommandReflection.invokeStatic(LITERAL, "literal", label);
+                configure(builder, projection.tree, player, suggestions);
+                Object replacement = PublicCommandReflection.invoke(builder, "build");
+                PublicCommandReflection.invoke(root, "removeCommand", label);
+                PublicCommandReflection.invoke(root, "addChild", replacement);
             }
-            throw new IllegalStateException("Missing compatible method: " + type.getName()
-                    + "." + name);
         }
 
-        private static Class<?> box(Class<?> type) {
-            if (type == boolean.class) {
-                return Boolean.class;
+        private boolean owned(String label) {
+            Command command = commands.getCommand(label);
+            return command instanceof PluginIdentifiableCommand
+                    && ((PluginIdentifiableCommand) command).getPlugin() == plugin;
+        }
+
+        private Object suggestions(Object root) {
+            Object redirected = PublicCommandReflection.invoke(root, "getRedirect");
+            Object raw = redirected == null ? root : redirected;
+            Object args = PublicCommandReflection.invoke(raw, "getChild", "args");
+            return args == null ? null : PublicCommandReflection.invoke(args, "getCustomSuggestions");
+        }
+
+        private void configure(Object builder, BrigadierTree tree, Player player, Object suggestions) {
+            // requires 在这个阶段不会重新过滤：必须先按玩家逐节点筛选，不能只挂 Predicate。
+            PublicCommandReflection.invoke(builder, "executes", executionMarker);
+            for (BrigadierTree child : tree.children()) {
+                if (!child.accessible(player)) continue;
+                Object next;
+                if (child.kind() == BrigadierTree.Kind.LITERAL) {
+                    next = PublicCommandReflection.invokeStatic(LITERAL, "literal", child.token());
+                } else {
+                    Object argument = PublicCommandReflection.invokeStatic(STRING,
+                            child.greedy() ? "greedyString" : "word");
+                    next = PublicCommandReflection.invokeStatic(ARGUMENT, "argument", child.token(), argument);
+                    if (suggestions != null) PublicCommandReflection.invoke(next, "suggests", suggestions);
+                }
+                configure(next, child, player, suggestions);
+                PublicCommandReflection.invoke(builder, "then", next);
             }
-            return type;
+        }
+
+        private static final class Projection {
+            private final BrigadierTree tree;
+            private volatile boolean active = true;
+            private Projection(BrigadierTree tree) { this.tree = tree; }
         }
     }
 }

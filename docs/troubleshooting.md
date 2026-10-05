@@ -65,18 +65,20 @@
   让 Klib 被重定位到 `<targetPackage>.libs.klib`，见
   [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
 
-### 改完配置执行重载后，插件的命令全部消失
+### 改完配置执行重载后，插件的命令不再响应
 
-- 症状：`/xxx reload` 之后命令不再响应，甚至插件被禁用。
-- 原因：`config.onChange(root::rebuild)` 会在配置变更后重建整张资源图。新配置本身能解析，但重建
-  过程中某个资源安装失败，Klib 会清理残留资源并禁用插件；如果只是监听器抛异常，新配置仍保持
-  加载，但依赖它的资源可能没重建完整。
-- 修复：查看控制台的 SEVERE 日志。`YamlConfigDocument` 会分别记录
-  `configuration reload failed; keeping the last known good value`（新值解析失败，沿用上一份可用
-  配置）和 `one or more reload listeners failed; the new configuration stays loaded`（新值已加载但
-  监听器失败）；`KPlugin` 重建失败时记录「插件重载失败，已关闭残留资源并禁用插件」。按日志里的
-  根因修正配置或资源安装逻辑，见 [klib-config · 重新加载](modules/config.md#重新加载) 和
-  [Core · 重建插件资源图](modules/core.md#重建插件资源图)。
+- 症状：`/xxx reload` 之后命令不再响应，客户端可能仍显示旧命令节点，甚至插件被禁用。
+- 原因：`config.onChange(root::rebuild)` 会关闭旧命令绑定，再重新执行包含命令声明的初始化逻辑。
+  命令只支持在插件启动时声明，作用域关闭立即停用执行、补全和权限检查，不保证物理节点立即清理；
+  运行时重建不能作为命令重新注册或恢复被覆盖标签的方式。
+- 修复：配置重载只更新配置、语言和业务状态，命令处理器从稳定服务入口读取最新值。
+  需要重建监听器、任务等资源时，仅重建不含命令声明的业务子作用域；移除根资源图重建后重启
+  服务端，重新建立启动命令。见 [Command · 启动注册、配置重载与逻辑停用](modules/command.md#启动注册配置重载与逻辑停用)
+  和 [Core · 重建插件资源图](modules/core.md#重建插件资源图)。
+- 如果日志还出现配置或资源安装错误，应分别排查：`configuration reload failed; keeping the last known good value`
+  表示新值解析失败、沿用旧配置；`one or more reload listeners failed; the new configuration stays loaded`
+  表示新值已加载但监听器失败。`KPlugin` 根资源图重建失败时会清理残留资源、禁用插件，并记录
+  「插件重载失败，已关闭残留资源并禁用插件」。详见 [Config · 重新加载](modules/config.md#重新加载)。
 
 ### 异步线程里调用 Bukkit API 抛异常或导致服务器不稳定
 

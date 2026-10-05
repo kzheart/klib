@@ -11,10 +11,11 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class BrigadierUnregisterOnRebuildTest {
+class BrigadierBridgeContractTest {
     @Test
-    void scopeRebuildReplacesBothCommandMapAndBrigadierRegistrations() {
+    void customBridgeOwnsItsScopeDisposalContract() {
         AtomicInteger commandMapActive = new AtomicInteger();
         CommandBridge commandMap = new CommandBridge() {
             @Override
@@ -51,7 +52,7 @@ class BrigadierUnregisterOnRebuildTest {
     }
 
     @Test
-    void duplicateBrigadierNameFallsBackToCommandMapOnly() {
+    void duplicateProjectionIsRejectedBeforeRawRegistration() {
         AtomicInteger commandMapActive = new AtomicInteger();
         CommandBridge commandMap = (name, spec, dispatcher) -> {
             commandMapActive.incrementAndGet();
@@ -72,12 +73,12 @@ class BrigadierUnregisterOnRebuildTest {
         });
 
         Disposable first = bridge.register("demo", spec, new CommandDispatcher(spec));
-        Disposable second = bridge.register("demo", spec, new CommandDispatcher(spec));
+        assertThrows(IllegalStateException.class,
+                () -> bridge.register("demo", spec, new CommandDispatcher(spec)));
 
-        assertEquals(2, commandMapActive.get());
+        assertEquals(1, commandMapActive.get());
         assertEquals(1, registry.active.size());
 
-        second.dispose();
         first.dispose();
         assertEquals(0, commandMapActive.get());
         assertEquals(0, registry.active.size());

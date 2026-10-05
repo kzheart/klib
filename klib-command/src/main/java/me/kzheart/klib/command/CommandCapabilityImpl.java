@@ -4,6 +4,7 @@ import me.kzheart.klib.KLogger;
 import me.kzheart.klib.command.api.CommandCapability;
 import me.kzheart.klib.command.api.CommandRegistration;
 import me.kzheart.klib.command.api.CommandSpec;
+import me.kzheart.klib.command.api.CommandErrorHandler;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
 
@@ -15,6 +16,7 @@ public final class CommandCapabilityImpl implements CommandCapability {
     private final RichTextSink output;
     private final CommandMessages messages;
     private final KLogger logger;
+    private final CommandErrorHandler errorHandler;
 
     public CommandCapabilityImpl(CommandBridge bridge) {
         this(
@@ -49,6 +51,11 @@ public final class CommandCapabilityImpl implements CommandCapability {
             CommandMessages messages,
             KLogger logger
     ) {
+        this(bridge, players, output, messages, logger, null);
+    }
+
+    public CommandCapabilityImpl(CommandBridge bridge, PlayerResolver players, RichTextSink output,
+                                  CommandMessages messages, KLogger logger, CommandErrorHandler errorHandler) {
         if (bridge == null) {
             throw new NullPointerException("bridge");
         }
@@ -66,6 +73,7 @@ public final class CommandCapabilityImpl implements CommandCapability {
         this.output = output;
         this.messages = messages;
         this.logger = logger;
+        this.errorHandler = errorHandler;
     }
 
     @Override
@@ -91,7 +99,7 @@ public final class CommandCapabilityImpl implements CommandCapability {
     }
 
     CommandRegistration registerCompiled(Scope owner, CommandSpecImpl spec) {
-        CommandDispatcher dispatcher = new CommandDispatcher(spec, players, output, messages, logger);
+        CommandDispatcher dispatcher = new CommandDispatcher(spec, players, output, messages, logger, errorHandler);
         Disposable bridgeRegistration = bridge.register(spec.name(), spec, dispatcher);
         CommandRegistrationImpl registration = new CommandRegistrationImpl(
                 spec.name(),

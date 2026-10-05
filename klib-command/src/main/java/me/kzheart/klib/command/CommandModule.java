@@ -5,6 +5,7 @@ import java.util.Locale;
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.KPlugin;
 import me.kzheart.klib.command.api.CommandCapability;
+import me.kzheart.klib.command.api.CommandErrorHandler;
 import me.kzheart.klib.lang.MessagePipeline;
 import me.kzheart.klib.scope.Scope;
 
@@ -32,6 +33,10 @@ public final class CommandModule {
         return install(plugin.context().scope(), BukkitCommandRegistrar.discover(plugin, plugin.getName().toLowerCase(Locale.ROOT)));
     }
 
+    public static CommandCapability install(KPlugin plugin, CommandErrorHandler errors) {
+        return install(plugin.context().scope(), BukkitCommandRegistrar.discover(plugin, plugin.getName().toLowerCase(Locale.ROOT)), errors);
+    }
+
     private CommandModule() {
     }
 
@@ -42,6 +47,16 @@ public final class CommandModule {
                 BukkitPlayerResolver.INSTANCE,
                 SpigotRichTextSink.INSTANCE,
                 DefaultCommandMessages.INSTANCE);
+    }
+
+    /** 未知业务异常不会自动回显 exception.getMessage()；反馈内容由 errors 决定。 */
+    public static CommandCapability install(Scope scope, CommandBridge bridge, CommandErrorHandler errors) {
+        return install(scope, bridge, BukkitPlayerResolver.INSTANCE, SpigotRichTextSink.INSTANCE, DefaultCommandMessages.INSTANCE, errors);
+    }
+
+    public static CommandCapability install(Scope scope, CommandBridge bridge, MessagePipeline messages, CommandErrorHandler errors) {
+        if (messages == null) throw new NullPointerException("messages");
+        return install(scope, bridge, BukkitPlayerResolver.INSTANCE, SpigotRichTextSink.INSTANCE, new MessagePipelineCommandMessages(messages), errors);
     }
 
     /** 安装使用插件同一条可重新加载语言管线的命令。 */
@@ -68,6 +83,17 @@ public final class CommandModule {
             RichTextSink output,
             CommandMessages messages
     ) {
+        return installWithErrors(scope, bridge, players, output, messages, null);
+    }
+
+    public static CommandCapability install(Scope scope, CommandBridge bridge, PlayerResolver players,
+                                            RichTextSink output, CommandMessages messages, CommandErrorHandler errors) {
+        if (errors == null) throw new NullPointerException("errors");
+        return installWithErrors(scope, bridge, players, output, messages, errors);
+    }
+
+    private static CommandCapability installWithErrors(Scope scope, CommandBridge bridge, PlayerResolver players,
+                                                        RichTextSink output, CommandMessages messages, CommandErrorHandler errors) {
         if (scope == null) {
             throw new NullPointerException("scope");
         }
@@ -76,7 +102,7 @@ public final class CommandModule {
                 players,
                 output,
                 messages,
-                scope.findCapability(KLogger.class).orElse(null));
+                scope.findCapability(KLogger.class).orElse(null), errors);
         return scope.registerCapability(CommandCapability.class, capability);
     }
 }

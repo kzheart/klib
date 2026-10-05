@@ -177,6 +177,7 @@ public final class AnnotatedCommands {
             if (next == null) {
                 next = new CommandNode(argument ? null : name,
                         argument ? argument(name, parameter, target, suggestions, method) : null);
+                next.parent = current;
                 current.children.add(next);
                 signatures.put(next, signature);
                 if (parameter != null && parameter.isAnnotationPresent(Suggest.class)) next.suggestionOwner = target;

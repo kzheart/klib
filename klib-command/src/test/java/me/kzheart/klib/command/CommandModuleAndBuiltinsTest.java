@@ -137,8 +137,7 @@ class CommandModuleAndBuiltinsTest {
                 new String[]{"reload"});
         reload.completeExceptionally(new IllegalStateException("broken"));
 
-        assertEquals(1, sent.size());
-        assertEquals(CommandMessageKeys.INTERNAL_ERROR, messages.lastKey());
+        assertTrue(sent.isEmpty());
     }
 
     @Test
@@ -259,7 +258,7 @@ class CommandModuleAndBuiltinsTest {
     }
 
     @Test
-    void handlerFailureIsCaughtLocalizedAndReturnsFailed() {
+    void handlerFailureIsLoggedWithoutImplicitPlayerMessage() {
         RecordingMessages messages = new RecordingMessages();
         List<RichText> sent = new ArrayList<RichText>();
         CommandSpecImpl spec = CommandSpecImpl.command("demo");
@@ -277,8 +276,7 @@ class CommandModuleAndBuiltinsTest {
                 new String[0]);
 
         assertEquals(CommandResult.Status.FAILED, result.status());
-        assertEquals(CommandMessageKeys.INTERNAL_ERROR, messages.lastKey());
-        assertFalse(sent.isEmpty());
+        assertTrue(sent.isEmpty());
     }
 
     @Test

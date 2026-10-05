@@ -1,6 +1,6 @@
 # klib-ui
 
-`klib-ui` 用于构建物品栏菜单、分页、物品投放区和聊天输入流程。它把点击、拖拽、数字键、双击、关闭归还以及异步聊天事件集中在统一监听器中，业务代码只描述模型和动作。
+`klib-ui` 用于构建物品栏菜单、分页、物品投放区、聊天控制面板和聊天输入流程。它把点击、拖拽、数字键、双击、关闭归还以及异步聊天事件集中在统一监听器中，业务代码只描述模型和动作。
 
 ## 会话菜单注解
 
@@ -22,7 +22,7 @@ klib {
 }
 ```
 
-`ui` 会自动带入 `core` 和 `item`，因此同样需要声明 CodeMC 仓库以解析 Item-NBT-API，配置见
+`ui` 会自动带入 `core`、`item`、`command`（含 `lang`），因此同样需要声明 CodeMC 仓库以解析 Item-NBT-API，配置见
 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。直接依赖时加入：
 
 ```kotlin
@@ -32,7 +32,65 @@ dependencies {
 }
 ```
 
-直接依赖还需保证 `klib-core`、`klib-item` 及物品标签所需运行时依赖可用。
+直接依赖还需保证 `klib-core`、`klib-item`、`klib-command`、`klib-lang` 及其运行时依赖可用。
+
+## 聊天控制面板
+
+聊天面板用于字段、开关和列表管理，可替代只承担参数选择的物品栏页面。`ChatPanel` 描述标题、行、按钮、页脚和权限；`BukkitChatPanels` 负责启动声明的按钮命令、玩家会话、刷新和输入，业务对象及保存规则由调用方持有。
+
+在 `KPlugin.setup()` 中先安装 Command，再复用同一份聊天提示服务安装面板：
+
+```java
+import me.kzheart.klib.command.CommandModule;
+import me.kzheart.klib.lang.RichText;
+import me.kzheart.klib.ui.chat.BukkitChatPanels;
+import me.kzheart.klib.ui.chat.ChatPanel;
+import me.kzheart.klib.ui.chat.ChatPanelButton;
+import me.kzheart.klib.ui.prompt.BukkitChatPrompts;
+
+CommandModule.install(this);
+BukkitChatPrompts prompts = BukkitChatPrompts.install(context().scope(), this);
+BukkitChatPanels panels = BukkitChatPanels.install(
+        context().scope(), this, "myplugin_panel", prompts);
+commands().register("settings", root -> root.playerOnly()
+        .permission("myplugin.settings")
+        .executes(call -> panels.open((Player) call.sender(), ChatPanel
+                .builder(RichText.plain("配置面板"))
+                .permission("myplugin.settings")
+                .row(RichText.plain("操作："), ChatPanelButton.command(
+                        RichText.plain("[查看状态]"), "myplugin status"))
+                .row(RichText.plain("文本："), ChatPanelButton.suggest(
+                        RichText.plain("[预填]"), "待编辑的原文").hover(RichText.plain("填入聊天框后再发送")))
+                .footer(ChatPanelButton.action(RichText.plain("[关闭]"), session -> session.dispose()))
+                .pageSize(8).clearLines(12).lifetimeMillis(120000L)
+                .build())));
+```
+
+导入 `org.bukkit.entity.Player`；安装调用必须位于启动主线程，按钮命令名应以插件为前缀，不能与其他插件共享同一个裸标签。默认发送复用 Lang 的 Bukkit 富文本桥接；自定义宿主可传入 `BiConsumer<Player, RichText>`，不需要把重定位后的 Adventure 类型传入 Bukkit。
+
+按钮工厂：`action(label, callback)` 调用业务回调，`command(label, text)` 以玩家权限执行命令，`suggest(label, text)` 预填输入框，`copy(label, text)` 复制到剪贴板。`hover(...)` 和 `permission(...)` 返回新的不可变按钮；无权限按钮隐藏，执行时再次校验。预填与复制是客户端展示操作，不会执行其中的文本，也不作为业务授权手段；旧聊天文本仍存在于客户端历史中。旧版客户端不支持剪贴板时可使用 `suggest`。
+
+`ChatPanel.Builder.guard(Predicate<Player>)` 在点击、刷新和输入完成时检查目标是否仍存在或仍是原版本。`ChatPanelSession.refresh(newModel)` 主动替换行数据，`page(index)` 翻页；新模型需保留适当的业务 guard。每次刷新会作废旧按钮；一次动作执行后，若未关闭、切换面板或启动输入，会自动重绘当前模型。会话有效期按打开时开始计时，刷新不延长；每名玩家只保留一个活动面板，打开新面板会关闭旧面板。
+
+在 action 回调中发送业务提示，再启动输入（`session` 为 `ChatPanelSession`）：
+
+```java
+import java.util.Optional;
+import me.kzheart.klib.ui.prompt.PromptSpec;
+import me.kzheart.klib.scheduler.Ticks;
+
+session.player().sendMessage("输入新的名称，或输入 cancel 取消");
+session.input(PromptSpec.<String>builder(text -> text.trim().isEmpty()
+                ? Optional.<String>empty() : Optional.of(text))
+        .timeout(Ticks.seconds(60)).build(), currentName,
+        value -> {
+            // 在主线程重新核对并保存业务值，然后 refresh(newModel) 或重新 open。
+        }, () -> session.refresh(currentModel));
+```
+
+面板会附带“预填当前值”按钮。输入复用 `BukkitChatPrompts`，消息被消费，不向公共聊天广播；解析器仅执行纯解析，不能访问 Bukkit 可变状态。成功和取消回调均回到所属 Scope 的同步执行器；输入等待期间权限、玩家会话或目标 guard 变化会拒绝回调。关闭面板只取消自己启动的提示，不取消其他模块后续替换的输入。
+
+`hotkeys(onSave, onCancel)` 显式启用 F 保存、潜行+F 取消，默认不接管副手交换；调用方自行保存或丢弃业务草稿并关闭/刷新面板。到期、退出或 Scope 关闭只撤销面板及提示，不自动保存业务数据。`ChatPanel.Builder.errorHandler(...)` 可由业务选择错误提示；未配置时只记录异常并结束失败会话，不发送固定文案。所有公开面板操作及释放均要求主线程；作用域关闭后注册的命令立即逻辑停用。
 
 ## 创建并打开菜单
 

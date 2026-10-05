@@ -3,6 +3,8 @@ package me.kzheart.klib.command;
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.command.api.CommandArgument;
 import me.kzheart.klib.command.api.CommandSpec;
+import me.kzheart.klib.command.api.CommandContext;
+import me.kzheart.klib.command.api.CommandErrorHandler;
 import me.kzheart.klib.lang.MessageColor;
 import me.kzheart.klib.lang.RichText;
 import me.kzheart.klib.lang.RichTextSegment;
@@ -34,6 +36,7 @@ public final class CommandDispatcher implements DiagnosticSource {
     private final CommandMessages messages;
     private final HelpRenderer helpRenderer;
     private final KLogger logger;
+    private final CommandErrorHandler errorHandler;
     private final AtomicLong invocations = new AtomicLong();
     private final AtomicLong failures = new AtomicLong();
     private volatile String lastFailureType = "";
@@ -67,6 +70,11 @@ public final class CommandDispatcher implements DiagnosticSource {
             CommandMessages messages,
             KLogger logger
     ) {
+        this(spec, players, output, messages, logger, null);
+    }
+
+    public CommandDispatcher(CommandSpec spec, PlayerResolver players, RichTextSink output,
+                             CommandMessages messages, KLogger logger, CommandErrorHandler errorHandler) {
         if (spec == null) {
             throw new NullPointerException("spec");
         }
@@ -89,6 +97,7 @@ public final class CommandDispatcher implements DiagnosticSource {
         this.messages = messages;
         this.helpRenderer = new HelpRenderer(messages);
         this.logger = logger;
+        this.errorHandler = errorHandler;
     }
 
     public CommandResult execute(CommandSender sender, String[] rawArgs) {
@@ -164,6 +173,7 @@ public final class CommandDispatcher implements DiagnosticSource {
 
         if (current.handler != null) {
             CommandContextImpl context = new CommandContextImpl(sender, spec.name(), values);
+            context.errorHandler = errorsFor(current);
             try {
                 if (current.handler instanceof DispatcherAwareCommandHandler) {
                     ((DispatcherAwareCommandHandler) current.handler).execute(context, this);
@@ -175,20 +185,15 @@ public final class CommandDispatcher implements DiagnosticSource {
                 return CommandResult.message(CommandResult.Status.FAILED, null);
             } catch (CommandFailure failure) {
                 Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-                reportFailure(cause);
-                return emit(sender, CommandResult.message(
-                        CommandResult.Status.FAILED,
-                        failureText(sender, cause, failure.messageKey())));
+                sendFailure(context, cause, failure.messageKey());
+                return CommandResult.message(CommandResult.Status.FAILED, null);
             } catch (RuntimeException failure) {
                 reportFailure(failure);
-                return emit(sender, CommandResult.message(
-                        CommandResult.Status.FAILED,
-                        message(sender, CommandMessageKeys.INTERNAL_ERROR)));
+                handleError(context, failure);
+                return CommandResult.message(CommandResult.Status.FAILED, null);
             } catch (Error failure) {
                 reportFailure(failure);
-                emit(sender, CommandResult.message(
-                        CommandResult.Status.FAILED,
-                        message(sender, CommandMessageKeys.INTERNAL_ERROR)));
+                handleError(context, failure);
                 throw failure;
             }
             return CommandResult.success();
@@ -248,17 +253,35 @@ public final class CommandDispatcher implements DiagnosticSource {
      * 否则退回通用内部错误消息。
      */
     void sendFailure(CommandSender sender, Throwable failure, String reasonKey) {
-        reportFailure(failure);
-        emit(sender, CommandResult.message(
-                CommandResult.Status.FAILED,
-                failureText(sender, failure, reasonKey)));
+        CommandContextImpl context = new CommandContextImpl(sender, spec.name(), Collections.<CommandArgument<?>, Object>emptyMap());
+        context.errorHandler = errorsFor(spec.root());
+        sendFailure(context, failure, reasonKey);
     }
 
-    private RichText failureText(CommandSender sender, Throwable failure, String reasonKey) {
+    void sendFailure(CommandContext context, Throwable failure, String reasonKey) {
+        reportFailure(failure);
+        CommandErrorHandler selected = context instanceof CommandContextImpl ? ((CommandContextImpl) context).errorHandler : errorHandler;
         String reason = reasonKey == null ? null : displayableReason(failure);
-        return reason == null
-                ? message(sender, CommandMessageKeys.INTERNAL_ERROR)
-                : messages.resolve(sender, reasonKey, MessagePlaceholders.of("reason", reason));
+        if (selected == null && reason != null) {
+            emit(context.sender(), CommandResult.message(CommandResult.Status.FAILED,
+                    messages.resolve(context.sender(), reasonKey, MessagePlaceholders.of("reason", reason))));
+        } else handleError(context, failure);
+    }
+
+    private CommandErrorHandler errorsFor(CommandNode node) {
+        for (CommandNode current = node; current != null; current = current.parent)
+            if (current.errorHandler != null) return current.errorHandler;
+        return errorHandler;
+    }
+
+    private void handleError(CommandContext context, Throwable failure) {
+        CommandErrorHandler selected = context instanceof CommandContextImpl ? ((CommandContextImpl) context).errorHandler : errorHandler;
+        if (selected == null) return; // 默认只记录，不替业务插件发送统一文案。
+        try { selected.handle(context, failure); }
+        catch (RuntimeException handlerFailure) {
+            if (logger != null) logger.error("命令异常处理器失败: /" + spec.name(), handlerFailure);
+            else FALLBACK_LOGGER.log(Level.SEVERE, "命令异常处理器失败: /" + spec.name(), handlerFailure);
+        }
     }
 
     private static final int MAX_REASON_LENGTH = 200;

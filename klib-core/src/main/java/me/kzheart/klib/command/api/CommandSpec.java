@@ -21,6 +21,9 @@ public interface CommandSpec {
 
     CommandSpec executes(CommandHandler handler);
 
+    /** 为当前节点及其子节点选择异常反馈；子节点可覆盖。未配置时继承模块策略。 */
+    CommandSpec errorHandler(CommandErrorHandler handler);
+
     CommandSpec literal(String literal, Consumer<? super CommandSpec> configure);
 
     <T> CommandSpec argument(

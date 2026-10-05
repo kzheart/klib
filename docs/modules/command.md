@@ -299,7 +299,7 @@ CommandBuiltins.standardAsync(
 重新加载失败: config.yml:limits.max: 需要整数
 ```
 
-原因文本会去掉 legacy 颜色码并限制在 200 字符内；在 MiniMessage 管线下占位符值在解析之后插入，不会被当作标签。其他异常仍显示通用的 `command.internal-error`。
+原因文本会去掉 legacy 颜色码并限制在 200 字符内；在 MiniMessage 管线下占位符值在解析之后插入，不会被当作标签。其他异常走业务 `CommandErrorHandler`，未配置时只记录。配置异常的内置定位提示仅在未指定业务错误处理器时使用；提供错误处理器即可接管。
 
 `reload` 和 `debug` 属于敏感操作。权限参数不要传 `null`；确实希望任何人都可用时，必须显式传 `CommandBuiltins.PERMISSION_NONE`。未带权限参数的旧 `standard(...)` 重载会默认要求 `klib.command.builtin.admin`，不应在新代码中使用。
 
@@ -324,7 +324,7 @@ CommandModule.install(root, BukkitCommandRegistrar.discover(this, "myplugin"));
 
 此形式使用内置消息、在线玩家解析器和 Spigot 富文本输出。高级适配场景可以传入自己的 `PlayerResolver`、`RichTextSink` 与 `CommandMessages`。
 
-处理器抛出的运行时异常会被捕获、写入 `KLogger`，并向发送者显示本地化内部错误；`Error` 在记录和提示后仍会继续抛出。
+处理器抛出的普通异常由 Klib 捕获并记录到 `KLogger`，返回 `FAILED`；默认不发送统一的“命令执行出错”，也不自动回显异常消息。业务插件可在模块安装时提供 `CommandErrorHandler`，或在根/路由上设置 `errorHandler(...)`；优先使用最近路由的处理器，其次根处理器，最后模块策略。处理器可以发送自定义消息、关闭界面、转交业务反馈或保持静默。`Error` 在记录及业务反馈后仍继续抛出；错误处理器本身抛普通异常只记录，不递归调用或再补一条固定文案。
 
 `CommandDispatcher` 同时提供轻量 `DiagnosticSource`：只报告根命令名、调用次数、失败次数和最近失败的
 异常类型，不记录发送者、命令参数或玩家身份。需要把命令状态附到 Remote Incident 时，由开发者显式注册
@@ -373,6 +373,24 @@ CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
 关闭替换后的绑定只保证立即逻辑停用，不保证恢复被覆盖的裸标签，也不提供多个插件覆盖同名命令的恢复栈。不要依赖关闭顺序重新交还标签；需要恢复原命令时应移除冲突声明并重启服务端。注册失败不启用失败绑定，但不应把一次注册当成可恢复任意第三方标签的全局事务。
 
 同一插件内不得让 Klib 与其他注册器同时管理相同标签，包括重复的 `plugin.yml` 命令声明。不要直接修改 `knownCommands`、服务端 Brigadier 根树，或用固定 tick 延时模拟运行时替换。
+
+### 业务决定异常反馈
+
+```java
+import me.kzheart.klib.command.CommandModule;
+import me.kzheart.klib.command.api.CommandErrorHandler;
+
+CommandErrorHandler errors = (call, failure) -> {
+    // Klib 已记录完整异常；按业务类型选择可展示的信息，或不发送消息。
+    call.sender().sendMessage("操作未完成，请查看本插件的状态提示");
+};
+CommandModule.install(this, errors);
+commands().register("shop", root -> root
+        .errorHandler((call, failure) -> call.sender().sendMessage("商店操作未完成"))
+        .executes(call -> call.sender().sendMessage("商店入口")));
+```
+
+使用显式注册器时可调用 `CommandModule.install(scope, bridge, errors)`，共享语言管线时使用 `install(scope, bridge, messages, errors)`。参数解析、权限、缺参数及用法仍由命令规则处理，不进入业务处理器；业务显式抛出的 `CommandRejectedException` 保留其选择的拒绝消息。注解命令使用模块级策略；`CommandCall.await(stage, success, failure)` 的异步失败回调本来就由调用方提供，保持该契约。内置异步 reload 同样使用原命令上下文的策略。
 
 ## 生命周期与线程约束
 

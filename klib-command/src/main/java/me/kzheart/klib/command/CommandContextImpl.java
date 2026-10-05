@@ -2,6 +2,7 @@ package me.kzheart.klib.command;
 
 import me.kzheart.klib.command.api.CommandArgument;
 import me.kzheart.klib.command.api.CommandContext;
+import me.kzheart.klib.command.api.CommandErrorHandler;
 import org.bukkit.command.CommandSender;
 
 import java.util.IdentityHashMap;
@@ -15,6 +16,7 @@ final class CommandContextImpl implements CommandContext {
     private final Map<CommandArgument<?>, Object> values;
     // 名称索引按解析顺序构建：同名参数出现在路径多层时，最深的一次覆盖较浅的一次。
     private final Map<String, Object> byName;
+    CommandErrorHandler errorHandler;
 
     CommandContextImpl(
             CommandSender sender,

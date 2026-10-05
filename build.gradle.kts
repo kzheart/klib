@@ -430,6 +430,7 @@ project(":klib-ui") {
     dependencies {
         add("api", project(":klib-core"))
         add("api", project(":klib-item"))
+        add("api", project(":klib-command"))
         val compileSpigot = create(spigotApi.get()) as ModuleDependency
         val testSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false

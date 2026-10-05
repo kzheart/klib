@@ -239,7 +239,7 @@ public final class CommandBuiltins {
                             context.sender(), CommandMessageKeys.BUILTIN_RELOAD_SUCCESS);
                 } else {
                     dispatcher.sendFailure(
-                            context.sender(),
+                            context,
                             failure,
                             CommandMessageKeys.BUILTIN_RELOAD_FAILURE);
                 }

@@ -2,6 +2,7 @@ package me.kzheart.klib.command;
 
 import me.kzheart.klib.command.api.CommandArgument;
 import me.kzheart.klib.command.api.CommandHandler;
+import me.kzheart.klib.command.api.CommandErrorHandler;
 import me.kzheart.klib.command.api.CommandSpec;
 
 import java.util.Locale;
@@ -95,6 +96,12 @@ public final class CommandSpecImpl implements CommandSpec {
         return this;
     }
 
+    @Override public CommandSpec errorHandler(CommandErrorHandler handler) {
+        if (handler == null) throw new NullPointerException("handler");
+        node.errorHandler = handler;
+        return this;
+    }
+
     @Override
     public CommandSpec literal(String literal, Consumer<? super CommandSpec> configure) {
         requireCanAddChild(configure);
@@ -105,6 +112,7 @@ public final class CommandSpecImpl implements CommandSpec {
             }
         }
         CommandNode child = new CommandNode(normalized, null);
+        child.parent = node;
         node.children.add(child);
         configure.accept(new CommandSpecImpl(name, child));
         return this;
@@ -136,6 +144,7 @@ public final class CommandSpecImpl implements CommandSpec {
             }
         }
         CommandNode child = new CommandNode(null, typed);
+        child.parent = node;
         node.children.add(child);
         if (typed.isGreedy()) {
             node.hasGreedyChild = true;

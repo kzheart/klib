@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.13.0 - 2026-10-05
+
+- Command 新增 `CommandErrorHandler`、模块安装错误策略和根/路由 `errorHandler(...)`：普通业务异常默认仅记录并返回 FAILED，不再自动发送统一“命令执行出错”或回显异常信息；最近路由覆盖根及模块策略。内置异步 reload 保留原命令上下文，严重 Error 仍继续抛出，参数与权限错误保持命令规则。
+- 聊天面板也支持业务 `errorHandler(...)`；未配置时只记录并结束失败会话，不发送固定错误提示。
+
+- UI 新增 `BukkitChatPanels`、`ChatPanel`、`ChatPanelButton` 和 `ChatPanelSession`：支持字段/列表行、分页、悬停、点击回调、玩家权限命令、预填当前值、剪贴板复制与可选 F/潜行+F 保存取消。
+- 聊天按钮绑定玩家实例、当前页 UUID 和绝对有效期；刷新、重复点击、退出和作用域关闭使旧按钮失效。每次操作及聊天输入完成时重新检查权限与业务 guard，异步输入通过所属 Scope 回到主线程。
+- 面板复用现有 Lang 富文本和 BukkitChatPrompts，不保存业务草稿、不授予 OP、不以控制台代执行玩家命令；UI 公开依赖 Command（含 Lang），安装时需在启动阶段先安装命令模块。
+
 ## 0.12.0 - 2026-10-05
 
 - Command 改为启动声明模型：支持公开命令生命周期 API 的 Paper 通过 `JavaPlugin.onEnable` 中的 `LifecycleEvents.COMMANDS` 安装 `BasicCommand` 原始参数入口；无该 API 的 Bukkit/Paper 保留启动期 `CommandMap` 注册。通过宿主能力发现保持公共 Java 8 制品，不引入 Java 21 硬依赖。

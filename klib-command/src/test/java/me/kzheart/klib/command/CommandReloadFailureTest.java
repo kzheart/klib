@@ -60,7 +60,7 @@ class CommandReloadFailureTest {
     }
 
     @Test
-    void nonConfigFailuresKeepTheGenericInternalError() {
+    void nonConfigFailuresDoNotForceAnInternalErrorMessage() {
         RecordingMessages messages = new RecordingMessages();
         CommandSpecImpl spec = CommandSpecImpl.command("demo");
         CommandBuiltins.standard(
@@ -77,7 +77,7 @@ class CommandReloadFailureTest {
                 TestSenders.console().sender(), new String[]{"reload"});
 
         assertEquals(CommandResult.Status.FAILED, result.status());
-        assertEquals(CommandMessageKeys.INTERNAL_ERROR, messages.lastKey());
+        assertTrue(messages.keys.isEmpty());
     }
 
     @Test

@@ -71,8 +71,9 @@ public final class AsyncTasks {
     }
 
     /**
-     * 返回一个在主线程完成的等价阶段，使其后续的非 {@code Async} 回调也运行在主线程。
-     * 适合需要多步组合、不想每步都传执行器的场景。
+     * 返回一个在主线程完成的等价阶段。完成前注册的非 {@code Async} 回调随完成在主线程执行；
+     * 完成后从其他线程追加的非 {@code Async} 回调会直接在追加线程执行，不保证在主线程。
+     * 需要确保主线程时使用 {@link #thenSync} 或显式传入 {@code scope.syncExecutor()}。
      */
     public static <T> CompletionStage<T> onSync(CompletionStage<T> stage, Scope scope) {
         require(stage, scope);

@@ -22,7 +22,6 @@
 | 外部插件集成 | [klib-hook](modules/hook.md) |
 | 版本能力与数据包侧边栏 | [klib-compat](modules/compat.md) |
 | 远程诊断客户端 | [klib-remote](modules/remote.md) |
-| Guard 编译契约 | [klib-guard-api](modules/guard-api.md) |
 
 ## 跨模块专题
 

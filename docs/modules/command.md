@@ -1,36 +1,12 @@
 # Command 模块
 
-注解命令通过 `@Command(value = "mail", help = true)` 安装自动分页帮助；主命令和 GUI 的入口声明见下文的“自动帮助与主命令入口”。
+用一棵类型化命令树统一处理参数解析、补全、权限、帮助和错误反馈，不用再手工拆 `String[] args`。
 
-状态：稳定公开模块
-模块名：`command`
-制品：`me.kzheart.klib:klib-command`
+| 模块名 | 制品 | 自动带入 |
+| --- | --- | --- |
+| `command` | `me.kzheart.klib:klib-command` | `core`、`lang`、`config` |
 
-`klib-command` 用类型化树描述 Bukkit 命令，统一完成参数解析、补全、权限、玩家限制、帮助、错误定位和作用域关闭后的逻辑停用。命令在插件启动时声明；支持公开命令生命周期 API 的 Paper 使用该 API 安装执行入口，并在发送客户端命令树时按玩家权限生成 Brigadier 展示树。
-
-## 注解与平铺声明
-
-`commands().register(new PlayerCommands(), new AdminCommands())` 将 `@Command`、`@Route` 方法编译为同一套命令树。
-支持参数注入、Permission、Check、Greedy、带前置参数上下文的 Suggest/Suggestions，以及 CommandCall.await 主线程回调。
-同根的处理器在一次调用中合并，别名共享完整命令树；`MountedCommand.of(根命令, 处理器, 子命令, 别名...)` 可把已有处理器的全部路由再挂到另一根命令的子命令下。所有声明在启动阶段完成，失败绑定不启用，命令随所属作用域关闭立即逻辑停用；物理节点不保证同时消失。
-
-程序化声明可使用 `root.route("action start").argument(token).executes(handler)`，无需按层嵌套 lambda。
-领域参数解析用 `Arguments.contextual`；原有 Arguments.custom 保持两参数补全器语义。
-本页原有按树声明方式仍可用；新 API 的完整用法、权限合并和限制见 [组件与注解](../annotations.md)。
-
-## 何时使用
-
-适合以下场景：
-
-- 不想手工拆分 `String[] args`；
-- 需要整数范围、枚举、在线玩家、可选值或贪婪文本等类型化参数；
-- 希望补全、帮助和执行共享同一棵命令树；
-- 希望配置重载后命令读取最新业务状态，而不用重新注册命令；
-- 希望命令错误与业务消息共用 Lang 语言文件。
-
-## 接入
-
-推荐通过 Klib Gradle 插件选择模块：
+## 快速开始
 
 ```kotlin
 klib {
@@ -40,21 +16,7 @@ klib {
 }
 ```
 
-`command` 会自动带入 `core`、`lang` 和 `config`。
-
-直接依赖的高级用法：
-
-```kotlin
-dependencies {
-    implementation("me.kzheart.klib:klib-command:<klib-version>")
-}
-```
-
-直接依赖时需自行打包、重定位并提供 Bukkit API；推荐的 Gradle 插件会自动处理 Klib 模块闭包。
-
-## 快速开始
-
-最常用的写法是注解声明。在 `KPlugin.setup()` 中安装命令能力，再用 `commands().register(...)` 一次声明处理类；这个初始化入口由 `JavaPlugin.onEnable` 阶段调用：
+依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
 
 ```java
 @Override
@@ -85,10 +47,31 @@ public final class CoinCommands {
 }
 ```
 
-`CommandModule.install(this)` 发现当前服务端支持的注册方式，并使用默认命令消息；命令来自代码声明，不需要在 `plugin.yml` 重复声明相同标签。注解的完整规则见
-[组件与注解](../annotations.md)。
+效果：
 
-需要让命令错误与帮助复用语言文件，或在启动时以程序化方式构建命令树时，先安装语言能力，再通过 `Scope.command` 声明：
+- `/coins give <target> <amount>` 发放金币；
+- `/coins` 和 `/coins help [page]` 显示按权限过滤的分页帮助。
+
+命令只在代码里声明，**不要**再在 `plugin.yml` 里写同名命令。注解的完整规则见 [组件与注解](../annotations.md)。
+
+## 两种声明方式
+
+| 方式 | 写法 | 适合 |
+| --- | --- | --- |
+| 注解 | `commands().register(new A(), new B())` | 大多数业务命令 |
+| 程序化 | `commands().register("name", root -> ...)` 或 `scope.command(...)` | 动态结构、自定义参数、需要精细控制节点 |
+
+两种方式编译成同一套命令树，以下规则通用：
+
+- 同根命令的多个处理类放在**同一次** `register(...)` 中合并，别名共享完整树。
+- `MountedCommand.of(根命令, 处理器, 子命令, 别名...)` 把一个处理类的全部路由再挂到另一个根命令下。
+- 注解支持参数注入、`@Permission`、`@Check`、`@Greedy`、`@Suggest`/`@Suggestions`（可读取前置参数），以及 `CommandCall.await` 主线程回调。
+- 程序化可以平铺声明：`root.route("action start").argument(token).executes(handler)`，不用逐层嵌套 lambda。
+- 领域参数用 `Arguments.contextual`（可读发送者和前置参数）；`Arguments.custom` 仍是两参数补全器。
+
+### 程序化建树
+
+需要命令错误和帮助复用语言文件时，先安装 Lang，再把它的管线传给命令模块：
 
 ```java
 @Override
@@ -125,29 +108,44 @@ protected void setup() {
 }
 ```
 
-这里注册的是 `/coins give <target> <amount>`。参数对象既描述树节点，也是 `context.get(...)` 的类型化键，因此必须保存并复用同一个实例；不要在读取时重新调用 `Arguments.player("target")`。
+`Arg` 对象既是树节点，也是 `context.get(...)` 的类型化键，**必须复用建树时的同一个实例**。读取时不要重新调用 `Arguments.player("target")`。
 
 ### 按名读取参数
 
-拿不到建树时的 `Arg` 实例（例如处理器写在另一个类里，或参数被 `Arguments.optional(...)` 包装过）时，可以按参数名读取：
+拿不到建树时的 `Arg` 实例时（处理器在别的类里，或参数被 `Arguments.optional(...)` 包装过），可以按名字读取：
 
 ```java
 int amount = context.get("amount", Integer.class).intValue();
 Optional<Object> raw = context.find("amount");
 ```
 
-- 名称取自 `Arguments.xxx(name, ...)` 声明的名字，已规范化为小写；
-- 同名参数出现在同一条解析路径的多个层级时，返回最深处的值；
-- 名称未出现在本次解析中，`get(String, Class)` 抛 `IllegalArgumentException`，`find` 返回 `Optional.empty()`；
-- 可选参数默认值为 `null` 时，`find` 同样返回 `Optional.empty()`，`get(String, Class)` 返回 `null`。
+| 情况 | `get(name, type)` | `find(name)` |
+| --- | --- | --- |
+| 同名参数在路径上出现多次 | 取最深处的值 | 取最深处的值 |
+| 本次解析没有这个参数 | 抛 `IllegalArgumentException` | `Optional.empty()` |
+| 可选参数的默认值为 `null` | 返回 `null` | `Optional.empty()` |
 
-按实例读取仍是推荐写法，它在编译期就带上类型；按名读取用于跨类传递和包装参数场景。
+名称取自 `Arguments.xxx(name, ...)`，已转成小写。优先按实例读取，因为类型在编译期就确定了。
 
-`BukkitCommandRegistrar.discover(this, "myplugin")` 显式传入所属插件，避免依赖库与宿主共享 ClassLoader；`CommandModule.install(this)` 已自动使用这个入口。省略插件参数的 `discover(prefix)` 仅用于 Klib 已打包在所属插件 ClassLoader 内的情况。字符串参数是旧 Bukkit 注册路径使用的命名空间前缀，建议使用插件 ID 的小写稳定形式。支持公开生命周期 API 的 Paper 使用实际插件名对应的命名空间，这个参数不会替换 Paper 的插件命名空间。
+## 安装选项
+
+| 调用 | 说明 |
+| --- | --- |
+| `CommandModule.install(this)` | 最常用。自动选择注册方式，使用默认消息 |
+| `CommandModule.install(this, errors)` | 同上，再加业务错误处理器 |
+| `CommandModule.install(root, bridge)` | 显式注册器、内置消息、在线玩家解析和 Spigot 富文本输出 |
+| `CommandModule.install(root, bridge, lang.pipeline())` | 命令消息走语言文件（推荐） |
+| `CommandModule.install(scope, bridge, errors)` / `(scope, bridge, messages, errors)` | 显式注册器 + 错误处理器 |
+
+高级适配可以自己传入 `PlayerResolver`、`RichTextSink` 和 `CommandMessages`。
+
+`BukkitCommandRegistrar.discover(this, "myplugin")`：
+
+- 显式传入所属插件，不依赖库和宿主共用 ClassLoader。`install(this)` 内部用的就是它。
+- 省略插件参数的 `discover(prefix)` 只适用于 Klib 打包在所属插件 ClassLoader 里的情况。
+- 字符串是旧 Bukkit 注册路径的命名空间前缀，建议用插件 ID 的小写形式。现代 Paper 的命名空间由实际插件名决定，这个参数不会改变它。
 
 ## 构建命令树
-
-每个节点都可以配置：
 
 ```java
 command.description("说明")
@@ -156,34 +154,39 @@ command.description("说明")
         .executes(context -> run(context.sender()));
 ```
 
-- `description` 用于 Bukkit 元数据和帮助；
-- `permission` 在执行、帮助与补全中都会过滤；
-- `playerOnly` 拒绝控制台及其他非玩家发送者；
-- `executes` 指定参数在该节点结束时执行的处理器；
-- `literal` 添加固定单词；
-- `argument` 添加类型化参数。
+| 方法 | 作用 |
+| --- | --- |
+| `description` | Bukkit 元数据和帮助中的说明 |
+| `permission` | 执行、帮助、补全都按它过滤 |
+| `playerOnly` | 拒绝控制台和其他非玩家发送者 |
+| `executes` | 参数在这个节点结束时执行的处理器 |
+| `literal` | 添加固定单词 |
+| `argument` | 添加类型化参数 |
 
-节点可以同时拥有处理器和子节点，例如 `/arena` 显示摘要，而 `/arena join` 执行加入操作。
+一个节点可以同时有处理器和子节点，例如 `/arena` 显示摘要，`/arena join` 加入。
 
-到达一个没有处理器但仍有可访问子节点的节点时：
+走到一个没有处理器、但还有可访问子节点的节点时：
 
-- 停在根命令上（如只输入 `/coins`）显示命令帮助第一页，结果状态为 `HELP`；
-- 已经进入子命令却缺少后续参数（如 `/coins give`）反馈该节点的完整用法和用途，结果状态为 `INCOMPLETE`：
+- 停在根命令（如 `/coins`）：显示帮助第一页，结果状态为 `HELP`。
+- 进入子命令后缺少参数（如 `/coins give`）：显示该节点的用法和用途，结果状态为 `INCOMPLETE`，用法行使用 `command.usage` 消息键：
 
   ```text
   用法 › /coins give <target> <amount>
   用途 › 发放金币
   ```
 
-  该节点下有多条可达分支时逐行列出；分支超过一页（8 条）或发送者无权访问任何分支时，退回帮助第一页。用法行使用 `command.usage` 消息键。
+  有多条分支时逐行列出。分支超过一页（8 条），或发送者没有权限访问任何分支时，改为显示帮助第一页。
 
-命令名、literal 和参数名都会规范化为小写单词，不能包含空格。同一节点下不能出现重名 literal 或重名参数。
+## 命令标签
+
+- 命令名、literal 和参数名会统一转成小写，不能含空格。同一节点下不能有重名的 literal 或参数。
+- 根名、别名和 literal 支持 Unicode 字母和数字，例如 `@Command(value = "mail", aliases = {"邮箱"})`、`@Route("领取")`。
+- 中文别名与原命令共用权限、补全、客户端命令树和逻辑停用，不需要另写转发命令。
+- 标点只能用 `_ . : -`，不能含空白、参数括号或控制符。
 
 ## 参数
 
 ### 内置参数
-
-常用工厂包括：
 
 ```java
 Arg<Integer> count = Arguments.integer("count", 1, 64);
@@ -197,15 +200,17 @@ Arg<String> id = Arguments.string("id");
 Arg<String> reason = Arguments.greedyString("reason");
 ```
 
-- `integer` 和 `decimal` 支持闭区间范围；
-- `bool` 接受 `true/false`、`yes/no`、`on/off`、`1/0` 并提供补全；
-- `enumeration` 大小写不敏感，补全使用小写枚举名；
-- `player` 只解析精确匹配的在线玩家；
-- `choice` 大小写不敏感并返回声明时的规范值；
-- `string` 消费一个 token，可选自定义补全；
-- `greedyString` 消费剩余全部文本，必须是路径中的最后一个节点。
+| 工厂 | 行为 |
+| --- | --- |
+| `integer` / `decimal` | 支持闭区间范围 |
+| `bool` | 接受 `true/false`、`yes/no`、`on/off`、`1/0`，带补全 |
+| `enumeration` | 大小写不敏感，补全为小写枚举名 |
+| `player` | 只匹配名字完全一致的在线玩家 |
+| `choice` | 大小写不敏感，返回声明时的规范值 |
+| `string` | 消费一个 token，可自定义补全 |
+| `greedyString` | 消费剩余全部文本，必须是路径最后一个节点 |
 
-同一节点下可以放多个具体参数类型作为分支，但第一个能成功解析的分支会胜出。`string` 接受任意单 token，会遮蔽后续同级参数，因此它之后不能再声明同级参数分支。
+同一节点下可以放多个参数分支，按顺序第一个解析成功的生效。`string` 能接受任意单个 token，会挡住后面的同级参数，所以它之后不能再加同级参数分支。
 
 ### 可选参数
 
@@ -218,9 +223,9 @@ command.argument(amount, node -> node.executes(context ->
         give(context.get(amount).intValue())));
 ```
 
-输入缺少该参数且路径可以沿可选节点到达处理器时，`context.get(amount)` 返回默认值。贪婪参数不能设为可选。
-
-可选参数应放在必填参数之后。虽然树允许在可选节点后继续添加节点，但命令省略可选值时，只会沿可访问的可选参数继续补默认值，不会跳过它去匹配一个必填节点。
+- 输入缺少该参数、且路径能沿可选节点到达处理器时，`context.get(amount)` 返回默认值。
+- 贪婪参数不能设为可选。
+- 可选参数要放在必填参数之后。省略可选值时，只会沿可选节点继续补默认值，不会跳过它去匹配后面的必填节点。
 
 ### 自定义参数与补全
 
@@ -231,13 +236,11 @@ Arg<UUID> playerId = Arguments.custom(
         (sender, prefix) -> knownIds(prefix));
 ```
 
-解析器返回 `null` 或抛出 `IllegalArgumentException` 会作为普通参数错误反馈给发送者。补全器可以返回 `null`，结果会按当前前缀再次过滤并按大小写不敏感顺序排序。
-
-`Arguments.custom(...)` 是唯一的参数扩展点。`CommandArgument` 与 `Arg` 虽然公开，但只用于声明字段类型：`Arg` 的构造器和解析方法都是包内可见，库外无法继承，自行实现 `CommandArgument` 的对象也会被 `argument(...)` 拒绝。需要复杂解析时把逻辑写进 `ArgumentParser`，而不是新建实现类。
+- 解析器返回 `null` 或抛 `IllegalArgumentException`，会作为普通参数错误反馈给发送者。
+- 补全器可以返回 `null`。结果会按当前前缀再过滤一次，并按不区分大小写的顺序排序。
+- `Arguments.custom(...)` 是唯一的参数扩展点。`Arg` 和 `CommandArgument` 只用来声明字段类型，库外不能继承；自己实现 `CommandArgument` 的对象会被 `argument(...)` 拒绝。复杂解析逻辑写进 `ArgumentParser`。
 
 ## 权限、玩家限制与可见性
-
-权限和 `playerOnly` 属于声明它们的节点。执行时会逐层检查；帮助和 Tab 补全也会隐藏不可访问分支。
 
 ```java
 command.literal("admin", admin -> admin
@@ -246,17 +249,22 @@ command.literal("admin", admin -> admin
                 .executes(context -> reload())));
 ```
 
-如果一个无权限 literal 与同级参数可能匹配同一输入，无权限 literal 不会遮蔽该参数；模块会先尝试发送者有权访问的参数分支。
-
-不要只依赖客户端补全隐藏敏感命令。服务端执行路径始终会重新检查权限，但业务处理器内部涉及具体对象授权时仍需自行校验。
+- `permission` 和 `playerOnly` 作用于声明它们的节点，执行时逐层检查。帮助和 Tab 补全会隐藏不可访问的分支。
+- 没有权限的 literal 不会挡住同级参数，会优先尝试发送者有权访问的参数分支。
+- 服务端执行时一定会重新检查权限，不要只靠隐藏补全来保护敏感命令。涉及具体对象的授权仍要在业务处理器里自己校验。
 
 ## 自动帮助与主命令入口
 
-注解入口设置 `@Command(value = "mail", aliases = {"m"}, help = true)` 后，会根据已注册路由生成 `help [page]`。`help` 默认是 `false`；同根处理类合并完成后安装一次，别名共享帮助。`@Description` 显示路由用途，权限与 `Player` 发送者限制决定哪些业务命令可见。
+注解方式：`@Command(value = "mail", aliases = {"m"}, help = true)` 会根据已注册路由生成 `help [page]`。
 
-主命令默认显示帮助时，不声明 `@Route("")`；GUI 单独声明为 `@Route("open")`。已有的 `@Route({"", "open"})` 应移除空字符串，变为 `@Route("open")`。自动帮助会保留已有根处理器，以及显式声明的 `help` 子命令。完整注解示例见 [组件与注解](../annotations.md#自动帮助与主命令入口)。
+- `help` 默认是 `false`。同根处理类合并后只安装一次，别名共用。
+- `@Description` 提供每条路由的用途。权限和 `Player` 发送者限制决定哪些命令可见。
+- **主命令默认显示帮助**：不要声明 `@Route("")`，GUI 单独用 `@Route("open")`。旧写法 `@Route({"", "open"})` 要去掉空字符串。
+- 已有的根处理器和显式声明的 `help` 子命令会保留。
 
-程序化入口也应把 GUI 放到独立子命令：
+完整注解示例见 [组件与注解](../annotations.md#自动帮助与主命令入口)。
+
+程序化方式同样把 GUI 放到独立子命令：
 
 ```java
 commands().register("mail", root -> {
@@ -269,133 +277,24 @@ commands().register("mail", root -> {
 });
 ```
 
-此处根节点没有 `executes`：`/mail` 显示帮助第一页，`/mail help 1` 显式指定页码，`/mail open` 打开界面。若根节点或无参数可匹配的默认分支保留 GUI 处理器，裸主命令仍会执行该处理器。`CommandBuiltins.create().install(root)` 只安装帮助，不会附带配置重载或调试操作。
+| 输入 | 结果 |
+| --- | --- |
+| `/mail` | 帮助第一页（根节点没有 `executes`） |
+| `/mail help 1` | 指定页码 |
+| `/mail open` | 打开界面 |
 
-## 内置帮助、重载与调试命令
+如果根节点或不带参数就能匹配的默认分支挂了 GUI 处理器，`/mail` 仍会执行它。`CommandBuiltins.create().install(root)` 只安装帮助，不带 reload 和 debug。
 
-推荐显式提供管理员权限，并让配置重载等待监听器完成：
+## 帮助样式
 
-```java
-AtomicBoolean debug = new AtomicBoolean();
+| 预设 | 样式 |
+| --- | --- |
+| `ELEGANT`（默认） | 典雅：标题 + 单行用途 |
+| `COMPACT` | 简洁：紧凑目录 |
+| `PANEL` | 面板：两行用途 + 边线 |
+| `CLASSIC` | 经典：沿用 `CommandMessages` 的标题和分页文案 |
 
-CommandBuiltins.standardAsync(
-        "myplugin.admin",
-        config::reloadAsync,
-        debug::get,
-        debug::set)
-        .install(command);
-```
-
-这会安装：
-
-- `help [page]`：分页显示发送者可访问的命令；
-- `reload`：异步完成后才发送成功消息；
-- `debug`：切换调用方维护的调试状态。
-
-同步重载可以使用 `CommandBuiltins.standard(permission, reloadAction, ...)`。
-
-重载失败时，同步与异步两条路径都会记录完整堆栈到日志。如果失败异常（或其 cause 链上任意一层）属于 Config 模块的 `ConfigException` 族，发送者还会收到 `command.builtin.reload.failure` 消息，其中 `{reason}` 是异常自带的定位信息，例如：
-
-```text
-重新加载失败: config.yml:limits.max: 需要整数
-```
-
-原因文本会去掉 legacy 颜色码并限制在 200 字符内；在 MiniMessage 管线下占位符值在解析之后插入，不会被当作标签。其他异常走业务 `CommandErrorHandler`，未配置时只记录。配置异常的内置定位提示仅在未指定业务错误处理器时使用；提供错误处理器即可接管。
-
-`reload` 和 `debug` 属于敏感操作。权限参数不要传 `null`；确实希望任何人都可用时，必须显式传 `CommandBuiltins.PERMISSION_NONE`。未带权限参数的旧 `standard(...)` 重载会默认要求 `klib.command.builtin.admin`，不应在新代码中使用。
-
-也可以通过 `CommandBuiltins.create()` 只选择部分内置项，或用 `help(false, null)` 关闭帮助。
-
-## 消息与输出
-
-推荐把 `LangRuntime.pipeline()` 传给 `CommandModule.install`。命令模块使用 `command.*` 消息键解析无权限、参数错误、内部错误、帮助和内置命令文本；这些键会随语言文件重载。
-
-```java
-CommandModule.install(
-        root,
-        BukkitCommandRegistrar.discover(this, "myplugin"),
-        lang.pipeline());
-```
-
-不需要自定义语言时，可以使用简化安装：
-
-```java
-CommandModule.install(root, BukkitCommandRegistrar.discover(this, "myplugin"));
-```
-
-此形式使用内置消息、在线玩家解析器和 Spigot 富文本输出。高级适配场景可以传入自己的 `PlayerResolver`、`RichTextSink` 与 `CommandMessages`。
-
-处理器抛出的普通异常由 Klib 捕获并记录到 `KLogger`，返回 `FAILED`；默认不发送统一的“命令执行出错”，也不自动回显异常消息。业务插件可在模块安装时提供 `CommandErrorHandler`，或在根/路由上设置 `errorHandler(...)`；优先使用最近路由的处理器，其次根处理器，最后模块策略。处理器可以发送自定义消息、关闭界面、转交业务反馈或保持静默。`Error` 在记录及业务反馈后仍继续抛出；错误处理器本身抛普通异常只记录，不递归调用或再补一条固定文案。
-
-`CommandDispatcher` 同时提供轻量 `DiagnosticSource`：只报告根命令名、调用次数、失败次数和最近失败的
-异常类型，不记录发送者、命令参数或玩家身份。需要把命令状态附到 Remote Incident 时，由开发者显式注册
-`new KlibDiagnosticContributor(dispatcher)`；Command 模块本身不依赖 Remote，也不会自动上传数据。
-
-## 启动注册、配置重载与逻辑停用
-
-所有根命令、别名和路由都在插件启动时声明。使用 `KPlugin` 时放在 `setup()`，不要覆盖框架管理的 `onEnable`；使用普通 `JavaPlugin` 的高级集成则在 `onEnable` 中安装和声明。注册入口会按当前服务端能力选择路径：
-
-- 暴露公开命令生命周期 API 的 Paper：在 `JavaPlugin.onEnable` 阶段通过 `LifecycleEvents.COMMANDS` 安装 `BasicCommand` 原始参数执行入口。服务端决定何时重建和重新发布命令注册，不直接修改正在使用的服务端 Brigadier 树。
-- 没有该 API 的 Bukkit/Paper：保留启动阶段的 `CommandMap` 注册，执行和 Tab 补全交给同一套 Klib 分发器。
-
-公开 API 通过宿主能力发现接入，Klib 的公共制品仍保持 Java 8 字节码与 API 边界，不硬依赖 Java 21 或现代 Paper API 类。目标服务端自身需要的 Java 版本由服务端决定。
-
-配置重载只更新命令处理器读取的配置、语言和业务状态，不重建命令树，也不通过 `root.rebuild()` 或关闭再创建命令作用域来实现。需要重建监听器、任务或其他业务资源时，将它们放在不含命令声明的独立子作用域；启动时声明的处理器从稳定服务入口读取最新状态。调整根名、别名或路由声明后应重启插件所在服务端。
-
-`Scope.command` 返回的 `CommandRegistration` 归传入作用域持有。关闭注册句柄或其作用域会立即禁止该绑定的执行、补全和权限检查；关闭后不会重新启用旧处理器。这个保证是逻辑停用：物理命令节点可能仍留在服务端或玩家已收到的命令树里，直到服务端生命周期重建或重启才消失。Klib 不承诺运行时新增根命令、即时物理注销，也不会为了关闭作用域强制刷新在线玩家的命令树。
-
-仍可用子作用域管理命令的逻辑存活期，但必须在启动时创建并声明：
-
-```java
-root.scope("arena-commands", arena -> {
-    arena.command("arena", command -> configureArenaCommand(command));
-});
-```
-
-关闭这个作用域会立即停用 `/arena`，不等于支持运行时重新注册它。对于可随配置启停的功能，通常应保留启动时的命令声明，并在业务入口检查功能状态。
-
-### 客户端展示树与服务端执行
-
-Brigadier 集成只在 `AsyncPlayerSendCommandsEvent` 的同步回调中处理事件提供的当前玩家树副本。投影时逐节点检查权限与玩家限制，不修改服务端共享根树，不在异步回调中查询 Bukkit 权限，也不接管 Paper 的内部构建线程或队列。
-
-服务端始终通过原始命令参数调用 Klib 分发器，保留中文命令、含冒号参数（如 `zap:ID`）、本地化错误和大小写不敏感的 literal 匹配。客户端树用于显示用法和补全，不能替代服务端的参数解析与权限校验。关闭作用域后，即使客户端还显示旧节点，执行入口和补全入口也已停用。
-
-### 显式覆盖未命名空间的标签
-
-默认 `CommandRegistrationPolicy.REJECT` 保留已有绑定并拒绝根名或别名冲突。确实需要在启动时接管已有裸命令时，显式选择公开注册策略：
-
-```java
-CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
-        this, getName().toLowerCase(Locale.ROOT), CommandRegistrationPolicy.REPLACE_UNQUALIFIED));
-```
-
-`REPLACE_UNQUALIFIED` 只接管不含命名空间的标签，根名和声明的别名各自参与冲突判断；不会覆盖其他插件的 `namespace:label` 入口。现代 Paper 的命名空间仍由实际插件名决定，`discover` 的前缀只用于旧 Bukkit 路径。
-
-关闭替换后的绑定只保证立即逻辑停用，不保证恢复被覆盖的裸标签，也不提供多个插件覆盖同名命令的恢复栈。不要依赖关闭顺序重新交还标签；需要恢复原命令时应移除冲突声明并重启服务端。注册失败不启用失败绑定，但不应把一次注册当成可恢复任意第三方标签的全局事务。
-
-同一插件内不得让 Klib 与其他注册器同时管理相同标签，包括重复的 `plugin.yml` 命令声明。不要直接修改 `knownCommands`、服务端 Brigadier 根树，或用固定 tick 延时模拟运行时替换。
-
-### 业务决定异常反馈
-
-```java
-import me.kzheart.klib.command.CommandModule;
-import me.kzheart.klib.command.api.CommandErrorHandler;
-
-CommandErrorHandler errors = (call, failure) -> {
-    // Klib 已记录完整异常；按业务类型选择可展示的信息，或不发送消息。
-    call.sender().sendMessage("操作未完成，请查看本插件的状态提示");
-};
-CommandModule.install(this, errors);
-commands().register("shop", root -> root
-        .errorHandler((call, failure) -> call.sender().sendMessage("商店操作未完成"))
-        .executes(call -> call.sender().sendMessage("商店入口")));
-```
-
-使用显式注册器时可调用 `CommandModule.install(scope, bridge, errors)`，共享语言管线时使用 `install(scope, bridge, messages, errors)`。参数解析、权限、缺参数及用法仍由命令规则处理，不进入业务处理器；业务显式抛出的 `CommandRejectedException` 保留其选择的拒绝消息。注解命令使用模块级策略；`CommandCall.await(stage, success, failure)` 的异步失败回调本来就由调用方提供，保持该契约。内置异步 reload 同样使用原命令上下文的策略。
-
-## 帮助布局与点击
-
-默认使用典雅样式。可选 `CommandHelpStyle.Preset.ELEGANT`（典雅，标题和单行用途）、`COMPACT`（简洁，紧凑目录）、`PANEL`（面板，双行用途与边线）、`CLASSIC`（经典，复用原有 CommandMessages 的标题和分页文案）。所有布局均保留命令预填、完整用途悬停、实际分页命令及权限过滤，不依赖资源包。
+所有预设都支持点击预填命令、悬停显示完整用途、真实分页命令和权限过滤，不依赖资源包。
 
 ```java
 import me.kzheart.klib.command.api.CommandHelpStyle;
@@ -407,11 +306,25 @@ commands().register("coins", root -> {
 });
 ```
 
-全插件的默认值可在安装/声明阶段注册 `context().scope().registerCapability(CommandHelpStyle.class, style)`；根或路由的 `helpStyle(...)` 优先。注解命令同样继承所属 Scope 的默认值。`helpStyle(() -> currentStyle)` 支持业务原子替换配置后动态读取；不用重建命令树。
+设置的位置，优先级从高到低：
 
-`CommandHelpStyle.builder(preset)` 可定制 `header`、`entry`、`description`（条目第二行）、`usage`（参数不完整提示）、`group`、`previous`、`next`、`footer`、`hover`、三种命令层级 RGB 颜色、`pageSize` 和 `clearLines`。模板支持 MiniMessage；`{command}`、`{page}`、`{pages}`、`{count}`、`{summary}` 用于标题/页脚，`{usage}`、`{description}`、`{index}` 用于条目，`{category}` 用于分组。参数、说明、当前值都在解析后按字面文本插入，不会成为点击标签。自定义条目与不完整提示必须同时保留用法和说明占位符；未提供 description 时明确显示“暂无说明”，不会凭名称编造用途。
+1. 根或路由上的 `helpStyle(...)`；`helpStyle(() -> currentStyle)` 每次动态读取，配置重载后不用重建命令树。
+2. 全插件默认：`context().scope().registerCapability(CommandHelpStyle.class, style)`，注解命令同样继承。
 
-业务插件可自行持有 YAML，再调用 `CommandHelpStyles.parse(section)`：
+### 自定义模板
+
+`CommandHelpStyle.builder(preset)` 可以定制 `header`、`entry`、`description`（条目第二行）、`usage`（缺参数提示）、`group`、`previous`、`next`、`footer`、`hover`、三种命令层级的 RGB 颜色、`pageSize` 和 `clearLines`。
+
+| 占位符 | 用于 |
+| --- | --- |
+| `{command}` `{page}` `{pages}` `{count}` `{summary}` | 标题、页脚 |
+| `{usage}` `{description}` `{index}` | 条目 |
+| `{category}` | 分组 |
+
+- 模板支持 MiniMessage。参数、说明和当前值在解析后按纯文本插入，不会变成点击标签。
+- 自定义条目和缺参数提示必须同时保留用法和说明的占位符。没写 description 时显示“暂无说明”，不会根据名字编造用途。
+
+也可以从业务插件自己的 YAML 解析：`CommandHelpStyles.parse(section)`。
 
 ```yaml
 preset: elegant # elegant / compact / panel / classic / custom
@@ -431,40 +344,178 @@ custom: # 仅 preset: custom 时应用，不影响其他预设
   argument-color: '#a39a8c'
 ```
 
-含换行的 YAML 模板用双引号的 `\n` 或块文本 `|`；单引号会保留字面 `\n`。Klib 不创建或重写业务配置，错误值会抛出解析异常供业务 reload 门禁处理。
+- 多行模板用双引号里的 `\n` 或块文本 `|`。单引号会保留字面的 `\n`。
+- Klib 不会创建或改写业务配置。值有错误时抛解析异常，交给业务的 reload 流程处理。
 
-普通命令树的翻页按钮执行 `/<根命令> help <页码>`，使用 `CommandBuiltins` 或 `@Command(help = true)` 安装对应路由；自定义 sendHelp 调用应保证页容量与该路由相同。若帮助是多个独立短命令的汇总，可通过 `HelpRenderer.renderEntries(sender, command, summary, entries, page, style, navigation)` 渲染：传入已过滤权限的 `CommandHelpEntry`，usage 包含 `/`，navigation 返回实际注册的翻页命令（例如 `number -> "/help " + number`）。支持 category 与额外悬停说明，不能把 `/<根> help` 当成所有业务帮助的通用路由。
+### 翻页与汇总帮助
 
-## 生命周期与线程约束
+<details>
+<summary>展开：翻页路由与多命令汇总帮助 HelpRenderer.renderEntries</summary>
 
-- 安装与命令声明必须在插件启动阶段的服务器主线程执行；从异步线程调用注册会失败。
-- 注册句柄允许从其他线程关闭；关闭立即逻辑停用绑定，不等待 Paper 构建器，也不保证物理节点立即清理。
-- Bukkit 命令处理器通常运行在主线程。处理器中不要执行数据库、网络或大文件 I/O；使用 `scope.async(...).thenSync(...)`。
-- 异步工作完成后，只有回到主线程才能修改玩家、世界或背包。
-- 自定义 `CompletionStage` 用于内置异步重载时，应确保完成回调能够安全发送 Bukkit 消息；Config 的 `reloadAsync()` 在 `KPlugin` 环境中会在主线程监听器完成后结束。
-- 命令能力、注册与语言管线都必须在所属作用域仍打开时使用；配置重载不重新声明命令。
+- 普通命令树的翻页按钮执行 `/<根命令> help <页码>`，需要用 `CommandBuiltins` 或 `@Command(help = true)` 安装这条路由。自己调用 sendHelp 时，页容量要和这条路由一致。
+- 多个独立短命令的汇总帮助用 `HelpRenderer.renderEntries(sender, command, summary, entries, page, style, navigation)`：
+  - `entries` 传已经按权限过滤过的 `CommandHelpEntry`，usage 要带 `/`；
+  - `navigation` 返回实际注册的翻页命令，例如 `number -> "/help " + number`；
+  - 支持 category 和额外的悬停说明。不要把 `/<根> help` 当成所有业务帮助的通用路由。
 
-## 注意事项
+</details>
 
-- `context.get(arg)` 按对象身份匹配，必须使用建树时的同一 `Arg` 实例；`Arguments.optional(...)` 返回的是新实例，读取时用包装后的实例或改用 `context.get(name, type)`。
-- `greedyString` 必须位于路径末尾，之后不能添加 literal 或参数。
-- literal 优先于同级参数；具体值与命令词冲突时，应调整树结构避免歧义。
-- 命令模块只解析 Bukkit 交给它的命令 token，不负责 shell 风格引号或转义。
-- 公开生命周期 API 与 Brigadier 客户端投影按宿主能力发现；缺少生命周期 API 时使用启动期 Bukkit 注册，缺少客户端事件时保留基础执行与 Tab 补全。
-- 默认拒绝根名或别名冲突，不以“只剩命名空间入口”作为注册成功；仅在确实需要接管裸标签时选择 `REPLACE_UNQUALIFIED`。
-- 同一插件的同一个标签只能由一个注册入口管理，不要将 Klib 与 `plugin.yml`、其他命令框架或直接注册器混用。
+## 内置命令：help / reload / debug
 
-## 相关模块
+```java
+AtomicBoolean debug = new AtomicBoolean();
 
-- [Core](core.md)：命令注册的作用域和异步任务。
-- [Config](config.md)：可重载类型化配置。
-- [Lang](lang.md)：命令消息、帮助和富文本输出。
-- 完整命令树的组成方式见本页“构建命令树”。
+CommandBuiltins.standardAsync(
+        "myplugin.admin",
+        config::reloadAsync,
+        debug::get,
+        debug::set)
+        .install(command);
+```
 
-## Unicode 命令标签
+| 子命令 | 行为 |
+| --- | --- |
+| `help [page]` | 分页显示发送者能访问的命令 |
+| `reload` | 异步重载完成后才发送成功消息 |
+| `debug` | 切换调用方自己维护的调试状态 |
 
-注解命令根名、别名和字面量支持 Unicode 字母与数字，例如 `@Command(value="mail", aliases={"邮箱"})`
-和 `@Route("领取")`。中文别名与原命令共用权限、补全、客户端命令树与作用域逻辑停用，不需要另写转发命令。
-标签仍不得包含空白、参数括号或其他控制符；标点范围为 `_ . : -`。
+- 同步重载用 `CommandBuiltins.standard(permission, reloadAction, ...)`。
+- 只要部分内置项，用 `CommandBuiltins.create()` 挑选；`help(false, null)` 关闭帮助。
+- `reload` 和 `debug` 属于敏感操作，**权限参数不要传 `null`**。确实要所有人可用时，显式传 `CommandBuiltins.PERMISSION_NONE`。
+- 不带权限参数的旧 `standard(...)` 默认要求 `klib.command.builtin.admin`，新代码不要用。
 
-富文本发送方法从公开平台接口或父类解析，支持 Paper 的匿名 Spigot 实现；无组件 API 的平台才回退到纯文字颜色码。
+重载失败时，同步和异步都会把完整堆栈写进日志：
+
+- 异常本身或 cause 链上任意一层属于 Config 的 `ConfigException` 时，发送者会收到 `command.builtin.reload.failure` 消息，`{reason}` 是异常自带的定位信息：
+
+  ```text
+  重新加载失败: config.yml:limits.max: 需要整数
+  ```
+
+  原因文本会去掉旧式颜色码，最长 200 字符。在 MiniMessage 管线下，占位符的值在解析之后才插入，不会被当成标签。
+- 其他异常交给业务的 `CommandErrorHandler`，没配置时只记录日志。
+- 只要配置了业务错误处理器，就由它接管，不再使用上面的配置异常默认提示。
+
+## 错误反馈
+
+处理器抛出的普通异常会被 Klib 捕获、写进 `KLogger`，结果为 `FAILED`。默认**不**给玩家发统一的“命令执行出错”，也不回显异常消息，提示内容由业务决定：
+
+```java
+import me.kzheart.klib.command.CommandModule;
+import me.kzheart.klib.command.api.CommandErrorHandler;
+
+CommandErrorHandler errors = (call, failure) -> {
+    // Klib 已记录完整异常；按业务类型选择可展示的信息，或不发送消息。
+    call.sender().sendMessage("操作未完成，请查看本插件的状态提示");
+};
+CommandModule.install(this, errors);
+commands().register("shop", root -> root
+        .errorHandler((call, failure) -> call.sender().sendMessage("商店操作未完成"))
+        .executes(call -> call.sender().sendMessage("商店入口")));
+```
+
+- 处理器的查找顺序：最近的路由 → 根命令 → 模块级策略。注解命令使用模块级策略。
+- 错误处理器可以发消息、关界面、转交业务反馈，也可以什么都不做。
+- `Error` 在记录和反馈之后仍会继续抛出。错误处理器自己抛出的普通异常只记录，不会递归处理，也不会补发固定文案。
+- 参数解析、权限、缺参数和用法提示走命令规则，不经过错误处理器。
+- 业务主动抛出的 `CommandRejectedException` 会原样展示它的拒绝消息。
+- `CommandCall.await(stage, success, failure)` 的失败回调由调用方自己提供。内置的异步 reload 使用原命令上下文的错误策略。
+
+## 消息、富文本与诊断
+
+- 推荐给 `CommandModule.install` 传入 `LangRuntime.pipeline()`。无权限、参数错误、内部错误、帮助和内置命令的文本都使用 `command.*` 消息键，并会随语言文件一起重载。
+- 富文本发送方法从公开平台接口或父类中查找，支持 Paper 的匿名 Spigot 实现；平台没有组件 API 时，才退回到带颜色码的纯文本。
+- `CommandDispatcher` 自带一个轻量的 `DiagnosticSource`：只报告根命令名、调用次数、失败次数和最近一次失败的异常类型，不记录发送者、参数或玩家身份。
+- 想把命令状态附到 Remote Incident 里，需要自己注册 `new KlibDiagnosticContributor(dispatcher)`。Command 不依赖 Remote，也不会自动上传任何数据。
+
+## 启动注册、配置重载与逻辑停用
+
+**核心规则：命令只在插件启动时声明一次。重载配置不会重建命令树。**
+
+- 使用 `KPlugin` 时，在 `setup()` 中声明，不要覆盖 `onEnable`。普通 `JavaPlugin` 的高级集成在 `onEnable` 中安装和声明。
+- 注册方式按服务端能力自动选择：
+
+  | 服务端 | 注册方式 |
+  | --- | --- |
+  | 有公开命令生命周期 API 的 Paper | 在 `onEnable` 阶段通过 `LifecycleEvents.COMMANDS` 安装 `BasicCommand`。何时重建和发布命令由服务端决定，不改动正在使用的 Brigadier 树 |
+  | 其他 Bukkit/Paper | 启动阶段注册到 `CommandMap`。执行和补全都交给 Klib 分发器 |
+
+- 现代 API 通过运行时能力检测接入，公共制品仍然是 Java 8 字节码，不硬依赖 Java 21 或新版 Paper 类。
+
+**配置重载**只更新处理器读取的配置、语言和业务状态：
+
+- 不要用 `root.rebuild()`，也不要关掉再重建命令作用域来实现重载。
+- 需要重建监听器、任务等资源时，放进一个不含命令的独立子作用域。
+- 修改根名、别名或路由后，需要重启服务端。
+
+**逻辑停用**：`Scope.command` 返回的 `CommandRegistration` 归所在作用域所有。
+
+- 关闭注册句柄或作用域后，执行、补全和权限检查立即停用，之后也不会重新启用旧处理器。
+- 物理命令节点可能还留在服务端或玩家已收到的命令树里，直到服务端重建生命周期或重启。
+- Klib 不支持运行时新增根命令、立即物理注销，也不会为此强制刷新在线玩家的命令树。
+
+子作用域可以管理命令的逻辑存活期，但也必须在启动时创建和声明：
+
+```java
+root.scope("arena-commands", arena -> {
+    arena.command("arena", command -> configureArenaCommand(command));
+});
+```
+
+关闭它会立即停用 `/arena`，但不能在运行时再重新注册。功能需要随配置开关时，保留启动时的声明，在业务入口里检查开关状态即可。
+
+### 客户端展示树与服务端执行
+
+<details>
+<summary>展开：Brigadier 客户端树如何投影、与服务端执行的关系</summary>
+
+- Brigadier 集成只在 `AsyncPlayerSendCommandsEvent` 的同步回调里，处理事件给出的当前玩家命令树副本。投影时逐个节点检查权限和玩家限制。
+- 不修改服务端共享的根树，不在异步回调里查询 Bukkit 权限，也不接管 Paper 内部的构建线程或队列。
+- 服务端始终用原始参数调用 Klib 分发器，因此保留中文命令、带冒号的参数（如 `zap:ID`）、本地化错误和不区分大小写的 literal 匹配。
+- 客户端树只用于显示用法和补全，不能代替服务端的解析和权限校验。作用域关闭后，即使客户端还显示旧节点，执行和补全也已停用。
+
+</details>
+
+### 显式覆盖未命名空间的标签
+
+<details>
+<summary>展开：用 REPLACE_UNQUALIFIED 接管已有裸命令</summary>
+
+默认策略 `CommandRegistrationPolicy.REJECT`：保留已有绑定，根名或别名冲突时拒绝注册；只注册上带命名空间的入口不算成功。确实需要在启动时接管已有的裸命令时：
+
+```java
+CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
+        this, getName().toLowerCase(Locale.ROOT), CommandRegistrationPolicy.REPLACE_UNQUALIFIED));
+```
+
+- `REPLACE_UNQUALIFIED` 只接管不带命名空间的标签，根名和每个别名分别判断冲突；不会覆盖其他插件的 `namespace:label`。
+- 关闭替换后的绑定只保证逻辑停用。被覆盖的裸标签不会恢复，多个插件覆盖同名命令时也没有恢复栈。需要恢复原命令时，删掉冲突的声明并重启。
+- 注册失败时不会启用这次的绑定，但一次注册并不是能恢复任意第三方标签的全局事务。
+- 同一插件里，同一个标签不能同时交给 Klib 和其他注册器管理（包括 `plugin.yml` 里的重复声明）。不要直接改 `knownCommands` 或服务端 Brigadier 根树，也不要用延时 tick 模拟运行时替换。
+
+</details>
+
+## 线程与生命周期
+
+- 安装和声明命令必须在启动阶段、在主线程执行。从异步线程注册会失败。
+- 注册句柄可以在任何线程关闭。关闭后立即逻辑停用，不等待 Paper 构建器，也不保证物理节点马上清除。
+- 命令处理器通常运行在主线程。不要在里面做数据库、网络或大文件 I/O，改用 `scope.async(...).thenSync(...)`。
+- 异步任务完成后，必须回到主线程才能修改玩家、世界或背包。
+- 给内置异步重载传自定义 `CompletionStage` 时，要确保它完成时可以安全发送 Bukkit 消息。在 `KPlugin` 环境下，Config 的 `reloadAsync()` 会等主线程上的监听器执行完才完成。
+- 命令能力、注册和语言管线都只能在所属作用域还打开时使用。
+
+## 常见坑
+
+- `context.get(arg)` 按对象身份匹配，必须用建树时的同一个 `Arg` 实例。`Arguments.optional(...)` 返回的是新实例，读取时要用包装后的实例，或者改用 `context.get(name, type)`。
+- `greedyString` 必须在路径末尾，后面不能再加 literal 或参数。
+- literal 优先于同级参数。如果具体的值和命令词可能冲突，要调整树结构消除歧义。
+- 命令模块只解析 Bukkit 交给它的 token，不处理 shell 风格的引号和转义。
+- 缺少生命周期 API 时退回启动期 Bukkit 注册；缺少客户端事件时保留基本的执行和 Tab 补全。
+- 同一个标签只能交给一个注册入口管理。不要把 Klib 和 `plugin.yml`、其他命令框架或直接注册器混在一起用。
+
+## 相关页面
+
+- [组件与注解](../annotations.md)：注解命令的完整规则
+- [Core](core.md)：作用域和异步任务
+- [Config](config.md)：可重载的类型化配置
+- [Lang](lang.md)：命令消息、帮助和富文本

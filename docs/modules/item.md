@@ -1,10 +1,12 @@
-# klib-item
+# Item 模块
 
-`klib-item` 为 Bukkit 插件提供 Java 8 可用的物品构建、类型化标签、背包操作和传输编码。它适合处理“创建一个带业务标记的物品”“安全扣除或发放物品”“把物品保存为字符串”等任务。
+Java 8 可用的物品构建、类型化标签、背包扣除/发放和物品编码。适合「创建带业务标记的物品」「安全扣除或发放物品」「把物品保存为字符串」这类任务。
 
-## 接入模块
+| 模块名 | 制品 |
+| --- | --- |
+| `item` | `me.kzheart.klib:klib-item` |
 
-使用 klib Gradle 插件时，在模块列表中加入 `item`：
+## 快速开始
 
 ```kotlin
 klib {
@@ -14,9 +16,13 @@ klib {
 }
 ```
 
-插件会自动加入并内嵌 `item` 所需的 klib 模块及运行时依赖。当前 `klib-item` 在旧版服务端读写标签时需要 Item-NBT-API；默认构建会把它一并放入最终产物。该制品只在 CodeMC 仓库发布，构建脚本必须声明该仓库，配置见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
+依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
 
-若不使用 klib Gradle 插件，可直接依赖：
+**额外依赖 Item-NBT-API**：
+
+- 旧版服务端读写标签时需要它，默认构建会把它一并放入最终产物。
+- 该制品只在 CodeMC 仓库发布，构建脚本**必须**声明该仓库，配置见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
+- 不用 Klib Gradle 插件时，自己把 `klib-item` 和 Item-NBT-API 打入插件，或在运行环境提供：
 
 ```kotlin
 dependencies {
@@ -26,11 +32,7 @@ dependencies {
 }
 ```
 
-直接依赖时，调用方负责把 `klib-item` 和 Item-NBT-API 打入插件或在运行环境提供它们。
-
-## 构建带业务标签的物品
-
-`Items` 是常用入口。`Items.of(...)` 新建物品，`Items.edit(...)` 克隆后编辑已有物品，`build()` 返回独立的 `ItemStack`。
+最小示例：
 
 ```java
 import me.kzheart.klib.item.Items;
@@ -57,7 +59,17 @@ public final class ToolItems {
 }
 ```
 
-名称和 lore 支持 `&` 颜色代码。数量必须处于材质可堆叠范围内；`Items.resolveMaterial(...)` 接受大小写差异、短横线以及带命名空间的材质名，未知材质会直接抛出异常。
+## 构建物品
+
+| 调用 | 作用 |
+| --- | --- |
+| `Items.of(...)` | 新建物品 |
+| `Items.edit(...)` | 克隆后编辑已有物品 |
+| `build()` | 返回独立的 `ItemStack` |
+| `Items.resolveMaterial(...)` | 解析材质名：接受大小写差异、短横线和带命名空间的名称；未知材质直接抛异常 |
+
+- 名称和 lore 支持 `&` 颜色代码。
+- 数量必须在材质可堆叠范围内。
 
 ### 模型、光效与头颅
 
@@ -76,13 +88,18 @@ ItemStack head = Items.playerHead()
         .build();
 ```
 
-- `customModelData(...)` 在 1.14 以前的服务端没有对应属性，调用会被忽略；需要区分时先调用 `Items.supportsCustomModelData()`。传入 `null` 清除。
-- `glow(true)` 在 1.20.5 及以上使用原生光效覆盖；更早版本添加一级 `LURE` 附魔并隐藏附魔标记。`glow(false)` 只移除由 `glow(true)` 添加的这组附魔与标记。
-- `Items.playerHead()` 在 1.13+ 创建 `PLAYER_HEAD`，在 1.12 创建数据值为 3 的 `SKULL_ITEM`。`skullOwner(...)` 要求物品是玩家头颅，否则抛出 `IllegalArgumentException`；传入 `UUID` 时通过 `Bukkit.getOfflinePlayer` 解析。
+| 方法 | 版本差异与规则 |
+| --- | --- |
+| `customModelData(...)` | 1.14 以前没有对应属性，调用被忽略；需要区分时先调 `Items.supportsCustomModelData()`。传 `null` 清除 |
+| `glow(true)` | 1.20.5+ 用原生光效覆盖；更早版本添加一级 `LURE` 附魔并隐藏附魔标记 |
+| `glow(false)` | 只移除由 `glow(true)` 添加的这组附魔与标记 |
+| `Items.playerHead()` | 1.13+ 创建 `PLAYER_HEAD`；1.12 创建数据值为 3 的 `SKULL_ITEM` |
+| `skullOwner(...)` | 物品必须是玩家头颅，否则抛 `IllegalArgumentException`；传 `UUID` 时通过 `Bukkit.getOfflinePlayer` 解析 |
 
 ## 读取和更新标签
 
-标签键必须采用 `namespace:path` 形式。内置类型包括字符串、整数、长整数、双精度数、布尔值和字节数组。
+- 标签键必须是 `namespace:path` 形式。
+- 内置类型：字符串、整数、长整数、双精度数、布尔值、字节数组。
 
 ```java
 ItemStack item = player.getInventory().getItemInMainHand();
@@ -94,7 +111,11 @@ if (TOOL_TYPE.has(item) && "mining".equals(TOOL_TYPE.get(item))) {
 }
 ```
 
-`get(...)` 在标签缺失时返回 `null`。需要显式的空值语义时改用 `find(...)` 或 `getOrDefault(...)`：
+| 方法 | 标签缺失时 |
+| --- | --- |
+| `get(...)` | 返回 `null` |
+| `find(...)` | 返回空 `Optional` |
+| `getOrDefault(...)` | 返回默认值 |
 
 ```java
 int durability = DURABILITY.getOrDefault(item, Integer.valueOf(0)).intValue();
@@ -102,11 +123,15 @@ int durability = DURABILITY.getOrDefault(item, Integer.valueOf(0)).intValue();
 TOOL_TYPE.find(item).ifPresent(type -> player.sendMessage("工具类型：" + type));
 ```
 
-在支持 Persistent Data Container 的服务端，标签写入 PDC；1.12 等旧版服务端通过 Item-NBT-API 写入根 NBT。升级服务器后读取旧标签时，适配器会尽力把标签迁移到 PDC。不要直接依赖具体桥接实现，也不要把同一个名称同时定义成不同 Java 类型。
+存储位置：
+
+- 支持 Persistent Data Container 的服务端：写入 PDC。
+- 1.12 等旧版服务端：通过 Item-NBT-API 写入根 NBT。
+- 升级服务器后读取旧标签时，适配器会尽力把标签迁移到 PDC。
 
 ## 背包中的扣除与发放
 
-`InventoryItems` 按 `ItemStack.isSimilar(...)` 比较物品，因此名称、lore、附魔和标签都会参与业务物品的匹配。
+`InventoryItems` 按 `ItemStack.isSimilar(...)` 比较物品，名称、lore、附魔和标签都参与匹配。
 
 ```java
 ItemStack price = Items.of("DIAMOND").amount(3).build();
@@ -119,7 +144,10 @@ ItemStack reward = ToolItems.miningTool();
 InventoryItems.give(player, reward);
 ```
 
-`take(...)` 会先确认总量足够，再一次性修改背包，不会出现只扣除一部分的结果。`give(...)` 使用 Bukkit 背包接口发放，放不下的物品会在玩家位置自然掉落，并把掉落物的副本作为返回值交给调用方。
+| 方法 | 行为 |
+| --- | --- |
+| `take(...)` | 先确认总量足够，再一次性修改背包；**不会**只扣一部分 |
+| `give(...)` | 用 Bukkit 背包接口发放；放不下的在玩家位置自然掉落，掉落物副本作为返回值 |
 
 ## 保存和传输物品
 
@@ -130,7 +158,11 @@ String encoded = ItemCodec.encode(item, true);
 ItemStack restored = ItemCodec.decodeItem(encoded);
 ```
 
-编码值包含 Minecraft 数据版本并可选用 GZIP。跨服务器版本解码时会记录数据版本不一致警告，Minecraft 仍可能升级或拒绝其中的物品。解码器限制输入和解压后的大小，并使用类白名单约束 Java 反序列化；即便如此，也应把编码值视为业务数据，不应把任意超大外部输入直接交给解码器。
+- 编码值包含 Minecraft 数据版本，可选 GZIP。
+- 跨服务器版本解码时记录数据版本不一致警告；Minecraft 仍可能升级或拒绝其中的物品。
+- 解码器限制输入和解压后的大小，并用类白名单约束 Java 反序列化。
+- 即便如此，编码值仍是业务数据，**不要**把任意超大外部输入直接交给解码器。
+- `ItemCodec` 不是跨 Minecraft 数据版本的稳定数据库格式。长期保存时要保留迁移或无法解码时的降级策略。
 
 ## 外部物品系统
 
@@ -146,7 +178,7 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 
 没有前缀或前缀为 `minecraft` 的引用视为原版材质，例如 `DIAMOND`、`minecraft:diamond`。
 
-探测是显式调用，不会在类加载时自动发生。应在目标插件启用之后调用，并在 `plugin.yml` 中把它们声明为 `softdepend`：
+探测是显式调用，不会在类加载时自动发生。**在目标插件启用之后调用**，并在 `plugin.yml` 中把它们声明为 `softdepend`：
 
 ```java
 import me.kzheart.klib.item.ExternalItems;
@@ -162,23 +194,43 @@ Predicate<ItemStack> matcher = items.matcher("mi:MATERIAL:SOUL_GEM");   // 预�
 ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 ItemSpec 组合
 ```
 
-行为边界：
+| 情况 | 行为 |
+| --- | --- |
+| `parse`、`matcher`、`spec` 遇到未知前缀或不存在的材质 | 抛 `IllegalArgumentException`，加载配置时就能发现拼写错误 |
+| 内置前缀对应的插件未安装 | `create` 返回空、`matches` 返回 `false`，不抛异常 |
+| 查看各前缀状态 | `report()` 给出每个前缀的状态与失败原因 |
+| 原版引用匹配 | 只匹配**不被任何已注册外部系统识别**的物品，MMOItems 的钻石不会被当作普通钻石扣除 |
 
-- `parse`、`matcher` 和 `spec` 在遇到未知前缀或不存在的材质时抛出 `IllegalArgumentException`，便于在加载配置时发现拼写错误。
-- 内置前缀对应的插件未安装时，`create` 返回空、`matches` 返回 `false`，不会抛出异常；`report()` 给出每个前缀的状态与失败原因。
-- 原版引用只匹配**不被任何已注册外部系统识别**的物品，因此 MMOItems 的钻石不会被当作普通钻石扣除。
-- 实例不可变。`with(source)` 返回追加了自定义 `ExternalItemSource` 的新实例；前缀 `minecraft` 保留给原版材质。
-- `create(reference, amount, player)` 传入玩家上下文；`createBatch(reference, amount, player)` 逐件生成，全部准备成功后返回只读列表，任一 ID 缺失返回空列表，生成异常继续传播。调用方先验证容量，再统一发放，并自行限定批量上限。
-- Zap 的 `create(reference, amount, player)` 只接受数量 1，多件必须使用 `createBatch`，避免复制实例 UUID 和随机属性；识别按 Zap 优先，插件停用后现有适配器仍可只读识别身份，停止生成。
-- 生成与识别会调用外部插件，遵守这些插件自身的线程要求，通常应在主线程调用。
+生成规则：
 
-接入其他物品系统时实现 `ExternalItemSource`（前缀、插件名、`create(id)`、`identify(item)`），再通过 `with(...)` 注册。
-`ExternalItems` 同时实现了旧的 `ExternalItemProvider`，可以直接传给 `ItemSpec.Builder.external(...)`。
+- `create(reference, amount, player)` 传入玩家上下文。
+- `createBatch(reference, amount, player)` 逐件生成，全部成功后返回只读列表；任一 ID 缺失返回空列表；生成异常继续传播。
+- 批量发放时，调用方先验证容量再统一发放，并自行限定批量上限。
+- **Zap 的 `create` 只接受数量 1**，多件必须用 `createBatch`，避免复制实例 UUID 和随机属性。
+- 识别按 Zap 优先。Zap 插件停用后，现有适配器仍可只读识别身份，但停止生成。
 
-## 生命周期与线程边界
+### 接入其他物品系统
 
-- `ItemBuilder` 和标签操作会处理 `ItemStack`；涉及在线玩家背包或世界掉落时，应在 Bukkit 主线程执行。
-- `Items.edit(...)`、`build()`、标签桥接和编码接口会克隆或创建值，仍不要在其他线程同时修改同一个原始 `ItemStack`。
-- `InventoryItems.give(...)` 在背包溢出时访问玩家世界并生成掉落物，只能用于在线玩家的同步流程。
-- `ItemCodec` 不是跨 Minecraft 数据版本的稳定数据库格式。长期保存时应保留迁移或无法解码时的降级策略。
+- 实现 `ExternalItemSource`（前缀、插件名、`create(id)`、`identify(item)`），再通过 `with(...)` 注册。
+- `ExternalItems` 实例不可变，`with(source)` 返回追加了该来源的新实例。前缀 `minecraft` 保留给原版材质。
+- `ExternalItems` 同时实现旧的 `ExternalItemProvider`，可以直接传给 `ItemSpec.Builder.external(...)`。
 
+## 线程与生命周期
+
+- `ItemBuilder` 和标签操作处理 `ItemStack`；涉及在线玩家背包或世界掉落时，在 Bukkit 主线程执行。
+- `Items.edit(...)`、`build()`、标签桥接和编码接口会克隆或创建值，但仍不要在其他线程同时修改同一个原始 `ItemStack`。
+- `InventoryItems.give(...)` 背包溢出时会访问玩家世界并生成掉落物，只能用于在线玩家的同步流程。
+- 外部物品的生成与识别会调用外部插件，遵守这些插件自身的线程要求，通常在主线程调用。
+
+## 常见坑
+
+- 不要直接依赖标签的具体桥接实现（PDC / NBT）。
+- 不要把同一个标签名称同时定义成不同 Java 类型。
+- `InventoryItems` 用 `isSimilar` 匹配，名称、lore、附魔或标签不同的物品不会被算作同一种。
+- 构建脚本漏声明 CodeMC 仓库时，Item-NBT-API 无法解析。
+- `ItemCodec` 编码值不适合作为跨版本的长期存储格式。
+
+## 相关页面
+
+- [构建与打包](../../README.md)：模块依赖、仓库与打包
+- [Core](core.md)：作用域、调度与回主线程

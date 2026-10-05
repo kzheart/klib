@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/kzheart/klib/actions/workflows/ci.yml"><img src="https://github.com/kzheart/klib/actions/workflows/ci.yml/badge.svg?branch=main" alt="持续集成状态"></a>
-  <a href="https://central.sonatype.com/namespace/me.kzheart.klib"><img src="https://img.shields.io/badge/Maven_Central-published-2563eb?style=flat-square" alt="Maven Central 制品"></a>
-  <a href="docs/modules/core.md"><img src="https://img.shields.io/badge/Java_API-8-437291?style=flat-square" alt="Java 8 API 与字节码"></a>
+  <a href="https://central.sonatype.com/namespace/me.kzheart.klib"><img src="https://img.shields.io/maven-central/v/me.kzheart.klib/klib-core?style=flat-square&label=Maven%20Central&color=2563eb" alt="Maven Central 最新版本"></a>
+  <img src="https://img.shields.io/badge/Java-8%2B-437291?style=flat-square" alt="Java 8 API 与字节码">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
@@ -26,21 +26,36 @@
 
 ---
 
-Klib 将插件中反复使用的基础能力组织为独立模块：从 `KPlugin` 与 `Scope` 出发，按需接入命令、配置、物品、界面、数据存储和脚本。业务插件显式安装模块、持有资源，并在作用域结束时统一释放。
+Klib 把插件里反复要写的基础能力拆成独立模块：命令、配置、语言、物品、菜单、数据存储、脚本和外部插件集成。按需选用，资源随插件生命周期自动释放。
 
-模块通过 Maven Central 发布，配套的 [Klib Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 负责模块选择、`plugin.yml` 生成与依赖重定位。公共 Java 制品保持 Java 8 API 与字节码边界；实际运行所需的 Java 版本由目标服务端决定。
+```java
+public final class MyPlugin extends KPlugin {
+    @Override
+    protected void setup() {
+        CommandModule.install(this);
+        commands().register(new CoinCommands());
+    }
+}
 
-## 核心能力
+@Command(value = "coins", help = true)   // 自动生成分页帮助
+@Permission("myplugin.coins")
+public final class CoinCommands {
+    @Route("give <target> <amount>")
+    @Description("向玩家发放金币")
+    public void give(CommandSender sender,
+            @Param("target") Player target,
+            @Param("amount") int amount) {
+        // 参数已解析并校验，补全和权限过滤自动完成
+    }
+}
+```
 
-| 开发基础 | 交互与集成 |
-| :--- | :--- |
-| **生命周期与资源管理**<br>`KPlugin`、`Scope`、组件、事件与调度，统一持有和释放插件资源。 | **界面与聊天交互**<br>菜单、分页、投放区、聊天控制面板与输入，组合适合业务的操作流程。 |
-| **命令与配置**<br>类型化命令、注解路由、可定制的交互式帮助，以及配置映射、迁移和重载。 | **物品与平台适配**<br>物品构建、标签、编解码、外部物品来源，以及显式选择的版本能力实现。 |
-| **数据与脚本**<br>JSON、SQLite、MySQL、PostgreSQL 存储，以及 Kether 动作与可选宿主互操作。 | **插件集成与诊断**<br>经济、占位符、消耗与奖励接口，以及日志、Incident 和离线交付客户端。 |
+- **兼容范围**：Bukkit / Spigot / Paper；公共制品为 Java 8 字节码，实际运行所需的 Java 版本由服务端决定。
+- **发布方式**：Maven Central，配套 [Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 负责选模块、生成 `plugin.yml` 和依赖重定位。
 
 ## 快速接入
 
-推荐使用 Gradle 插件选取模块。构建插件与库独立发布，请将占位符替换为各自已发布的版本；库版本记录见 [更新日志](CHANGELOG.md)。
+把占位符换成已发布的版本（见上方徽章和 [更新日志](CHANGELOG.md)）：
 
 ```kotlin
 plugins {
@@ -60,14 +75,17 @@ klib {
 }
 ```
 
-这个片段展示模块选择与打包配置。完整接入还需配置仓库、目标服务端 API 的 `compileOnly` 依赖，并在 `KPlugin.setup()` 中安装所选模块。`command()` 自动补齐 Core、Config 与 Lang；`ui()` 自动补齐其依赖，运行时安装顺序见模块文档。
+- `modules {}` 只负责打包，代码里还要在 `KPlugin.setup()` 中安装所选模块。
+- 依赖会自动补齐，例如 `command()` 会带入 Core、Config 和 Lang。
+
+完整接入（仓库配置、服务端 API 依赖）和常用模块：
 
 - [开始使用](https://github.com/kzheart/klib/wiki/Getting-Started)：项目配置、插件入口与模块安装。
 - [构建与打包](https://github.com/kzheart/klib/wiki/Build)：仓库、依赖闭包、重定位与手工接入。
 - [命令模块](docs/modules/command.md)：命令声明、帮助样式、异常策略与启动注册契约。
 - [UI 模块](docs/modules/ui.md)：菜单、聊天面板与聊天输入。
 
-需要手工管理依赖时，可使用 `me.kzheart.klib:klib-<module>:<klib-version>` 坐标，并自行完成打包与重定位。业务插件应依赖正式发布的制品。Guard API 使用独立版本与 `compileOnly` 接入，见 [Guard API 文档](docs/modules/guard-api.md)。
+不用 Gradle 插件时，直接依赖 `me.kzheart.klib:klib-<module>:<klib-version>`，自己完成打包和重定位。
 
 ## 模块索引
 
@@ -86,7 +104,6 @@ klib {
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI 与消耗奖励 | [Hook](docs/modules/hook.md) |
 | `klib-compat` | 版本能力发现、实现选择与数据包侧边栏 | [Compat](docs/modules/compat.md) |
 | `klib-remote` | 插件日志、Incident 与离线交付客户端 | [Remote](docs/modules/remote.md) |
-| `klib-guard-api` | 受保护商品生命周期与门户级 Kether Broker 编译契约 | [Guard API](docs/modules/guard-api.md) |
 
 <details>
 <summary><strong>数据后端与驱动</strong></summary>
@@ -113,7 +130,6 @@ klib {
 | [仓库文档](docs/README.md) | 与源码一起维护的模块边界、生命周期与线程约定 |
 | [组件与注解](docs/annotations.md) | 声明组件、命令及其他注解入口 |
 | [故障排查](docs/troubleshooting.md) | 常见问题与定位方式 |
-| [Issues](https://github.com/kzheart/klib/issues) | 问题反馈与功能建议 |
 
 <details>
 <summary><strong>AI 编程助手接入</strong></summary>
@@ -138,7 +154,7 @@ $skill-installer 安装 https://github.com/kzheart/klib/tree/main/skills/klib
 
 欢迎通过 [Issues](https://github.com/kzheart/klib/issues) 或 [Pull Requests](https://github.com/kzheart/klib/pulls) 反馈问题与提交改进。变更应保持公共 Java 8 边界，并同步相关模块文档；参与前请阅读 [仓库协作约定](AGENTS.md)。
 
-本仓库维护公共 Java 模块及最小 `klib-guard-api` 编译契约。Gradle 插件独立维护；Guard runtime、Native、Collector 与生产部署配置属于私有仓库。
+> 本仓库只包含公共 Java 模块和最小 `klib-guard-api` 编译契约；Gradle 插件另有仓库，Guard runtime 等私有组件不在此处。
 
 ## 许可证
 

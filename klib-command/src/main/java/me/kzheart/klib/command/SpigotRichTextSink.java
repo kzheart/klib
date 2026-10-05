@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
@@ -72,7 +73,7 @@ public final class SpigotRichTextSink implements RichTextSink {
         private Optional<Method> resolve(Class<?> runtimeType) {
             resolutions.incrementAndGet();
             try {
-                return Optional.of(runtimeType.getMethod(methodName, parameterTypes));
+                return Optional.of(accessibleMethod(runtimeType));
             } catch (NoSuchMethodException ignored) {
                 return Optional.empty();
             } catch (SecurityException ignored) {
@@ -80,6 +81,19 @@ public final class SpigotRichTextSink implements RichTextSink {
             } catch (LinkageError ignored) {
                 return Optional.empty();
             }
+        }
+
+        private Method accessibleMethod(Class<?> type) throws NoSuchMethodException {
+            if (Modifier.isPublic(type.getModifiers())) {
+                Method method = type.getMethod(methodName, parameterTypes);
+                if (Modifier.isPublic(method.getDeclaringClass().getModifiers())) return method;
+            }
+            for (Class<?> contract : type.getInterfaces()) {
+                try { return accessibleMethod(contract); }
+                catch (NoSuchMethodException ignored) { }
+            }
+            if (type.getSuperclass() != null) return accessibleMethod(type.getSuperclass());
+            throw new NoSuchMethodException(methodName);
         }
     }
 

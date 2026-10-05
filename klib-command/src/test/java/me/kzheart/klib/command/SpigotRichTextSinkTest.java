@@ -20,6 +20,19 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpigotRichTextSinkTest {
+    public static class PublicApi {
+        public String send(String text) { return text; }
+    }
+    private static final class PrivateRuntime extends PublicApi {
+        @Override public String send(String text) { return "delivered:" + text; }
+    }
+    @Test void anonymousRuntimeUsesPublicApiMethodWithoutLosingVirtualDispatch() throws ReflectiveOperationException {
+        SpigotRichTextSink.RuntimeMethodCache cache = new SpigotRichTextSink.RuntimeMethodCache("send", String.class);
+        Method method = cache.find(PrivateRuntime.class);
+        assertNotNull(method);
+        assertEquals(PublicApi.class, method.getDeclaringClass());
+        assertEquals("delivered:clickable", method.invoke(new PrivateRuntime(), "clickable"));
+    }
     public static final class ModernColor {
         public static final ModernColor GOLD = new ModernColor();
     }

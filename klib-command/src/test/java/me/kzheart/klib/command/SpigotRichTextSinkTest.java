@@ -20,6 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpigotRichTextSinkTest {
+    public static final class ModernColor {
+        public static final ModernColor GOLD = new ModernColor();
+    }
+    @Test void namedChatColorsArePublicConstantsOnModernBungee() throws ReflectiveOperationException {
+        assertFalse(ModernColor.class.isEnum());
+        assertSame(ModernColor.GOLD, SpigotRichTextSink.namedColor(ModernColor.class, MessageColor.GOLD));
+    }
     @Test
     void playerUsesInteractiveDeliveryWhenAdapterAcceptsMessage() {
         AtomicReference<RichText> delivered = new AtomicReference<RichText>();

@@ -211,7 +211,7 @@ public final class CommandDispatcher implements DiagnosticSource {
                             CommandResult.Status.INCOMPLETE, usage));
                 }
             }
-            HelpPage help = helpRenderer.render(spec, sender, 1, DEFAULT_HELP_PAGE_SIZE);
+            HelpPage help = helpRenderer.render(spec, sender, 1, defaultHelpPageSize());
             return emit(sender, CommandResult.message(CommandResult.Status.HELP, help.content()));
         }
         return emit(sender, CommandResult.message(
@@ -250,7 +250,7 @@ public final class CommandDispatcher implements DiagnosticSource {
 
     /**
      * 失败反馈。{@code reasonKey} 非空且异常携带可回显原因时使用该键并注入 {@code reason}，
-     * 否则退回通用内部错误消息。
+     * 否则交由业务错误处理器；默认仅记录。
      */
     void sendFailure(CommandSender sender, Throwable failure, String reasonKey) {
         CommandContextImpl context = new CommandContextImpl(sender, spec.name(), Collections.<CommandArgument<?>, Object>emptyMap());
@@ -521,7 +521,7 @@ public final class CommandDispatcher implements DiagnosticSource {
     }
 
     int defaultHelpPageSize() {
-        return DEFAULT_HELP_PAGE_SIZE;
+        return HelpRenderer.style(spec.root()).pageSize();
     }
 
     private RichText message(CommandSender sender, String key) {

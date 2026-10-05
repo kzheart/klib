@@ -81,7 +81,7 @@ class CommandModuleAndBuiltinsTest {
         assertEquals(CommandMessageKeys.BUILTIN_DEBUG_DISABLED, messages.lastKey());
 
         dispatcher.execute(allowed, new String[]{"help", "1"});
-        assertTrue(messages.keys().contains(CommandMessageKeys.HELP_HEADER));
+        assertTrue(sent.get(sent.size() - 1).plainText().contains("命令指南"));
         assertTrue(messages.keys().contains(CommandMessageKeys.BUILTIN_HELP_DESCRIPTION));
         assertFalse(sent.isEmpty());
     }

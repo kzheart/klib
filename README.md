@@ -79,7 +79,7 @@ dependencies {
 | `klib-core` | `KPlugin`、`Scope`、调度、事件、资源释放、冷却与加权随机 |
 | `klib-config` | YAML 配置映射、第三方格式原值树、子节文本与创建、迁移及原子重载 |
 | `klib-lang` | 多语言消息、占位符、富文本与 Paper 宿主 Adventure 适配 |
-| `klib-command` | 类型化命令树、Unicode 别名、权限、建议、启动期生命周期注册、按玩家过滤的客户端树与显式裸标签覆盖 |
+| `klib-command` | 类型化命令树、可选帮助布局、业务异常反馈、Unicode 别名、权限、建议、启动期生命周期注册与裸标签覆盖 |
 | `klib-item` | 物品构建、标签、跨版本编解码与 ZaphkielPlus/MMOItems/NeigeItems/ItemsAdder/MythicMobs 物品适配 |
 | `klib-data` | 存储契约、迁移与玩家数据缓存，不包含存储实现或第三方运行时 |
 | `klib-data-json` | JSON 文件存储；使用宿主提供的 Gson |

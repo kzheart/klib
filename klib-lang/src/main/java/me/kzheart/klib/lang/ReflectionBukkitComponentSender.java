@@ -88,9 +88,11 @@ final class ReflectionBukkitComponentSender implements BukkitComponentSender {
         if (!color.isLegacy() && bungee.chatColorOfMethod != null) {
             return bungee.chatColorOfMethod.invoke(null, color.toString());
         }
-        return enumValue(
-                bungee.chatColor,
-                color.nearestLegacy().toString().toUpperCase(Locale.ROOT));
+        return namedColor(bungee.chatColor, color);
+    }
+
+    static Object namedColor(Class<?> type, MessageColor color) throws ReflectiveOperationException {
+        return type.getField(color.nearestLegacy().toString().toUpperCase(Locale.ROOT)).get(null);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -108,6 +110,9 @@ final class ReflectionBukkitComponentSender implements BukkitComponentSender {
         if (action.type() == TextAction.Type.OPEN_URL) {
             return "OPEN_URL";
         }
+        if (action.type() == TextAction.Type.COPY_TO_CLIPBOARD) return "COPY_TO_CLIPBOARD";
+        if (action.type() == TextAction.Type.CHANGE_PAGE) return "CHANGE_PAGE";
+        if (action.type() == TextAction.Type.OPEN_FILE) return "OPEN_FILE";
         throw new IllegalArgumentException("Unsupported click action: " + action.type());
     }
 

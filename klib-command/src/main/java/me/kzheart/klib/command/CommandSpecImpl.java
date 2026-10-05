@@ -3,10 +3,12 @@ package me.kzheart.klib.command;
 import me.kzheart.klib.command.api.CommandArgument;
 import me.kzheart.klib.command.api.CommandHandler;
 import me.kzheart.klib.command.api.CommandErrorHandler;
+import me.kzheart.klib.command.api.CommandHelpStyle;
 import me.kzheart.klib.command.api.CommandSpec;
 
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public final class CommandSpecImpl implements CommandSpec {
     private final String name;
@@ -99,6 +101,16 @@ public final class CommandSpecImpl implements CommandSpec {
     @Override public CommandSpec errorHandler(CommandErrorHandler handler) {
         if (handler == null) throw new NullPointerException("handler");
         node.errorHandler = handler;
+        return this;
+    }
+
+    @Override public CommandSpec helpStyle(CommandHelpStyle style) {
+        if (style == null) throw new NullPointerException("style");
+        return helpStyle(() -> style);
+    }
+    @Override public CommandSpec helpStyle(Supplier<CommandHelpStyle> style) {
+        if (style == null) throw new NullPointerException("style");
+        node.helpStyle = style;
         return this;
     }
 

@@ -3,6 +3,7 @@ package me.kzheart.klib.command;
 import me.kzheart.klib.lang.RichText;
 import me.kzheart.klib.lang.RichTextSegment;
 import me.kzheart.klib.lang.TextAction;
+import me.kzheart.klib.lang.MessageColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -17,6 +18,9 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class SpigotRichTextSink implements RichTextSink {
+    static Object namedColor(Class<?> type, MessageColor color) throws ReflectiveOperationException {
+        return type.getField(color.nearestLegacy().toString().toUpperCase(Locale.ROOT)).get(null);
+    }
     public static final SpigotRichTextSink INSTANCE = new SpigotRichTextSink(
             new ReflectionInteractiveDelivery());
 
@@ -176,6 +180,9 @@ public final class SpigotRichTextSink implements RichTextSink {
             if (action.type() == TextAction.Type.OPEN_URL) {
                 return "OPEN_URL";
             }
+            if (action.type() == TextAction.Type.COPY_TO_CLIPBOARD) return "COPY_TO_CLIPBOARD";
+            if (action.type() == TextAction.Type.CHANGE_PAGE) return "CHANGE_PAGE";
+            if (action.type() == TextAction.Type.OPEN_FILE) return "OPEN_FILE";
             throw new IllegalArgumentException("Unsupported click action: " + action.type());
         }
 
@@ -237,12 +244,7 @@ public final class SpigotRichTextSink implements RichTextSink {
                 if (!segment.color().isLegacy() && chatColorOf != null) {
                     return chatColorOf.invoke(null, segment.color().toString());
                 }
-                return enumValue(
-                        chatColor,
-                        segment.color()
-                                .nearestLegacy()
-                                .toString()
-                                .toUpperCase(Locale.ROOT));
+                return namedColor(chatColor, segment.color());
             }
 
             static BungeeApi resolve() {

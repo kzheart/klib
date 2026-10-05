@@ -26,7 +26,7 @@ class HelpPaginationComponentTest {
         assertEquals(1, page.page());
         assertEquals(2, page.totalPages());
         RichTextSegment command = page.content().segments().stream()
-                .filter(segment -> segment.text().equals("/demo"))
+                .filter(segment -> segment.text().equals("/demo") && segment.click() != null)
                 .findFirst()
                 .orElseThrow(AssertionError::new);
         assertNotNull(command.hover());
@@ -55,7 +55,7 @@ class HelpPaginationComponentTest {
         // help 与 help <page> 合并为一条
         assertEquals(1, countOccurrences(plain, "/demo help"));
         // 描述内联在条目行内
-        assertTrue(plain.contains("/demo give - 发放物品"));
+        assertTrue(plain.contains("/demo give — 发放物品"));
         // 点击建议在 `[`/`<` 处截断，占位符不进输入框
         RichTextSegment help = page.content().segments().stream()
                 .filter(segment -> segment.text().equals("help"))
@@ -80,7 +80,7 @@ class HelpPaginationComponentTest {
 
     private static RichTextSegment segment(HelpPage page, String text) {
         return page.content().segments().stream()
-                .filter(value -> value.text().equals(text))
+                .filter(value -> value.text().equals(text) && value.click() != null)
                 .findFirst()
                 .orElseThrow(AssertionError::new);
     }

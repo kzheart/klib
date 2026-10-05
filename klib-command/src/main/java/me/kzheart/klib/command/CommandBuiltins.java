@@ -152,11 +152,10 @@ public final class CommandBuiltins {
     }
 
     private void installHelp(CommandSpec spec) {
-        final Arg<Integer> page = Arguments.integer("page", 1, Integer.MAX_VALUE);
+        final Arg<Integer> page = Arguments.optional(Arguments.integer("page", 1, Integer.MAX_VALUE), Integer.valueOf(1));
         spec.literal("help", child -> {
             markDescription(child, CommandMessageKeys.BUILTIN_HELP_DESCRIPTION);
             applyPermission(child, helpPermission);
-            child.executes(new HelpHandler(null));
             child.argument(page, pageNode -> pageNode.executes(new HelpHandler(page)));
         });
     }

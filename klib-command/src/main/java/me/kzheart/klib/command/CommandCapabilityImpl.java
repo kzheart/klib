@@ -5,6 +5,7 @@ import me.kzheart.klib.command.api.CommandCapability;
 import me.kzheart.klib.command.api.CommandRegistration;
 import me.kzheart.klib.command.api.CommandSpec;
 import me.kzheart.klib.command.api.CommandErrorHandler;
+import me.kzheart.klib.command.api.CommandHelpStyle;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
 
@@ -99,6 +100,8 @@ public final class CommandCapabilityImpl implements CommandCapability {
     }
 
     CommandRegistration registerCompiled(Scope owner, CommandSpecImpl spec) {
+        if (spec.root().helpStyle == null) spec.root().helpStyle = () -> owner.findCapability(CommandHelpStyle.class)
+                .orElse(CommandHelpStyle.preset(CommandHelpStyle.Preset.ELEGANT));
         CommandDispatcher dispatcher = new CommandDispatcher(spec, players, output, messages, logger, errorHandler);
         Disposable bridgeRegistration = bridge.register(spec.name(), spec, dispatcher);
         CommandRegistrationImpl registration = new CommandRegistrationImpl(

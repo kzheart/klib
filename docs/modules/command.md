@@ -168,10 +168,11 @@ command.description("说明")
 到达一个没有处理器但仍有可访问子节点的节点时：
 
 - 停在根命令上（如只输入 `/coins`）显示命令帮助第一页，结果状态为 `HELP`；
-- 已经进入子命令却缺少后续参数（如 `/coins give`）只反馈该节点的用法，结果状态为 `INCOMPLETE`：
+- 已经进入子命令却缺少后续参数（如 `/coins give`）反馈该节点的完整用法和用途，结果状态为 `INCOMPLETE`：
 
   ```text
-  用法: /coins give <target> <amount>
+  用法 › /coins give <target> <amount>
+  用途 › 发放金币
   ```
 
   该节点下有多条可达分支时逐行列出；分支超过一页（8 条）或发送者无权访问任何分支时，退回帮助第一页。用法行使用 `command.usage` 消息键。
@@ -391,6 +392,48 @@ commands().register("shop", root -> root
 ```
 
 使用显式注册器时可调用 `CommandModule.install(scope, bridge, errors)`，共享语言管线时使用 `install(scope, bridge, messages, errors)`。参数解析、权限、缺参数及用法仍由命令规则处理，不进入业务处理器；业务显式抛出的 `CommandRejectedException` 保留其选择的拒绝消息。注解命令使用模块级策略；`CommandCall.await(stage, success, failure)` 的异步失败回调本来就由调用方提供，保持该契约。内置异步 reload 同样使用原命令上下文的策略。
+
+## 帮助布局与点击
+
+默认使用典雅样式。可选 `CommandHelpStyle.Preset.ELEGANT`（典雅，标题和单行用途）、`COMPACT`（简洁，紧凑目录）、`PANEL`（面板，双行用途与边线）、`CLASSIC`（经典，复用原有 CommandMessages 的标题和分页文案）。所有布局均保留命令预填、完整用途悬停、实际分页命令及权限过滤，不依赖资源包。
+
+```java
+import me.kzheart.klib.command.api.CommandHelpStyle;
+
+commands().register("coins", root -> {
+    root.helpStyle(CommandHelpStyle.preset(CommandHelpStyle.Preset.PANEL));
+    CommandBuiltins.create().install(root);
+    // 各业务路由继续声明 description(...)，参数节点可继承祖先说明。
+});
+```
+
+全插件的默认值可在安装/声明阶段注册 `context().scope().registerCapability(CommandHelpStyle.class, style)`；根或路由的 `helpStyle(...)` 优先。注解命令同样继承所属 Scope 的默认值。`helpStyle(() -> currentStyle)` 支持业务原子替换配置后动态读取；不用重建命令树。
+
+`CommandHelpStyle.builder(preset)` 可定制 `header`、`entry`、`description`（条目第二行）、`usage`（参数不完整提示）、`group`、`previous`、`next`、`footer`、`hover`、三种命令层级 RGB 颜色、`pageSize` 和 `clearLines`。模板支持 MiniMessage；`{command}`、`{page}`、`{pages}`、`{count}`、`{summary}` 用于标题/页脚，`{usage}`、`{description}`、`{index}` 用于条目，`{category}` 用于分组。参数、说明、当前值都在解析后按字面文本插入，不会成为点击标签。自定义条目与不完整提示必须同时保留用法和说明占位符；未提供 description 时明确显示“暂无说明”，不会凭名称编造用途。
+
+业务插件可自行持有 YAML，再调用 `CommandHelpStyles.parse(section)`：
+
+```yaml
+preset: elegant # elegant / compact / panel / classic / custom
+page-size: 7
+clear-lines: 0
+custom: # 仅 preset: custom 时应用，不影响其他预设
+  header: '<gold><bold>/{command}</bold> <gray>· 命令指南 {page}/{pages}'
+  entry: '  <gold>› {usage} <dark_gray>— <gray>{description}'
+  usage: |
+    <gold>用法 <dark_gray>› {usage}
+    <gray>用途 <dark_gray>› {description}
+  footer: '<dark_gray>点击预填 · 悬停查看用途 · {page}/{pages}'
+  previous: '<gray>[ ← 上一页 ]'
+  next: '<gold>[ 下一页 → ]'
+  command-color: '#e8b04a'
+  literal-color: '#e7d9c1'
+  argument-color: '#a39a8c'
+```
+
+含换行的 YAML 模板用双引号的 `\n` 或块文本 `|`；单引号会保留字面 `\n`。Klib 不创建或重写业务配置，错误值会抛出解析异常供业务 reload 门禁处理。
+
+普通命令树的翻页按钮执行 `/<根命令> help <页码>`，使用 `CommandBuiltins` 或 `@Command(help = true)` 安装对应路由；自定义 sendHelp 调用应保证页容量与该路由相同。若帮助是多个独立短命令的汇总，可通过 `HelpRenderer.renderEntries(sender, command, summary, entries, page, style, navigation)` 渲染：传入已过滤权限的 `CommandHelpEntry`，usage 包含 `/`，navigation 返回实际注册的翻页命令（例如 `number -> "/help " + number`）。支持 category 与额外悬停说明，不能把 `/<根> help` 当成所有业务帮助的通用路由。
 
 ## 生命周期与线程约束
 

@@ -1,6 +1,6 @@
 # Klib 文档
 
-本目录是 Klib 公共 Java 模块的文档入口。根目录 [README](../README.md) 提供最小接入；这里按模块
+本目录是 Klib 公共 Java 模块的文档入口。根目录 [README](../README.md) 介绍项目定位、核心能力与接入导航；这里按模块
 说明完整 API 边界、生命周期、线程要求和版本约束。
 
 推荐使用独立的 [Klib Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 选择模块、生成

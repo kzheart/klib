@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Klib</title>
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a5b4fc"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="94" height="94" rx="24" fill="url(#surface)" stroke="#334155" stroke-width="2"/>
+  <path d="M28 25h10v46H28z" fill="#f8fafc"/>
+  <path d="M42 48 61 25h13L54 48l21 23H61z" fill="url(#accent)"/>
+</svg>

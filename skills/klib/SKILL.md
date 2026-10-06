@@ -27,7 +27,7 @@ description: 按 kzheart/klib 官方 Wiki 为 Bukkit、Spigot 或 Paper 插件�
 | 命令树、参数、权限和补全 | [Command](https://github.com/kzheart/klib/wiki/Command) |
 | 物品、标签、背包和编码 | [Item](https://github.com/kzheart/klib/wiki/Item) |
 | 存储后端、事务和玩家缓存 | [Data](https://github.com/kzheart/klib/wiki/Data) |
-| 物品栏菜单、分页和聊天输入 | [UI](https://github.com/kzheart/klib/wiki/UI) |
+| 物品栏菜单、分页、聊天面板和聊天输入 | [UI](https://github.com/kzheart/klib/wiki/UI) |
 | Kether 脚本和语句互操作 | [Script](https://github.com/kzheart/klib/wiki/Script) |
 | 经济插件和 PlaceholderAPI | [Hook](https://github.com/kzheart/klib/wiki/Hook) |
 | 服务端版本、能力查询与数据包侧边栏 | [Compat](https://github.com/kzheart/klib/wiki/Compat) |

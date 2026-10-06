@@ -119,7 +119,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         }
         cancelInput(session);
         session.history.clear();
-        session.status = null;
+        if (session.acting == 0) session.status = null;
         session.lastActive = clock.getAsLong();
         show(session, register(session, panel));
         render(session);
@@ -183,13 +183,16 @@ public final class BukkitChatPanels implements Listener, Disposable {
         if (!page.key.equals(session.current)) show(session, page);
         if (page.panel.once()) page.retired = true;
         int navigation = session.navigation;
+        int renders = session.renders;
         session.invokingPermission = route.button.permission();
+        session.acting++;
         try {
             if (route.reset) route.button.resetAction().accept(session);
             else route.button.invoke(session);
         } catch (RuntimeException failure) {
             fail(session, page, failure);
         } finally {
+            session.acting--;
             session.invokingPermission = "";
         }
         if (session.closed) return;
@@ -197,7 +200,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
             close(session, true);
             return;
         }
-        scheduleRedraw(session);
+        redrawUnlessRendered(session, renders);
     }
 
     void navigate(ChatPanelSession session, ChatPanel panel) {
@@ -237,6 +240,11 @@ public final class BukkitChatPanels implements Listener, Disposable {
         if (page == null) return;
         page.index = Math.max(0, index);
         scheduleRedraw(session);
+    }
+
+    /** 动作里已经通过 open(...) 立即发送过整页时不再重复发送；之后设置的状态行仍会安排重画。 */
+    private void redrawUnlessRendered(ChatPanelSession session, int renders) {
+        if (session.renders == renders) scheduleRedraw(session);
     }
 
     void scheduleRedraw(ChatPanelSession session) {
@@ -322,7 +330,9 @@ public final class BukkitChatPanels implements Listener, Disposable {
             return;
         }
         session.status = null;
+        int renders = session.renders;
         session.invokingPermission = pending.permission;
+        session.acting++;
         try {
             if (status == PromptStatus.ANSWERED) pending.accepted.accept(value);
             else {
@@ -332,9 +342,10 @@ public final class BukkitChatPanels implements Listener, Disposable {
         } catch (RuntimeException failure) {
             fail(session, origin, failure);
         } finally {
+            session.acting--;
             session.invokingPermission = "";
         }
-        if (!session.closed) scheduleRedraw(session);
+        if (!session.closed) redrawUnlessRendered(session, renders);
     }
 
     private void cancelByPlayer(ChatPanelSession session) {
@@ -432,6 +443,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
             sender.accept(session.player, text(ChatPanelText.FAILED));
             return;
         }
+        session.renders++;
         try { sender.accept(session.player, compose(session, page, view)); }
         finally { session.rendering = false; }
     }
@@ -586,9 +598,12 @@ public final class BukkitChatPanels implements Listener, Disposable {
         event.setCancelled(true);
         session.lastActive = clock.getAsLong();
         session.status = null;
+        int renders = session.renders;
+        session.acting++;
         try { page.panel.hotkey(session, event.getPlayer().isSneaking()); }
         catch (RuntimeException failure) { fail(session, page, failure); }
-        if (!session.closed) scheduleRedraw(session);
+        finally { session.acting--; }
+        if (!session.closed) redrawUnlessRendered(session, renders);
     }
 
     private void ensureOpen() { if (disposed || owner.isClosed()) throw new IllegalStateException("chat panels are closed"); }

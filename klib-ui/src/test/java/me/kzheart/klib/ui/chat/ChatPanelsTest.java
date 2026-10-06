@@ -365,6 +365,26 @@ class ChatPanelsTest {
         }
     }
 
+    @Test void reopeningInsideAnActionSendsOnceAndKeepsTheNotice() throws Exception {
+        try (Fixture f = new Fixture()) {
+            AtomicInteger count = new AtomicInteger();
+            AtomicReference<Consumer<Player>> reopen = new AtomicReference<Consumer<Player>>();
+            reopen.set(player -> f.panels.open(player, ChatPanel.builder("menu", RichText.plain("菜单")).content(view ->
+                    view.buttons(ChatPanelButton.action("inc", RichText.plain("计数"), s -> {
+                        count.incrementAndGet();
+                        f.panels.notice(s.player(), RichText.plain("已加一"));
+                        reopen.get().accept(s.player());
+                    }).value(String.valueOf(count.get())))).build()));
+            reopen.get().accept(f.player);
+            int sent = f.sent.size();
+            f.click("inc");
+            f.drain();
+            assertEquals(sent + 1, f.sent.size(), "the action already rendered the page");
+            assertTrue(f.last().contains("计数 1"));
+            assertTrue(f.statusLine().contains("已加一"));
+        }
+    }
+
     @Test void offMainThreadOperationsAreRejected() throws Exception {
         try (Fixture f = new Fixture()) {
             f.primary = false;

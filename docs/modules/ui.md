@@ -158,13 +158,15 @@ prompt.completionSync().thenAcceptAsync(outcome -> {
 
 ## 聊天控制面板
 
-聊天面板用于字段、开关和列表管理，可以替代只承担参数选择的物品栏页面。
+聊天面板用于字段、开关和列表编辑，交互方式接近 Adyeshach 的 NPC 编辑器：整页一条消息、一行多个 `[按钮]`、点击后按实时状态刷新。
 
 | 类型 | 职责 |
 | --- | --- |
-| `ChatPanel` | 描述标题、行、按钮、页脚和权限 |
-| `BukkitChatPanels` | 启动时声明的按钮命令、玩家会话、刷新和输入 |
-| 调用方 | 持有业务对象和保存规则 |
+| `ChatPanel` | 页面定义：id、标题、权限、guard 和每次显示都会调用的页面函数 |
+| `ChatPanelView` | 页面函数里的构建器：分组、行、按钮、页脚 |
+| `ChatPanelButton` | 回调、命令、预填、复制按钮，可带悬停、当前值和 (R) 重置 |
+| `ChatPanelSession` | 玩家会话：跳转、返回、状态行、输入 |
+| `BukkitChatPanels` | 启动时声明的按钮命令、路由、刷新和告示牌输入 |
 
 在 `KPlugin.setup()` 中先安装 Command，再复用同一份聊天提示服务安装面板：
 
@@ -174,83 +176,141 @@ import me.kzheart.klib.lang.RichText;
 import me.kzheart.klib.ui.chat.BukkitChatPanels;
 import me.kzheart.klib.ui.chat.ChatPanel;
 import me.kzheart.klib.ui.chat.ChatPanelButton;
+import me.kzheart.klib.ui.chat.ChatPanelInput;
 import me.kzheart.klib.ui.prompt.BukkitChatPrompts;
+import org.bukkit.entity.Player;
 
 CommandModule.install(this);
 BukkitChatPrompts prompts = BukkitChatPrompts.install(context().scope(), this);
 BukkitChatPanels panels = BukkitChatPanels.install(
         context().scope(), this, "myplugin_panel", prompts);
-commands().register("settings", root -> root.playerOnly()
-        .permission("myplugin.settings")
-        .executes(call -> panels.open((Player) call.sender(), ChatPanel
-                .builder(RichText.plain("配置面板"))
-                .permission("myplugin.settings")
-                .row(RichText.plain("操作："), ChatPanelButton.command(
-                        RichText.plain("[查看状态]"), "myplugin status"))
-                .row(RichText.plain("文本："), ChatPanelButton.suggest(
-                        RichText.plain("[预填]"), "待编辑的原文").hover(RichText.plain("填入聊天框后再发送")))
-                .footer(ChatPanelButton.action(RichText.plain("[关闭]"), session -> session.dispose()))
-                .pageSize(8).clearLines(12).lifetimeMillis(120000L)
-                .build())));
+
+ChatPanel flight(Player target) {
+    return ChatPanel.builder("flight", RichText.plain("飞行设置"))
+            .permission("myplugin.flight")
+            .guard(viewer -> target.isOnline())
+            .content(view -> view
+                    .group("飞行")
+                    .buttons(
+                            ChatPanelButton.action("fly", RichText.plain("允许飞行"),
+                                    session -> target.setAllowFlight(!target.getAllowFlight()))
+                                    .value(target.getAllowFlight() ? "开" : "关"),
+                            ChatPanelButton.action("speed", RichText.plain("速度"),
+                                    session -> session.input(ChatPanelInput.of(Speeds::parse)
+                                            .hint(RichText.plain("输入 0~1 的速度"))
+                                            .current(String.valueOf(target.getFlySpeed())),
+                                            value -> {
+                                                target.setFlySpeed(value);
+                                                session.status("已设置飞行速度");
+                                            }))
+                                    .value(String.valueOf(target.getFlySpeed()))
+                                    .hover(RichText.plain("点击输入新的速度"))
+                                    .reset(session -> target.setFlySpeed(0.1f))))
+            .build();
+}
+
+commands().register("flight", root -> root.playerOnly()
+        .permission("myplugin.flight")
+        .executes(call -> panels.open((Player) call.sender(), flight((Player) call.sender()))));
 ```
 
-- 需要导入 `org.bukkit.entity.Player`。
-- 安装调用必须位于启动主线程。
-- 按钮命令名应以插件为前缀，**不能与其他插件共享同一个裸标签**。
-- 默认发送复用 Lang 的 Bukkit 富文本桥接。自定义宿主可传入 `BiConsumer<Player, RichText>`，不需要把重定位后的 Adventure 类型传入 Bukkit。
+- `Speeds::parse` 是业务的纯解析函数，返回 `Optional<Float>`。
+- 安装调用必须位于启动主线程；按钮命令名应以插件为前缀，**不能与其他插件共享同一个裸标签**。
+- 默认发送复用 Lang 的 Bukkit 富文本桥接；自定义宿主可通过 `ChatPanelOptions.builder().sender(...)` 传入 `BiConsumer<Player, RichText>`。
 
-### 按钮
+### 页面函数与刷新
+
+- 页面函数在打开、每次点击、翻页和输入完成后**重新调用**，按钮上的值总是实时状态。
+- 动作执行后，面板在下一 tick 重画当前页；多次请求合并为一次。动作里调用 `session.open(...)` 或 `session.input(...)` 时显示新的页面或输入状态。
+- 整页作为**一条消息**发送，并补满固定行数（默认 20 行），旧面板被完整顶出可见区。
+- 布局自上而下：标题行、正文、状态行、导航行。未展开的聊天栏只显示末尾约 10 行，所以结果提示和导航始终可见。
+- 正文超出容量时分页，分组尽量整组留在同一页。
+
+| `ChatPanelView` 方法 | 作用 |
+| --- | --- |
+| `subtitle(text)` | 标题后追加 `› 副标题` |
+| `group(title)` | 开始一个分组，标题显示为 `名称 ···` |
+| `buttons(...)` | 一行多个按钮，按 `ChatPanel.Builder.perLine`（默认 4）或指定数量换行 |
+| `line(text, buttons...)` | 一行文字后接按钮 |
+| `text(text)` / `blank()` | 纯文本行 / 空行 |
+| `footer(buttons...)` | 追加到导航行 |
+
+### 按钮与稳定地址
+
+按钮命令为 `/<命令> <页面 id> <按钮 id>`，不含一次性令牌。点击时框架按实时状态重建该页面再查找按钮，聊天记录里的旧按钮同样可用。
 
 | 工厂 | 行为 |
 | --- | --- |
-| `action(label, callback)` | 调用业务回调 |
-| `command(label, text)` | 以玩家权限执行命令 |
-| `suggest(label, text)` | 预填输入框 |
+| `action(id, label, callback)` | 调用业务回调 |
+| `command(label, text)` | 以玩家权限执行命令后刷新面板 |
+| `suggest(label, text)` | 预填聊天框 |
 | `copy(label, text)` | 复制到剪贴板；旧版客户端不支持时改用 `suggest` |
 
-- `hover(...)` 和 `permission(...)` 返回新的不可变按钮。无权限按钮隐藏，执行时再次校验。
-- 预填与复制是客户端展示操作，不会执行其中的文本，也不能作为业务授权手段。
-- 旧聊天文本仍留在客户端历史中。
+- 按钮渲染为 `[名称 当前值 (R)]`：`value(...)` 显示当前值，`reset(callback)` 添加 (R) 重置，`hover(...)` 设置悬停说明。
+- 页面 id 与按钮 id 只能包含字母、数字和 `_ . : + -`。同一会话中同 id 的页面视为同一页面，后打开的定义替换先前的定义。
+- **id 应由目标决定**，如 `lore.3.edit`。列表内容可能变化时，把内容摘要放进 id，避免旧按钮作用到移位后的新内容。
+- 旧按钮的处理：
 
-### 刷新、翻页与会话
+| 情况 | 结果 |
+| --- | --- |
+| 页面和按钮都在 | 正常执行，并切换到该页面 |
+| 按钮在实时页面中已不存在 | 状态行提示，重画当前页 |
+| 页面已不在会话中，或一次性页面已使用 | 状态行提示，重画当前页 |
+| 缺少按钮权限 | 状态行提示，不执行 |
+| 页面权限或 guard 不满足 | 聊天提示；若是当前页则关闭会话 |
+| 会话已关闭或空闲过期 | 聊天提示重新打开 |
 
-- `ChatPanel.Builder.guard(Predicate<Player>)` 在点击、刷新和输入完成时检查目标是否仍存在或仍是原版本。
-- `ChatPanelSession.refresh(newModel)` 主动替换行数据，`page(index)` 翻页。新模型需保留适当的业务 guard。
-- 每次刷新会作废旧按钮。
-- 一次动作执行后，若未关闭、切换面板或启动输入，会自动重绘当前模型。
-- 会话有效期从打开时开始计时，刷新不延长。
-- 每名玩家只保留一个活动面板，打开新面板会关闭旧面板。
+- 每次点击都重新检查页面权限、guard 与按钮权限；无权限按钮不显示。所有丢弃都会提示玩家，并在 `chat-panel` 调试模块记录。
+- 确认框使用 `ChatPanel.Builder.once()`：每次打开都是新地址，首个动作执行后整页失效；动作未跳转时自动返回上一页。
+
+### 状态行、会话与返回
+
+- `session.status(...)` 把结果写入状态行，直到下一次操作；不要在动作里直接 `sendMessage`，否则会被随后的整页刷新顶掉。
+- 动作之外的业务代码可调用 `panels.notice(player, text)`：玩家开着面板时写入状态行，否则直接发送。
+- `session.open(panel)` 进入子页面并记录返回路径，导航行显示 `[返回]`；`session.back()` 返回上一页。
+- `panels.open(player, panel)` 从外部打开：复用会话、清空返回路径并立即发送；权限或 guard 不满足时提示玩家并返回空。
+- `[关闭]` 或 `session.dispose()` 发送一屏空行和“面板已关闭”，把面板文字顶走。
+- 会话按空闲时间过期（默认 15 分钟，每次操作续期），由 `ChatPanelOptions.builder().idleMillis(...)` 调整。每名玩家只有一个会话。
 
 ### 面板内输入
 
-在 action 回调中发送业务提示，再启动输入（`session` 为 `ChatPanelSession`）：
+在动作中调用 `session.input(...)`；面板保持显示，状态行显示提示、`[预填当前值]` 和 `[取消输入]`：
 
 ```java
-import java.util.Optional;
-import me.kzheart.klib.ui.prompt.PromptSpec;
-import me.kzheart.klib.scheduler.Ticks;
-
-session.player().sendMessage("输入新的名称，或输入 cancel 取消");
-session.input(PromptSpec.<String>builder(text -> text.trim().isEmpty()
-                ? Optional.<String>empty() : Optional.of(text))
-        .timeout(Ticks.seconds(60)).build(), currentName,
+session.input(ChatPanelInput.text(64)
+                .hint(RichText.plain("输入新的名称"))
+                .current(currentName),
         value -> {
-            // 在主线程重新核对并保存业务值，然后 refresh(newModel) 或重新 open。
-        }, () -> session.refresh(currentModel));
+            rename(value);
+            session.status("已修改名称");
+        });
 ```
 
-- 面板会附带“预填当前值”按钮。
-- 输入复用 `BukkitChatPrompts`：消息被消费，不向公共聊天广播。
-- 解析器只做纯解析，不能访问 Bukkit 可变状态。
-- 成功和取消回调都回到所属 Scope 的同步执行器。
-- 等待输入期间，权限、玩家会话或目标 guard 变化会拒绝回调。
-- 关闭面板只取消自己启动的提示，不取消其他模块后续替换的输入。
+- 提交、取消或超时后自动回到发起输入的页面；回调里再次 `input(...)` 或 `open(...)` 时按新的状态显示。
+- 取消或超时在状态行提示；需要额外处理时使用带 `cancelled` 回调的重载。
+- 解析器在异步聊天线程调用，只做纯解析；回调回到所属 Scope 的主线程，执行前重新检查页面 guard 和发起按钮的权限。
+- 点击面板上的其他按钮会放弃进行中的输入。关闭面板只取消自己启动的提示。
 
-### 快捷键、到期与错误
+### 告示牌输入
 
-- `hotkeys(onSave, onCancel)` 显式启用 F 保存、潜行+F 取消；默认不接管副手交换。调用方自行保存或丢弃业务草稿，并关闭或刷新面板。
+- 服务端提供 Paper 虚拟告示牌 API 时，导航行显示 `[输入：聊天]` / `[输入：告示牌]` 切换按钮，偏好按玩家记住到插件关闭。
+- 选择告示牌时，当前值按每行 15 个字符预填前三行，提交时拼接前三行；第四行为提示。
+- 当前值超过 45 个字符时自动改用聊天输入。多行或很长的内容用 `ChatPanelInput.sign(false)` 固定使用聊天。
+- 告示牌只发送给该玩家，不修改世界方块。可通过 `ChatPanelOptions.builder().signInput(false)` 关闭，或传入自定义 `ChatPanelSignInput`。
+
+### 选项、快捷键与错误
+
+| `ChatPanelOptions.Builder` | 默认 | 说明 |
+| --- | --- | --- |
+| `lines(int)` | 20 | 每页总行数 |
+| `idleMillis(long)` | 15 分钟 | 空闲过期时间 |
+| `sender(...)` | Lang 富文本 | 自定义发送 |
+| `signInput(...)` | 自动检测 | 关闭或替换告示牌输入 |
+| `text(ChatPanelText, RichText)` | 中文默认文案 | 替换提示和内置按钮文字 |
+
+- `hotkeys(onSave, onCancel)` 显式启用 F 保存、潜行+F 取消；默认不接管副手交换。
 - 到期、退出或 Scope 关闭只撤销面板及提示，**不自动保存业务数据**。
-- `ChatPanel.Builder.errorHandler(...)` 由业务选择错误提示。未配置时只记录异常并结束失败会话，不发送固定文案。
+- 动作抛出异常时记录日志并在状态行显示失败提示；`ChatPanel.Builder.errorHandler(...)` 可改为业务提示。
 - 所有公开面板操作及释放都要求主线程。作用域关闭后，注册的命令立即逻辑停用。
 
 ## Paper 富文本标题

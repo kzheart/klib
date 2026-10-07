@@ -332,7 +332,7 @@ menu.open(player, "tools", RichText.plain("工具管理"), "myplugin.admin",
 
 ### 保留原业务输出
 
-调用 `session.output(() -> player.performCommand("myplugin info"))` 暂停整页刷新，让原业务输出保持可见，并追加 `[返回继续操作]`。
+调用 `session.output(() -> player.performCommand("myplugin info"))` 暂停整页刷新，让原业务输出保持可见，并在命令主线程派发之后追加 `[返回继续操作]`，避免命令自行清屏顶掉返回入口。
 返回后恢复原页和字段草稿，仍检查页面权限与 guard。
 
 - 输出期间 `panels.session(player)` 返回空，避免已暂停的聊天页阻挡物品栏选择流程；内部会话仍受退出、关闭和空闲超时管理。

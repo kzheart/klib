@@ -83,7 +83,7 @@ klib {
 - [开始使用](https://github.com/kzheart/klib/wiki/Getting-Started)：项目配置、插件入口与模块安装。
 - [构建与打包](https://github.com/kzheart/klib/wiki/Build)：仓库、依赖闭包、重定位与手工接入。
 - [命令模块](docs/modules/command.md)：命令声明、帮助样式、异常策略与启动注册契约。
-- [UI 模块](docs/modules/ui.md)：菜单、字段编辑、分组管理面板与聊天输入。
+- [UI 模块](docs/modules/ui.md)：菜单、字段编辑、分组管理面板、业务输出返回与聊天输入。
 
 不用 Gradle 插件时，直接依赖 `me.kzheart.klib:klib-<module>:<klib-version>`，自己完成打包和重定位。
 

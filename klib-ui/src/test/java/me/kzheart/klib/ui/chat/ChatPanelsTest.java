@@ -40,6 +40,20 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChatPanelsTest {
+    @Test void returnControlFollowsDeferredCommandOutputAndStaleButtonsStillGiveFeedback() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.panels.open(f.player, ChatPanel.builder("main", RichText.plain("管理")).content(view ->
+                    view.buttons(ChatPanelButton.action("query", RichText.plain("查询"), session -> session.output(() ->
+                            f.scope.after(Ticks.of(1), () -> f.sent.add(new Object[] {f.player, RichText.plain("业务清屏后的查询结果")})))))).build());
+            f.click("query"); f.drain();
+            assertTrue(f.last().contains("返回继续操作"), "return control follows the command's deferred clear/output");
+            assertTrue(f.sentTo(f.player).contains("业务清屏后的查询结果"));
+            f.panels.dispatch(f.player, "missing", "missing"); f.drain();
+            assertTrue(f.last().contains(ChatPanelText.STALE_PAGE.defaultValue().plainText()));
+            assertTrue(f.panels.session(f.player).isPresent(), "an old button restores the current page with feedback");
+        }
+    }
+
     @Test void commandFieldsPreserveValuesAndOutputDoesNotCloseTheSession() throws Exception {
         try (Fixture f = new Fixture()) {
             ChatCommandMenu menus = new ChatCommandMenu(f.panels);

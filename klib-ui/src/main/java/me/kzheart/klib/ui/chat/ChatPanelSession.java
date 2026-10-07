@@ -29,6 +29,7 @@ public final class ChatPanelSession implements Disposable {
     long lastActive;
     boolean closed;
     boolean suspended;
+    long outputGeneration;
     boolean rendering;
     int renders;
     int acting;

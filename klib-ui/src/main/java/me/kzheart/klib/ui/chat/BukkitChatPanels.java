@@ -160,6 +160,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
             session.suspended = false; scheduleRedraw(session); return;
         }
         if (action.equals("@close")) { close(session, true); return; }
+        session.suspended = false;
         if (action.equals("@cancel")) { cancelByPlayer(session); return; }
         if (action.equals("@mode")) { toggleMode(session); return; }
         if (action.equals("@back")) { session.status = null; if (!back(session)) scheduleRedraw(session); return; }
@@ -460,16 +461,20 @@ public final class BukkitChatPanels implements Listener, Disposable {
         requireMain(); requireActive(session); cancelInput(session);
         if (session.redraw != null) { session.redraw.cancel(); session.redraw = null; }
         session.suspended = true;
+        final long generation = ++session.outputGeneration;
         RichText[] blank = new RichText[options.lines()]; Arrays.fill(blank, RichText.plain(""));
         sender.accept(session.player, join(Arrays.asList(blank)));
         try { action.run(); }
         catch (RuntimeException failure) { session.suspended = false; throw failure; }
-        if (!active(session) || !session.suspended) return;
-        ChatPanelView view = build(session, session.pages.get(session.current));
-        List<RichTextSegment> footer = new ArrayList<RichTextSegment>();
-        append(footer, control(text(ChatPanelText.RESUME), null, view.run("@resume")));
-        append(footer, control(text(ChatPanelText.CLOSE), null, view.run("@close")));
-        sender.accept(session.player, ChatPanelView.indent(footer));
+        // Klib 命令会通过所属 Scope 派发到主线程；在它的下一 tick 输出/清屏之后再附加返回。
+        owner.after(Ticks.of(1), () -> {
+            if (!active(session) || !session.suspended || generation != session.outputGeneration) return;
+            ChatPanelView view = build(session, session.pages.get(session.current));
+            List<RichTextSegment> footer = new ArrayList<RichTextSegment>();
+            append(footer, control(text(ChatPanelText.RESUME), null, view.run("@resume")));
+            append(footer, control(text(ChatPanelText.CLOSE), null, view.run("@close")));
+            sender.accept(session.player, ChatPanelView.indent(footer));
+        });
     }
 
     private RichText compose(ChatPanelSession session, Page page, ChatPanelView view) {

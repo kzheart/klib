@@ -22,10 +22,11 @@ public enum ChatPanelText {
     INPUT_INVALID(MessageColor.RED, "格式不正确，请重新输入（cancel 取消）"),
     INPUT_SIGN_INVALID(MessageColor.RED, "告示牌内容格式不正确，未修改。"),
     INPUT_SIGN_TOO_LONG(MessageColor.GRAY, "当前值过长，已改用聊天输入。"),
+    INPUT_CHAT_ONLY(MessageColor.GRAY, "此字段使用聊天输入。"),
     INPUT_CHAT_HINT(MessageColor.GRAY, "输入文字，或点取消"),
     INPUT_SIGN_HINT(MessageColor.GRAY, "请在告示牌中填写"),
     /** 告示牌第四行的提示，按纯文本发送。 */
-    SIGN_LINE(MessageColor.GRAY, "↑ 在上方三行输入 ↑"),
+    SIGN_LINE(MessageColor.GRAY, "↑ 输入，cancel取消"),
     EXPAND(MessageColor.GRAY, "↑ 展开聊天框继续操作 ↑"),
     RESUME(MessageColor.GOLD, "返回继续操作"),
     CLOSED(MessageColor.GRAY, "面板已关闭。"),

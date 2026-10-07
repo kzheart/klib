@@ -341,9 +341,11 @@ menu.open(player, "tools", RichText.plain("工具管理"), "myplugin.admin",
 
 ### 告示牌输入
 
-- 服务端提供 Paper 虚拟告示牌 API 时，导航行显示 `[输入：聊天]` / `[输入：告示牌]` 切换按钮，偏好按玩家记住到插件关闭。
-- 选择告示牌时，当前值按每行 15 个字符预填前三行，提交时拼接前三行；第四行为提示。
-- 当前值超过 45 个字符时自动改用聊天输入。多行或很长的内容用 `ChatPanelInput.sign(false)` 固定使用聊天。
+- `ChatPanelOptions.builder().preferSignInput(true)` 让短文本/数字默认使用告示牌；长字段使用 `ChatPanelInput.sign(false)`，当前值超出三行或包含换行时自动使用聊天。
+- 服务端提供 Paper 虚拟告示牌 API 时，导航行显示 `[输入：聊天]` / `[输入：告示牌]` 切换按钮，偏好按玩家记住到插件关闭；输入中切换会替换当前提示，并重新检查原按钮权限。
+- 选择告示牌时，当前值按原版字体每行 90px 的保守字宽预填前三行，提交时拼接前三行；第四行为提示。
+- 当前值超出前三行容量或包含换行时自动改用聊天输入。多行或很长的内容用 `ChatPanelInput.sign(false)` 固定使用聊天。
+- 告示牌前三行输入取消词（默认 `cancel`）可放弃修改；第四行提示不参与提交。
 - 告示牌只发送给该玩家，不修改世界方块。可通过 `ChatPanelOptions.builder().signInput(false)` 关闭，或传入自定义 `ChatPanelSignInput`。
 
 ### 选项、快捷键与错误
@@ -355,6 +357,7 @@ menu.open(player, "tools", RichText.plain("工具管理"), "myplugin.admin",
 | `idleMillis(long)` | 15 分钟 | 空闲过期时间 |
 | `sender(...)` | Lang 富文本 | 自定义发送 |
 | `signInput(...)` | 自动检测 | 关闭或替换告示牌输入 |
+| `preferSignInput(boolean)` | false | 短文本默认优先告示牌，支持切换与长内容自动使用聊天 |
 | `text(ChatPanelText, RichText)` | 中文默认文案 | 替换提示和内置按钮文字 |
 
 - `hotkeys(onSave, onCancel)` 显式启用 F 保存、潜行+F 取消；默认不接管副手交换。

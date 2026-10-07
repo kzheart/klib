@@ -14,6 +14,7 @@ public final class ChatPanelOptions {
     private final long idleMillis;
     private final BiConsumer<Player, RichText> sender;
     private final boolean signInput;
+    private final boolean preferSignInput;
     private final ChatPanelSignInput signs;
     private final Map<ChatPanelText, RichText> texts;
 
@@ -23,6 +24,7 @@ public final class ChatPanelOptions {
         idleMillis = builder.idleMillis;
         sender = builder.sender;
         signInput = builder.signInput;
+        preferSignInput = builder.preferSignInput;
         signs = builder.signs;
         texts = new EnumMap<ChatPanelText, RichText>(builder.texts);
     }
@@ -35,6 +37,7 @@ public final class ChatPanelOptions {
     public long idleMillis() { return idleMillis; }
     BiConsumer<Player, RichText> sender() { return sender; }
     boolean signInput() { return signInput; }
+    boolean preferSignInput() { return preferSignInput; }
     ChatPanelSignInput signs() { return signs; }
     public RichText text(ChatPanelText key) {
         RichText value = texts.get(key);
@@ -47,6 +50,7 @@ public final class ChatPanelOptions {
         private long idleMillis = 900000L;
         private BiConsumer<Player, RichText> sender;
         private boolean signInput = true;
+        private boolean preferSignInput;
         private ChatPanelSignInput signs;
         private final Map<ChatPanelText, RichText> texts = new EnumMap<ChatPanelText, RichText>(ChatPanelText.class);
         private Builder() { }
@@ -70,6 +74,8 @@ public final class ChatPanelOptions {
         public Builder sender(BiConsumer<Player, RichText> value) { sender = Objects.requireNonNull(value, "sender"); return this; }
         /** 是否提供告示牌输入；默认开启，服务端不支持时自动只用聊天输入。 */
         public Builder signInput(boolean enabled) { signInput = enabled; return this; }
+        /** 短文本默认优先弹出告示牌；玩家可切换为聊天，不支持告示牌或长内容时自动使用聊天。 */
+        public Builder preferSignInput(boolean enabled) { preferSignInput = enabled; return this; }
         /** 指定告示牌输入实现，替代内置的 Paper 虚拟告示牌。 */
         public Builder signInput(ChatPanelSignInput value) { signs = Objects.requireNonNull(value, "signInput"); signInput = true; return this; }
         public Builder text(ChatPanelText key, RichText value) {

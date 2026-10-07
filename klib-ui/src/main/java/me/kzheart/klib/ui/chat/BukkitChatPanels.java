@@ -3,12 +3,10 @@ package me.kzheart.klib.ui.chat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -46,7 +44,7 @@ import org.bukkit.plugin.Plugin;
  */
 public final class BukkitChatPanels implements Listener, Disposable {
     private static final String LOG = "chat-panel";
-    private static final int SIGN_LINE_LENGTH = 15;
+    private static final int SIGN_LINE_WIDTH = 90;
     private final Scope owner;
     private final Plugin plugin;
     private final String command;
@@ -57,7 +55,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
     private final KLogger logger;
     private final LongSupplier clock;
     private final Map<UUID, ChatPanelSession> sessions = new HashMap<UUID, ChatPanelSession>();
-    private final Set<UUID> signPreferred = new HashSet<UUID>();
+    private final Map<UUID, Boolean> inputModes = new HashMap<UUID, Boolean>();
     private long sequence;
     private boolean disposed;
 
@@ -268,8 +266,8 @@ public final class BukkitChatPanels implements Listener, Disposable {
         session.pending = pending;
         session.status = null;
         session.lastActive = clock.getAsLong();
-        boolean sign = signs != null && input.signAllowed() && signPreferred.contains(session.player.getUniqueId());
-        if (sign && input.current().length() > SIGN_LINE_LENGTH * 3) {
+        boolean sign = signs != null && input.signAllowed() && prefersSign(session.player.getUniqueId());
+        if (sign && !fitsSign(input)) {
             sign = false;
             session.status = text(ChatPanelText.INPUT_SIGN_TOO_LONG);
         }
@@ -305,6 +303,9 @@ public final class BukkitChatPanels implements Listener, Disposable {
         session.pending = null;
         StringBuilder joined = new StringBuilder();
         for (int i = 0; i < Math.min(3, values.length); i++) joined.append(values[i]);
+        if (joined.toString().trim().equalsIgnoreCase(pending.input.cancelKeyword())) {
+            complete(session, pending, PromptStatus.CANCELLED, null); return;
+        }
         Optional<T> parsed;
         try { parsed = pending.input.parser().parse(joined.toString().trim()); }
         catch (RuntimeException invalid) { parsed = Optional.empty(); }
@@ -372,12 +373,32 @@ public final class BukkitChatPanels implements Listener, Disposable {
         if (pending.sign && signs != null) signs.cancel(session.player);
     }
 
+    private boolean prefersSign(UUID id) {
+        Boolean explicit = inputModes.get(id);
+        return signs != null && (explicit == null ? options.preferSignInput() : explicit.booleanValue());
+    }
+
     private void toggleMode(ChatPanelSession session) {
-        UUID id = session.player.getUniqueId();
-        if (signs == null) signPreferred.remove(id);
-        else if (!signPreferred.remove(id)) signPreferred.add(id);
-        session.status = text(signPreferred.contains(id) ? ChatPanelText.MODE_SIGN : ChatPanelText.MODE_CHAT);
-        scheduleRedraw(session);
+        Pending<?> pending = session.pending;
+        if (pending != null && (!pending.input.signAllowed() || !fitsSign(pending.input))) {
+            session.status = text(ChatPanelText.INPUT_CHAT_ONLY); scheduleRedraw(session); return;
+        }
+        boolean sign = signs != null && !prefersSign(session.player.getUniqueId());
+        inputModes.put(session.player.getUniqueId(), Boolean.valueOf(sign));
+        if (pending != null) switchInput(session, pending);
+        else { session.status = text(sign ? ChatPanelText.MODE_SIGN : ChatPanelText.MODE_CHAT); scheduleRedraw(session); }
+    }
+
+    private <T> void switchInput(ChatPanelSession session, Pending<T> pending) {
+        Page origin = session.pages.get(pending.origin);
+        if (origin == null || !origin.panel.allowed(session.player)) { close(session, false); sender.accept(session.player, text(ChatPanelText.UNAVAILABLE)); return; }
+        if (!allowed(session.player, pending.permission)) {
+            cancelInput(session); session.status = text(ChatPanelText.NO_PERMISSION); scheduleRedraw(session); return;
+        }
+        String permission = session.invokingPermission;
+        session.invokingPermission = pending.permission;
+        try { input(session, pending.input, pending.accepted, pending.cancelled); }
+        finally { session.invokingPermission = permission; }
     }
 
     private void turn(ChatPanelSession session, Page page, String action) {
@@ -466,7 +487,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         sender.accept(session.player, join(Arrays.asList(blank)));
         try { action.run(); }
         catch (RuntimeException failure) { session.suspended = false; throw failure; }
-        // Klib 命令会通过所属 Scope 派发到主线程；在它的下一 tick 输出/清屏之后再附加返回。
+        // 原业务命令或客户端消息处理可能延后清屏；下一 tick 再附加返回，保留原命令输出。
         owner.after(Ticks.of(1), () -> {
             if (!active(session) || !session.suspended || generation != session.outputGeneration) return;
             ChatPanelView view = build(session, session.pages.get(session.current));
@@ -538,6 +559,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         Pending<?> pending = session.pending;
         if (pending == null) return session.status == null ? RichText.plain("") : ChatPanelView.indent(session.status.segments());
         List<RichTextSegment> line = new ArrayList<RichTextSegment>();
+        if (session.status != null) { line.addAll(session.status.segments()); line.add(RichTextSegment.plain("\n  ")); }
         if (pending.input.hint() != null) { line.addAll(pending.input.hint().segments()); line.add(RichTextSegment.plain(" ")); }
         if (pending.sign) line.addAll(text(ChatPanelText.INPUT_SIGN_HINT).segments());
         else {
@@ -561,7 +583,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         for (ChatPanelButton button : view.footer) append(line, view.render(button));
         if (!session.history.isEmpty()) append(line, control(text(ChatPanelText.BACK), null, view.run("@back")));
         if (signs != null) {
-            boolean sign = signPreferred.contains(session.player.getUniqueId());
+            boolean sign = session.pending == null ? prefersSign(session.player.getUniqueId()) : session.pending.sign;
             append(line, control(text(sign ? ChatPanelText.MODE_SIGN : ChatPanelText.MODE_CHAT), text(ChatPanelText.MODE_HOVER), view.run("@mode")));
         }
         append(line, control(text(ChatPanelText.CLOSE), null, view.run("@close")));
@@ -584,12 +606,16 @@ public final class BukkitChatPanels implements Listener, Disposable {
         return out;
     }
 
+    private static boolean fitsSign(ChatPanelInput<?> input) {
+        String value = input.current();
+        return value.indexOf('\n') < 0 && value.indexOf('\r') < 0
+                && ChatPanelLayout.wrap(RichText.plain(value), SIGN_LINE_WIDTH).size() <= 3;
+    }
+
     private String[] signLines(String current) {
+        List<RichText> rows = ChatPanelLayout.wrap(RichText.plain(current), SIGN_LINE_WIDTH);
         String[] lines = new String[4];
-        for (int i = 0; i < 3; i++) {
-            int from = Math.min(current.length(), i * SIGN_LINE_LENGTH);
-            lines[i] = current.substring(from, Math.min(current.length(), from + SIGN_LINE_LENGTH));
-        }
+        for (int i = 0; i < 3; i++) lines[i] = i < rows.size() ? rows.get(i).plainText() : "";
         lines[3] = text(ChatPanelText.SIGN_LINE).plainText();
         return lines;
     }
@@ -654,7 +680,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         if (disposed) return;
         for (ChatPanelSession session : new ArrayList<ChatPanelSession>(sessions.values())) close(session, false);
         disposed = true;
-        signPreferred.clear();
+        inputModes.clear();
         HandlerList.unregisterAll(this);
     }
 }

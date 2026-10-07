@@ -40,6 +40,28 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChatPanelsTest {
+    @Test void shortInputsPreferSignsWhileLongFieldsKeepChatAndPreferenceCanBeChanged() throws Exception {
+        try (Fixture f = new Fixture(ChatPanelOptions.builder().preferSignInput(true).build())) {
+            AtomicReference<String> name = new AtomicReference<String>("旧名称");
+            f.panels.open(f.player, ChatPanel.builder("field", RichText.plain("字段")).content(view -> view.buttons(
+                    ChatPanelButton.action("short", RichText.plain("名称"), s -> s.input(ChatPanelInput.text(32).current(name.get()), name::set)),
+                    ChatPanelButton.action("long", RichText.plain("说明"), s -> s.input(ChatPanelInput.text(500).sign(false), name::set)))).build());
+            f.click("short"); f.drain();
+            assertFalse(f.prompts.hasPrompt(f.id)); assertEquals("旧名称", f.signs.lines[0]);
+            f.signs.submit(new String[] {"新名称", "", "", "提示"}); f.drain(); assertEquals("新名称", name.get());
+            f.click("@mode"); f.drain(); f.click("short"); f.drain();
+            assertTrue(f.prompts.hasPrompt(f.id));
+            f.click("@mode"); f.drain(); assertFalse(f.prompts.hasPrompt(f.id), "switching mode replaces the active chat prompt");
+            f.signs.submit(new String[] {"切换后", "", "", "提示"}); f.drain(); assertEquals("切换后", name.get());
+            f.click("long"); f.drain(); assertTrue(f.prompts.hasPrompt(f.id));
+            assertTrue(f.last().contains("输入：聊天"), "mode label reflects the actual long-field input");
+            f.click("@mode"); f.drain(); assertTrue(f.last().contains(ChatPanelText.INPUT_CHAT_ONLY.defaultValue().plainText()));
+            f.click("@cancel"); f.drain(); f.click("short"); f.drain();
+            f.signs.submit(new String[] {"cancel", "", "", "提示"}); f.drain();
+            assertEquals("切换后", name.get(), "sign cancellation leaves the field unchanged");
+        }
+    }
+
     @Test void returnControlFollowsDeferredCommandOutputAndStaleButtonsStillGiveFeedback() throws Exception {
         try (Fixture f = new Fixture()) {
             f.panels.open(f.player, ChatPanel.builder("main", RichText.plain("管理")).content(view ->
@@ -359,7 +381,8 @@ class ChatPanelsTest {
             f.drain();
             assertTrue(f.last().contains("输入：告示牌"));
             f.click("edit");
-            assertArrayEquals(new String[] {"abcdefghijklmno", "pq", "", ChatPanelText.SIGN_LINE.defaultValue().plainText()}, f.signs.lines);
+            assertEquals("abcdefghijklmnopq", f.signs.lines[0] + f.signs.lines[1] + f.signs.lines[2]);
+            assertEquals(ChatPanelText.SIGN_LINE.defaultValue().plainText(), f.signs.lines[3]);
             assertFalse(f.prompts.hasPrompt(f.id));
             f.signs.submit(new String[] {"新", "名称", "", "忽略"});
             f.drain();
@@ -496,7 +519,9 @@ class ChatPanelsTest {
         boolean permitted = true;
         long now;
 
-        Fixture() throws Exception {
+        Fixture() throws Exception { this(ChatPanelOptions.defaults()); }
+
+        Fixture(ChatPanelOptions options) throws Exception {
             player = player(id);
             other = player(UUID.randomUUID());
             Server server = proxy(Server.class, (p, method, args) -> {
@@ -525,7 +550,7 @@ class ChatPanelsTest {
             constructor.setAccessible(true);
             KLogger logger = new KLogger(plugin.getLogger());
             prompts = scope.install(constructor.newInstance(scope, plugin, logger));
-            panels = scope.install(new BukkitChatPanels(scope, plugin, "testpanel", prompts, ChatPanelOptions.defaults(),
+            panels = scope.install(new BukkitChatPanels(scope, plugin, "testpanel", prompts, options,
                     (p, message) -> sent.add(new Object[] {p, message}), signs, logger, () -> now));
         }
 

@@ -165,7 +165,8 @@ prompt.completionSync().thenAcceptAsync(outcome -> {
 | `ChatPanel` | 页面定义：id、标题、权限、guard 和每次显示都会调用的页面函数 |
 | `ChatPanelView` | 页面函数里的构建器：分组、行、按钮、页脚 |
 | `ChatPanelButton` | 回调、命令、预填、复制按钮，可带悬停、当前值和 (R) 重置 |
-| `ChatPanelSession` | 玩家会话：跳转、返回、状态行、输入 |
+| `ChatPanelSession` | 玩家会话：跳转、返回、状态行、输入、业务输出 |
+| `ChatCommandMenu` | 分组管理入口、可选择的参数字段、草稿与一次性确认 |
 | `BukkitChatPanels` | 启动时声明的按钮命令、路由、刷新和告示牌输入 |
 
 在 `KPlugin.setup()` 中先安装 Command，再复用同一份聊天提示服务安装面板：
@@ -224,14 +225,15 @@ commands().register("flight", root -> root.playerOnly()
 - 动作执行后，面板在下一 tick 重画当前页；多次请求合并为一次。动作里调用 `session.open(...)` 或 `session.input(...)` 时显示新的页面或输入状态。
 - 动作里直接调用 `panels.open(...)` 重新打开时立即发送，不再额外重画；本次动作设置的状态行会保留。
 - 整页作为**一条消息**发送，并补满固定行数（默认 20 行），旧面板被完整顶出可见区。
-- 布局自上而下：标题行、正文、状态行、导航行。未展开的聊天栏只显示末尾约 10 行，所以结果提示和导航始终可见。
+- 布局自上而下：标题、分组正文、状态与导航。导航紧跟正文，留白补在尾部；收起聊天框时显示展开提示。
+- 原版字体按保守字宽排列，中文长按钮提前换行，保留颜色、悬停与点击事件。长标题和状态会截为摘要，完整内容保留在悬停。
 - 正文超出容量时分页，分组尽量整组留在同一页。
 
 | `ChatPanelView` 方法 | 作用 |
 | --- | --- |
 | `subtitle(text)` | 标题后追加 `› 副标题` |
 | `group(title)` | 开始一个分组，标题显示为 `名称 ···` |
-| `buttons(...)` | 一行多个按钮，按 `ChatPanel.Builder.perLine`（默认 4）或指定数量换行 |
+| `buttons(...)` | 一行多个按钮，按数量上限（默认 4）与行宽预算同时换行 |
 | `line(text, buttons...)` | 一行文字后接按钮 |
 | `text(text)` / `blank()` | 纯文本行 / 空行 |
 | `footer(buttons...)` | 追加到导航行 |
@@ -292,6 +294,51 @@ session.input(ChatPanelInput.text(64)
 - 解析器在异步聊天线程调用，只做纯解析；回调回到所属 Scope 的主线程，执行前重新检查页面 guard 和发起按钮的权限。
 - 点击面板上的其他按钮会放弃进行中的输入。关闭面板只取消自己启动的提示。
 
+### 分组命令管理页
+
+已有管理命令可用 `ChatCommandMenu` 接入。参数显示为可修改的字段，选择页提供实时选项、筛选和手动输入；返回时保留已填内容。
+
+```java
+import java.util.Arrays;
+import me.kzheart.klib.lang.RichText;
+import me.kzheart.klib.ui.chat.ChatCommandMenu;
+import me.kzheart.klib.ui.chat.ChatCommandMenu.Action;
+import me.kzheart.klib.ui.chat.ChatCommandMenu.Choice;
+import me.kzheart.klib.ui.chat.ChatCommandMenu.Field;
+
+ChatCommandMenu menu = new ChatCommandMenu(panels);
+menu.open(player, "tools", RichText.plain("工具管理"), "myplugin.admin",
+        Arrays.asList(Action.of("give", "管理操作", "发放物品", "myplugin give", "myplugin.give")
+                .fields(Field.text("物品").choices(viewer -> Arrays.asList(
+                                Choice.of("铁锭", "iron"), Choice.of("金锭", "gold"))),
+                        Field.integer("数量", 1, 64, 1))
+                .confirm()));
+```
+
+| 接口 | 行为 |
+| --- | --- |
+| `Action.of(id, group, label, command, permission)` | 分组入口；命令不加 `/`，仍以实际玩家身份执行 |
+| `Action.fields(Field...)` | 按字段顺序拼接参数，不要求一次输入整串参数 |
+| `Action.confirm()` | 修改/发放操作使用一次性确认页，确认内容是打开时的快照 |
+| `Field.text(label)` / `Field.integer(...)` | 文本或范围内整数，校验失败不提交 |
+| `Field.initial(value/provider)` | 初始值与 (R) 重置值 |
+| `Field.choices(provider)` | 在主线程实时查询选项；筛选、翻页和旧按钮点击都重新读取 |
+| `Field.validate(predicate)` | 纯文本校验，同时检查手动输入与所选值；不能访问 Bukkit 状态 |
+| `Field.sign(false)` | 长文本固定使用聊天输入 |
+
+- 字段输入只改草稿；点击执行才调用业务命令。草稿只存在该玩家当前菜单会话，不持久化。
+- 选择值与校验规则由插件提供，不在公共 UI 中复制物品库、玩家或世界规则。
+- 界面使用金色可编辑项、白色当前值、灰色说明、绿色已选/执行与红色重置/错误；颜色之外同时提供文字状态。
+
+### 保留原业务输出
+
+调用 `session.output(() -> player.performCommand("myplugin info"))` 暂停整页刷新，让原业务输出保持可见，并追加 `[返回继续操作]`。
+返回后恢复原页和字段草稿，仍检查页面权限与 guard。
+
+- 输出期间 `panels.session(player)` 返回空，避免已暂停的聊天页阻挡物品栏选择流程；内部会话仍受退出、关闭和空闲超时管理。
+- 此时 `panels.notice(...)` 直接发送业务结果，不重画覆盖输出；业务主动打开新的聊天页时恢复正常显示。
+- `ChatCommandMenu` 自动使用这一流程；异步命令的结果由原业务发送，界面不把“命令已投递”当作操作成功。
+
 ### 告示牌输入
 
 - 服务端提供 Paper 虚拟告示牌 API 时，导航行显示 `[输入：聊天]` / `[输入：告示牌]` 切换按钮，偏好按玩家记住到插件关闭。
@@ -303,7 +350,8 @@ session.input(ChatPanelInput.text(64)
 
 | `ChatPanelOptions.Builder` | 默认 | 说明 |
 | --- | --- | --- |
-| `lines(int)` | 20 | 每页总行数 |
+| `lines(int)` | 20 | 每页总行数，尾部补空行 |
+| `width(int)` | 300px | 原版字体行宽预算，窄聊天框或资源包字体可调小 |
 | `idleMillis(long)` | 15 分钟 | 空闲过期时间 |
 | `sender(...)` | Lang 富文本 | 自定义发送 |
 | `signInput(...)` | 自动检测 | 关闭或替换告示牌输入 |

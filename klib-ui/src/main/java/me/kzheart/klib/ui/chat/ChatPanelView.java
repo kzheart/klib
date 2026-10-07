@@ -49,21 +49,27 @@ public final class ChatPanelView {
     public ChatPanelView group(RichText title) {
         block = new ArrayList<RichText>();
         blocks.add(block);
-        block.add(indent(title.segments()));
+        add(title.segments());
         return this;
     }
-    public ChatPanelView text(RichText text) { current().add(indent(text.segments())); return this; }
+    public ChatPanelView text(RichText text) { add(text.segments()); return this; }
     public ChatPanelView blank() { current().add(RichText.plain("")); return this; }
 
     /** 一行文字后接若干按钮。 */
     public ChatPanelView line(RichText text, ChatPanelButton... buttons) {
-        List<RichTextSegment> line = new ArrayList<RichTextSegment>(text.segments());
+        List<RichText> rows = ChatPanelLayout.wrap(text, options.width() - 8);
+        for (int i = 0; i < rows.size() - 1; i++) add(rows.get(i).segments());
+        List<RichTextSegment> line = new ArrayList<RichTextSegment>(rows.get(rows.size() - 1).segments());
         for (ChatPanelButton button : buttons) {
             if (!register(button)) continue;
+            List<RichTextSegment> rendered = render(button);
+            if (!line.isEmpty() && ChatPanelLayout.width(line) + 4 + ChatPanelLayout.width(rendered) > options.width() - 8) {
+                add(line); line = new ArrayList<RichTextSegment>();
+            }
             if (!line.isEmpty()) line.add(RichTextSegment.plain(" "));
-            line.addAll(render(button));
+            line.addAll(rendered);
         }
-        current().add(indent(line));
+        add(line);
         return this;
     }
 
@@ -77,12 +83,15 @@ public final class ChatPanelView {
         int count = 0;
         for (ChatPanelButton button : buttons) {
             if (!register(button)) continue;
-            if (count > 0 && count % perLine == 0) { current().add(indent(line)); line = new ArrayList<RichTextSegment>(); }
+            List<RichTextSegment> rendered = render(button);
+            if (!line.isEmpty() && (count >= perLine || ChatPanelLayout.width(line) + 4 + ChatPanelLayout.width(rendered) > options.width() - 8)) {
+                add(line); line = new ArrayList<RichTextSegment>(); count = 0;
+            }
             if (!line.isEmpty()) line.add(RichTextSegment.plain(" "));
-            line.addAll(render(button));
+            line.addAll(rendered);
             count++;
         }
-        if (!line.isEmpty()) current().add(indent(line));
+        if (!line.isEmpty()) add(line);
         return this;
     }
 
@@ -93,6 +102,10 @@ public final class ChatPanelView {
     }
 
     RichText subtitle() { return subtitle; }
+
+    private void add(List<RichTextSegment> segments) {
+        for (RichText row : ChatPanelLayout.wrap(new RichText(segments), options.width() - 8)) current().add(indent(row.segments()));
+    }
 
     private List<RichText> current() {
         if (block == null) { block = new ArrayList<RichText>(); blocks.add(block); }
@@ -122,10 +135,10 @@ public final class ChatPanelView {
         List<RichTextSegment> out = new ArrayList<RichTextSegment>();
         TextAction hover = hover(button.hover());
         out.add(new RichTextSegment("[", MessageColor.DARK_GRAY, false, hover, click));
-        out.addAll(decorate(button.label().segments(), null, hover, click));
+        out.addAll(decorate(button.label().segments(), MessageColor.GOLD, hover, click));
         if (button.value() != null) {
             out.add(new RichTextSegment(" ", null, false, hover, click));
-            out.addAll(decorate(button.value().segments(), MessageColor.GRAY, hover, click));
+            out.addAll(decorate(button.value().segments(), MessageColor.WHITE, hover, click));
         }
         if (button.resetAction() != null) {
             out.add(RichTextSegment.plain(" "));

@@ -5,6 +5,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
+import me.kzheart.klib.lang.MessageColor;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +40,63 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChatPanelsTest {
+    @Test void commandFieldsPreserveValuesAndOutputDoesNotCloseTheSession() throws Exception {
+        try (Fixture f = new Fixture()) {
+            ChatCommandMenu menus = new ChatCommandMenu(f.panels);
+            ChatCommandMenu.Field target = ChatCommandMenu.Field.text("玩家").choices(player -> Collections.singletonList(ChatCommandMenu.Choice.of("测试玩家", "tester")));
+            menus.open(f.player, "admin", RichText.plain("管理"), "admin", Collections.singletonList(
+                    ChatCommandMenu.Action.of("query", "查询", "玩家信息", "info", "admin").fields(target)));
+            f.click("query"); f.drain();
+            f.click("field.0"); f.drain();
+            String choice = "choice." + UUID.nameUUIDFromBytes("tester".getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
+            f.click(choice); f.drain();
+            assertTrue(f.last().contains("玩家 tester"));
+            f.click("execute"); f.drain();
+            assertEquals(Collections.singletonList("info tester"), f.commands);
+            assertFalse(f.panels.session(f.player).isPresent(), "suspended panels do not interfere with inventory command menus");
+            assertTrue(f.last().contains("返回继续操作"));
+            f.click("@resume"); f.drain();
+            assertTrue(f.panels.session(f.player).isPresent());
+            assertTrue(f.last().contains("玩家 tester"));
+            f.click("@back"); f.drain(); f.click("query"); f.drain();
+            assertTrue(f.last().contains("玩家 tester"), "same menu reuses the field draft");
+        }
+    }
+
+    @Test void commandConfirmationCannotRepeatAGrantAndIntegerInputIsValidated() throws Exception {
+        try (Fixture f = new Fixture()) {
+            new ChatCommandMenu(f.panels).open(f.player, "admin", RichText.plain("管理"), "admin", Collections.singletonList(
+                    ChatCommandMenu.Action.of("give", "管理", "发放", "give", "admin").fields(ChatCommandMenu.Field.integer("数量", 1, 64, 1)).confirm()));
+            f.click("give"); f.drain(); f.click("field.0"); f.drain();
+            f.prompts.onChat(f.chat("-5")); f.drain();
+            assertTrue(f.panels.session(f.player).get().inputting());
+            f.prompts.onChat(f.chat("3")); f.drain();
+            assertTrue(f.last().contains("数量 3"));
+            f.click("execute"); f.drain(); String[] old = f.command("confirm");
+            f.click("confirm"); f.drain();
+            f.panels.dispatch(f.player, old[1], old[2]); f.drain();
+            assertEquals(Collections.singletonList("give 3"), f.commands);
+        }
+    }
+
+    @Test void chineseRowsWrapBeforeButtonsAndKeepTheirClickTargets() throws Exception {
+        try (Fixture f = new Fixture()) {
+            AtomicInteger clicked = new AtomicInteger();
+            f.panels.open(f.player, ChatPanel.builder("wide", RichText.plain("宽文字")).content(view ->
+                    view.buttons(3, ChatPanelButton.action("a", RichText.plain("这是一个很长的中文管理按钮并带有额外说明"), s -> { }),
+                            ChatPanelButton.action("b", RichText.plain("这是另一个很长的中文管理按钮并带有额外说明"), s -> clicked.incrementAndGet()),
+                            ChatPanelButton.action("c", RichText.plain("第三个按钮"), s -> { }))).build());
+            assertEquals(20, f.last().split("\n", -1).length);
+            for (String line : f.last().split("\n", -1)) assertFalse(line.contains("额外说明] [这是另"));
+            f.click("b"); f.drain(); assertEquals(1, clicked.get());
+            RichText rich = new RichText(Collections.singletonList(new RichTextSegment("长文字😀长文字😀", MessageColor.GOLD, false,
+                    new TextAction(TextAction.Type.HOVER_TEXT, "完整内容"), new TextAction(TextAction.Type.RUN_COMMAND, "test"))));
+            List<RichText> wrapped = ChatPanelLayout.wrap(rich, 20);
+            assertEquals(rich.plainText(), wrapped.stream().map(RichText::plainText).collect(Collectors.joining()));
+            assertTrue(wrapped.stream().flatMap(row -> row.segments().stream()).allMatch(segment -> segment.click() != null && segment.hover() != null));
+        }
+    }
+
     @Test void clickRebuildsFromLiveStateOnTheNextTick() throws Exception {
         try (Fixture f = new Fixture()) {
             AtomicInteger speed = new AtomicInteger(1);
@@ -82,7 +143,7 @@ class ChatPanelsTest {
             assertEquals(20, lines.length);
             assertTrue(lines[3].contains("[按钮0]") && lines[3].contains("[按钮2]") && !lines[3].contains("按钮3"));
             assertTrue(f.segments().anyMatch(s -> s.hover() != null && s.hover().value().contains("说明4")));
-            assertTrue(lines[19].contains("[关闭]"));
+            assertTrue(f.last().indexOf("[关闭]") < f.last().indexOf(ChatPanelText.EXPAND.defaultValue().plainText()), "navigation stays beside content instead of at the bottom");
         }
     }
 
@@ -417,6 +478,7 @@ class ChatPanelsTest {
         final Field serverField;
         final Object previousServer;
         boolean primary = true;
+        final List<String> commands = new ArrayList<String>();
         boolean permitted = true;
         long now;
 
@@ -466,7 +528,7 @@ class ChatPanelsTest {
             for (Object[] entry : sent) if (entry[0] == target) out.append(((RichText) entry[1]).plainText()).append('\n');
             return out.toString();
         }
-        String statusLine() { String[] lines = last().split("\n", -1); return lines[lines.length - 2]; }
+        String statusLine() { return last(); }
         Stream<RichTextSegment> segments() { return lastMessage().segments().stream(); }
         String[] command(String action) {
             for (int i = sent.size() - 1; i >= 0; i--) for (RichTextSegment segment : ((RichText) sent.get(i)[1]).segments())
@@ -482,6 +544,7 @@ class ChatPanelsTest {
                 if (method.getName().equals("isOnline")) return Boolean.TRUE;
                 if (method.getName().equals("hasPermission")) return Boolean.valueOf(permitted);
                 if (method.getName().equals("getName")) return "tester";
+                if (method.getName().equals("performCommand")) { commands.add((String) args[0]); return Boolean.TRUE; }
                 return defaultValue(method.getReturnType());
             });
         }

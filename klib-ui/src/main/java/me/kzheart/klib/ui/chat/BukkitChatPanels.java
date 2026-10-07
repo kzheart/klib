@@ -130,7 +130,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
     public boolean notice(Player player, RichText message) {
         requireMain(); Objects.requireNonNull(message, "message");
         ChatPanelSession session = sessions.get(player.getUniqueId());
-        if (session != null && session.player == player && active(session)) {
+        if (session != null && session.player == player && active(session) && !session.suspended) {
             session.status = message;
             scheduleRedraw(session);
             return true;
@@ -141,7 +141,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
 
     public Optional<ChatPanelSession> session(Player player) {
         ChatPanelSession session = sessions.get(player.getUniqueId());
-        return session != null && session.player == player && active(session) ? Optional.of(session) : Optional.<ChatPanelSession>empty();
+        return session != null && session.player == player && active(session) && !session.suspended ? Optional.of(session) : Optional.<ChatPanelSession>empty();
     }
 
     void dispatch(Player player, String key, String action) {
@@ -154,6 +154,11 @@ public final class BukkitChatPanels implements Listener, Disposable {
             return;
         }
         session.lastActive = clock.getAsLong();
+        if (action.equals("@resume")) {
+            Page current = session.pages.get(session.current);
+            if (current == null || !current.panel.allowed(player)) { close(session, false); sender.accept(player, text(ChatPanelText.UNAVAILABLE)); return; }
+            session.suspended = false; scheduleRedraw(session); return;
+        }
         if (action.equals("@close")) { close(session, true); return; }
         if (action.equals("@cancel")) { cancelByPlayer(session); return; }
         if (action.equals("@mode")) { toggleMode(session); return; }
@@ -179,6 +184,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
             return;
         }
         cancelInput(session);
+        session.suspended = false;
         session.status = null;
         if (!page.key.equals(session.current)) show(session, page);
         if (page.panel.once()) page.retired = true;
@@ -249,7 +255,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
 
     void scheduleRedraw(ChatPanelSession session) {
         requireMain();
-        if (session.closed || session.rendering || session.redraw != null || disposed || owner.isClosed()) return;
+        if (session.closed || session.suspended || session.rendering || session.redraw != null || disposed || owner.isClosed()) return;
         session.redraw = owner.after(Ticks.of(1), () -> { session.redraw = null; render(session); });
     }
 
@@ -413,6 +419,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
     }
 
     private static void show(ChatPanelSession session, Page page) {
+        session.suspended = false;
         session.current = page.key;
         session.navigation++;
     }
@@ -426,6 +433,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
     void render(ChatPanelSession session) {
         if (session.redraw != null) { session.redraw.cancel(); session.redraw = null; }
         if (!active(session)) { if (sessions.get(session.player.getUniqueId()) == session) close(session, false); return; }
+        if (session.suspended) return;
         Page page = session.pages.get(session.current);
         if (page == null || !page.panel.allowed(session.player)) {
             logger.debug(LOG, "关闭面板：当前页面已失效，player=" + session.player.getName());
@@ -448,23 +456,50 @@ public final class BukkitChatPanels implements Listener, Disposable {
         finally { session.rendering = false; }
     }
 
+    void output(ChatPanelSession session, Runnable action) {
+        requireMain(); requireActive(session); cancelInput(session);
+        if (session.redraw != null) { session.redraw.cancel(); session.redraw = null; }
+        session.suspended = true;
+        RichText[] blank = new RichText[options.lines()]; Arrays.fill(blank, RichText.plain(""));
+        sender.accept(session.player, join(Arrays.asList(blank)));
+        try { action.run(); }
+        catch (RuntimeException failure) { session.suspended = false; throw failure; }
+        if (!active(session) || !session.suspended) return;
+        ChatPanelView view = build(session, session.pages.get(session.current));
+        List<RichTextSegment> footer = new ArrayList<RichTextSegment>();
+        append(footer, control(text(ChatPanelText.RESUME), null, view.run("@resume")));
+        append(footer, control(text(ChatPanelText.CLOSE), null, view.run("@close")));
+        sender.accept(session.player, ChatPanelView.indent(footer));
+    }
+
     private RichText compose(ChatPanelSession session, Page page, ChatPanelView view) {
         int lines = options.lines();
-        List<List<RichText>> pages = paginate(view.blocks(), lines - 4);
-        int count = Math.max(1, pages.size());
-        page.index = Math.max(0, Math.min(page.index, count - 1));
-        List<RichText> out = new ArrayList<RichText>(lines);
         List<RichTextSegment> header = new ArrayList<RichTextSegment>(page.panel.title().segments());
         if (view.subtitle() != null) {
             header.add(new RichTextSegment(" › ", MessageColor.DARK_GRAY, true, null, null));
             header.addAll(view.subtitle().segments());
         }
-        out.add(ChatPanelView.indent(header));
+        List<RichText> title = ChatPanelLayout.limited(ChatPanelView.indent(header), options.width(), lines <= 10 ? 1 : 2);
+        RichText statusText = statusLine(session, view);
+        List<RichText> status = statusText.plainText().trim().isEmpty() ? new ArrayList<RichText>() : ChatPanelLayout.limited(statusText, options.width(), lines <= 10 ? 1 : 3);
+        // 先为最宽的分页导航预留容量，避免添加分页按钮后超屏。
+        List<RichText> navigation = ChatPanelLayout.wrap(footer(session, page, view, 2), options.width());
+        int capacity = Math.max(1, lines - title.size() - status.size() - navigation.size() - 3);
+        List<List<RichText>> pages = paginate(view.blocks(), capacity);
+        int count = Math.max(1, pages.size());
+        page.index = Math.max(0, Math.min(page.index, count - 1));
+        List<RichText> out = new ArrayList<RichText>(title);
         out.add(RichText.plain(""));
         if (!pages.isEmpty()) out.addAll(pages.get(page.index));
-        while (out.size() < lines - 2) out.add(RichText.plain(""));
-        out.add(statusLine(session, view));
-        out.add(footer(session, page, view, count));
+        out.add(RichText.plain(""));
+        out.addAll(status);
+        out.addAll(ChatPanelLayout.wrap(footer(session, page, view, count), options.width()));
+        // 控件跟随正文，留白放到末尾；收起聊天框时仍能看到展开提示。
+        if (out.size() < lines - 6) {
+            while (out.size() < lines - 7) out.add(RichText.plain(""));
+            out.add(ChatPanelView.indent(text(ChatPanelText.EXPAND).segments()));
+        }
+        while (out.size() < lines) out.add(RichText.plain(""));
         return join(out);
     }
 
@@ -503,7 +538,7 @@ public final class BukkitChatPanels implements Listener, Disposable {
         else {
             line.addAll(text(ChatPanelText.INPUT_CHAT_HINT).segments());
             line.add(RichTextSegment.plain(" "));
-            line.addAll(control(text(ChatPanelText.PREFILL), text(ChatPanelText.PREFILL_HOVER),
+            if (!pending.input.current().isEmpty()) line.addAll(control(text(ChatPanelText.PREFILL), text(ChatPanelText.PREFILL_HOVER),
                     new TextAction(TextAction.Type.SUGGEST_COMMAND, pending.input.current())));
         }
         line.add(RichTextSegment.plain(" "));

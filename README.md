@@ -83,7 +83,7 @@ klib {
 - [开始使用](https://github.com/kzheart/klib/wiki/Getting-Started)：项目配置、插件入口与模块安装。
 - [构建与打包](https://github.com/kzheart/klib/wiki/Build)：仓库、依赖闭包、重定位与手工接入。
 - [命令模块](docs/modules/command.md)：命令声明、帮助样式、异常策略与启动注册契约。
-- [UI 模块](docs/modules/ui.md)：菜单、聊天面板与聊天输入。
+- [UI 模块](docs/modules/ui.md)：菜单、字段编辑、分组管理面板与聊天输入。
 
 不用 Gradle 插件时，直接依赖 `me.kzheart.klib:klib-<module>:<klib-version>`，自己完成打包和重定位。
 
@@ -99,7 +99,7 @@ klib {
 | `klib-command` | 命令树、注解、权限、建议、帮助样式与业务异常策略 | [Command](docs/modules/command.md) |
 | `klib-item` | 物品构建、标签、编解码与外部物品适配 | [Item](docs/modules/item.md) |
 | `klib-data` | 存储契约、迁移与玩家缓存 | [Data](docs/modules/data.md) |
-| `klib-ui` | 菜单、分页、投放区、聊天面板与输入 | [UI](docs/modules/ui.md) |
+| `klib-ui` | 菜单、分页、投放区、字段与命令管理面板 | [UI](docs/modules/ui.md) |
 | `klib-script` | Kether 动作、编译检查、作用域执行与可选宿主互操作 | [Script](docs/modules/script.md) |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI 与消耗奖励 | [Hook](docs/modules/hook.md) |
 | `klib-compat` | 版本能力发现、实现选择与数据包侧边栏 | [Compat](docs/modules/compat.md) |

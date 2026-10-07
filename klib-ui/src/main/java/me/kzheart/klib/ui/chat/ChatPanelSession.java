@@ -28,6 +28,7 @@ public final class ChatPanelSession implements Disposable {
     RichText status;
     long lastActive;
     boolean closed;
+    boolean suspended;
     boolean rendering;
     int renders;
     int acting;
@@ -64,6 +65,9 @@ public final class ChatPanelSession implements Disposable {
     public <T> void input(ChatPanelInput<T> input, Consumer<T> accepted, Runnable cancelled) {
         panels.input(this, input, accepted, Objects.requireNonNull(cancelled, "cancelled"));
     }
+
+    /** 暂停整页刷新，显示原业务的命令/多行输出，并追加返回入口；不会关闭会话或丢失字段值。 */
+    public void output(Runnable action) { panels.output(this, Objects.requireNonNull(action, "action")); }
 
     /** 关闭面板并用空行顶掉聊天栏里的面板文字。 */
     @Override public void dispose() { panels.close(this, true); }

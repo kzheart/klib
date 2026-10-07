@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 /** 聊天面板的安装选项：整页行数、空闲有效期、发送方式、告示牌输入与内置文案。 */
 public final class ChatPanelOptions {
     private final int lines;
+    private final int width;
     private final long idleMillis;
     private final BiConsumer<Player, RichText> sender;
     private final boolean signInput;
@@ -18,6 +19,7 @@ public final class ChatPanelOptions {
 
     private ChatPanelOptions(Builder builder) {
         lines = builder.lines;
+        width = builder.width;
         idleMillis = builder.idleMillis;
         sender = builder.sender;
         signInput = builder.signInput;
@@ -29,6 +31,7 @@ public final class ChatPanelOptions {
     public static Builder builder() { return new Builder(); }
 
     public int lines() { return lines; }
+    public int width() { return width; }
     public long idleMillis() { return idleMillis; }
     BiConsumer<Player, RichText> sender() { return sender; }
     boolean signInput() { return signInput; }
@@ -40,6 +43,7 @@ public final class ChatPanelOptions {
 
     public static final class Builder {
         private int lines = 20;
+        private int width = 300;
         private long idleMillis = 900000L;
         private BiConsumer<Player, RichText> sender;
         private boolean signInput = true;
@@ -47,10 +51,15 @@ public final class ChatPanelOptions {
         private final Map<ChatPanelText, RichText> texts = new EnumMap<ChatPanelText, RichText>(ChatPanelText.class);
         private Builder() { }
 
-        /** 每次发送的总行数，不足时补空行；默认 20 行，正好占满展开的聊天栏。 */
+        /** 每次发送的总行数，不足时补空行；默认 20 行；正文与导航紧邻，尾部补空行占满展开的聊天栏。 */
         public Builder lines(int value) {
             if (value < 8 || value > 100) throw new IllegalArgumentException("lines must be 8..100");
             lines = value; return this;
+        }
+        /** 原版字体的行宽预算，默认 300px；中文按保守字宽估计，资源包或窄聊天栏可调小。 */
+        public Builder width(int value) {
+            if (value < 100 || value > 1000) throw new IllegalArgumentException("width must be 100..1000");
+            width = value; return this;
         }
         /** 无操作多久后会话过期；每次点击、输入或打开都会续期。默认 15 分钟。 */
         public Builder idleMillis(long value) {

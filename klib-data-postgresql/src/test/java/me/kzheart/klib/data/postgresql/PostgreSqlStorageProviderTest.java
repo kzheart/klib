@@ -3,6 +3,10 @@ package me.kzheart.klib.data.postgresql;
 import me.kzheart.klib.data.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import me.kzheart.klib.data.jdbc.JdbcDataSources;
+import java.util.Properties;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
@@ -16,14 +20,15 @@ class PostgreSqlStorageProviderTest {
         assertThrows(IllegalArgumentException.class, () -> new PostgreSqlStorageProvider(" ", "", ""));
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     @EnabledIfEnvironmentVariable(named = "KLIB_POSTGRESQL_TEST_URL", matches = ".+")
-    void realPostgreSqlPersistsBytesAndRollsBackDataAndMigrationVersion() throws Exception {
+    void realPostgreSqlPersistsBytesAndRollsBackDataAndMigrationVersion(boolean external) throws Exception {
         String namespace = "test-" + UUID.randomUUID();
         String url = System.getenv("KLIB_POSTGRESQL_TEST_URL");
         String user = System.getenv("KLIB_POSTGRESQL_TEST_USER");
         String password = System.getenv("KLIB_POSTGRESQL_TEST_PASSWORD");
-        StorageProvider provider = new PostgreSqlStorageProvider(url, user, password);
+        StorageProvider provider = provider(url, user, password, external);
         StorageSession session = provider.open().toCompletableFuture().get(15, TimeUnit.SECONDS);
         try {
             byte[] value = "中文😀\u0000binary".getBytes(StandardCharsets.UTF_8);
@@ -50,11 +55,19 @@ class PostgreSqlStorageProviderTest {
             session.dispose();
             provider.dispose();
         }
-        provider = new PostgreSqlStorageProvider(url, user, password);
+        provider = provider(url, user, password, external);
         StorageSession reopened = provider.open().toCompletableFuture().get(15, TimeUnit.SECONDS);
         try {
             assertArrayEquals(new byte[]{0, -1, 42}, reopened.get(namespace, "quoted'key").toCompletableFuture().get().get());
             reopened.delete(namespace, "quoted'key").toCompletableFuture().get();
         } finally { reopened.dispose(); provider.dispose(); }
+    }
+    private StorageProvider provider(String url, String user, String password, boolean external) {
+        if (!external) return new PostgreSqlStorageProvider(url, user, password);
+        Properties properties = new Properties();
+        if (user != null) properties.setProperty("user", user);
+        if (password != null) properties.setProperty("password", password);
+        return new PostgreSqlStorageProvider(JdbcDataSources.driver("org.postgresql.Driver",
+                getClass().getClassLoader(), url, properties), null);
     }
 }

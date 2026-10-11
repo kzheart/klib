@@ -147,6 +147,16 @@ PostgreSQL：
 
 不传 logger 的旧构造器行为不变：完全静默，异常照旧通过返回的 `CompletionStage` 传播。
 
+## 外部 JDBC 数据源
+
+MySQL、PostgreSQL 提供器支持 `(DataSource, KLogger)` 构造。数据源由调用方持有，关闭顺序为会话、提供器、数据源；提供器只关闭自己打开的连接。
+
+`JdbcDataSources.driver(driverClass, pluginClassLoader, jdbcUrl, properties)` 创建不带池的数据源，直接绑定指定类加载器的驱动，避免 `DriverManager` 选到其他插件的驱动。驱动延迟到首次连接加载，连接属性按副本传递。
+
+可注入 HikariCP 等外部连接池；现有会话仍按单个线程串行执行，并不会因数据源带池而自动并行。阻塞的获取连接操作仍由存储执行器执行。
+
+外置驱动的构建与启动依赖见 [构建与打包](https://github.com/kzheart/klib/wiki/Build)。经 PgBouncer 事务池访问时，不使用跨事务会话状态；`LISTEN` 应使用独立直连或会话池连接。
+
 ## 连接定位与超时
 
 JDBC 提供器是**单连接 + 单个串行执行线程**：

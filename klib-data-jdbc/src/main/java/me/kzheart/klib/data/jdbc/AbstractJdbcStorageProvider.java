@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import javax.sql.DataSource;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -30,6 +31,7 @@ public abstract class AbstractJdbcStorageProvider implements StorageProvider, Di
     private final String password;
     private final SqlDialect dialect;
     private final KLogger logger;
+    private final DataSource dataSource;
     private final Set<JdbcStorageSession> sessions = Collections.synchronizedSet(new HashSet<JdbcStorageSession>());
     private final AtomicBoolean disposed = new AtomicBoolean();
 
@@ -54,6 +56,18 @@ public abstract class AbstractJdbcStorageProvider implements StorageProvider, Di
         this.password = password;
         this.dialect = dialect;
         this.logger = logger;
+        this.dataSource = null;
+    }
+
+    /** 外部数据源由调用方持有；本提供器只关闭自己借出的连接，不关闭数据源。 */
+    protected AbstractJdbcStorageProvider(DataSource dataSource, SqlDialect dialect, KLogger logger) {
+        if (dataSource == null || dialect == null) throw new NullPointerException("dataSource and dialect");
+        this.dataSource = dataSource;
+        this.dialect = dialect;
+        this.logger = logger;
+        this.jdbcUrl = null;
+        this.username = null;
+        this.password = null;
     }
 
     @Override
@@ -100,7 +114,7 @@ public abstract class AbstractJdbcStorageProvider implements StorageProvider, Di
 
     /** 打开并配置一个连接，供首次打开和重连使用。 */
     private Connection createConnection() throws SQLException {
-        Connection connection = username == null
+        Connection connection = dataSource != null ? dataSource.getConnection() : username == null
                 ? DriverManager.getConnection(jdbcUrl)
                 : DriverManager.getConnection(jdbcUrl, username, password);
         try {

@@ -159,3 +159,5 @@ $skill-installer 安装 https://github.com/kzheart/klib/tree/main/skills/klib
 ## 许可证
 
 Klib 使用 [Apache License 2.0](LICENSE)。版权与第三方归属见 [NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+JDBC 后端支持调用方持有的 `DataSource`，见 [Data](docs/modules/data.md)。驱动可由服务器库加载器提供，Klib 模块仍按插件隔离。

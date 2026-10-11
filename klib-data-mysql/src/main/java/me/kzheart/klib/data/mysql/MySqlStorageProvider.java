@@ -3,9 +3,14 @@ package me.kzheart.klib.data.mysql;
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.data.jdbc.AbstractJdbcStorageProvider;
 import me.kzheart.klib.data.jdbc.SqlDialect;
+import javax.sql.DataSource;
 
 /** 基于 MySQL 的存储提供器。 */
 public final class MySqlStorageProvider extends AbstractJdbcStorageProvider {
+    /** 使用调用方持有的数据源或连接池；本提供器不会关闭数据源本身。 */
+    public MySqlStorageProvider(DataSource dataSource, KLogger logger) {
+        super(dataSource, SqlDialect.MYSQL, logger);
+    }
     /** 不写出日志的构造方式；生产环境建议使用带 {@link KLogger} 的重载。 */
     public MySqlStorageProvider(String jdbcUrl, String username, String password) {
         this(jdbcUrl, username, password, null);

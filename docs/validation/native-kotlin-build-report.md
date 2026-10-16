@@ -6,16 +6,18 @@
 
 | 范围 | 结果 | 证据与执行方法 |
 | --- | --- | --- |
-| JDK 21 全量 | PASS，825 测试、0 失败、0 跳过 | `clean check publishToMavenLocal centralDryRunBundle`；各模块 `build/test-results/test/TEST-*.xml` |
-| Java 8 真运行 | PASS，同一组 825 测试、0 失败、0 跳过 | `check -PtestJavaVersion=8`，使用 Temurin 8u504；不是仅检查字节码 |
-| 公开产物与依赖 | PASS | `checkJava8Compatibility` 与 `scripts/check-java8-api.sh`；857 个生产 class 均为 major 52 |
+| JDK 21 全量 | PASS，830 测试、0 失败、0 跳过 | `clean check publishToMavenLocal centralDryRunBundle`；各模块 `build/test-results/test/TEST-*.xml` |
+| Java 8 真运行 | PASS，同一组 830 测试、0 失败、0 跳过 | `check -PtestJavaVersion=8`，使用 Temurin 8u504；不是仅检查字节码 |
+| 公开产物与依赖 | PASS | `checkJava8Compatibility` 与 `scripts/check-java8-api.sh`；859 个生产 class 均为 major 52 |
 | Maven POM/Gradle metadata/许可证/校验和 | PASS | `verifyMavenStaging`、`verifyCentralChecksums`、`centralDryRunBundle`；只生成本地 unsigned bundle |
 | Kotlin consumer 文档用法 | PASS | `checkKotlinConsumerContracts` 的独立编译器编译 command/menu/item/config/data 组合；各模块另有实际 Kotlin consumer 测试 |
+| 错误标签类型 | PASS，按预期拒绝 | `WrongTagType.log` 含 `type mismatch` |
 | 错误参数类型 | PASS，按预期拒绝 | `WrongArgumentType.log` 含 `type mismatch` |
 | 越级 DSL 接收者 | PASS，按预期拒绝 | `OuterDslReceiver.log` 含 `implicit receiver` |
 | 事务内挂起 | PASS，按预期拒绝 | `SuspendingTransaction.log` 含 `suspension functions` |
 | Config | PASS，95 项 | 真实构造默认值、缺失/显式 null、集合元素、继承字段、注解、失败原子回滚、默认 YAML 与循环引用 |
 | Core | PASS，102 项 | 新增 16 个协程生命周期/竞态及 2 个 Kotlin consumer；含 50 轮 close/rebuild 与提交竞争 |
+| 会话所有权 | PASS | `withSession` 成功/业务错误/取消均关闭会话；关闭异常作为 suppressed 保留原错误 |
 | 数据操作 | PASS | JSON/SQLite/MySQL 模拟兼容测试及 PostgreSQL 实库；Java8/JDK21 均执行 |
 | PostgreSQL 17.11 | PASS，3 项 | 本次新建隔离 loopback 数据库；内部/外部 DataSource 的二进制 CRUD、删除后读取、事务/迁移回滚、重开持久性 |
 | Item 类加载器隔离 | PASS | 相同二进制类名在两个真实 ClassLoader 中的缓存 Method 所属类不同 |

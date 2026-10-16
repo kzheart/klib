@@ -221,9 +221,20 @@ ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 It
 import me.kzheart.klib.item.*
 import org.bukkit.Material
 
-val icon = item(Material.STONE) { amount(2); name("&a石头") }
-val copy = icon.editItem { amount(3) }
+val icon = item(Material.STONE) { amount = 2; name = "&a石头" }
+val copy = icon.editItem { amount = 3 }
+val level = TagKey.integer("demo:level")
+val tagged = item(Material.STONE) {
+    amount = 1
+    lore = listOf("&7可升级")
+    this[level] = 5
+}
+val current: Int? = tagged[level]
 ```
+
+`amount`、`name`、`lore`、`customModelData`、`unbreakable` 是可读写属性。若外层局部变量同名，用 `this.amount = value` 明确指定接收者。`this[key] = value` 按 `TagKey<T>` 推断值类型，读到缺失标签返回 `null`，删除用 `removeTag(key)`。
+
+对普通 `ItemStack` 使用 `stack[key] = value` 会修改该接收者；需要副本时用 `editItem`。
 
 `item` 与 `editItem` 共用 `ItemBuilder` 的校验与版本处理。编辑不会更改原物品，返回值也不共享 builder 的可变物品。
 

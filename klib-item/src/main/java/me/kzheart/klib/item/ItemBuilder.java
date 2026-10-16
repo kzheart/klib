@@ -144,6 +144,16 @@ public final class ItemBuilder {
         return this;
     }
 
+    /** Reads the same typed tag storage used by {@link #tag(TagKey, Object)}. */
+    public <T> T tag(TagKey<T> key) {
+        return key.get(item);
+    }
+
+    public ItemBuilder removeTag(TagKey<?> key) {
+        key.remove(item);
+        return this;
+    }
+
     public ItemStack build() {
         return item.clone();
     }

@@ -315,6 +315,8 @@ suspend fun save(session: StorageSession) {
 }
 ```
 
+需要会话所有权时使用 `provider.withSession { ... }`：块可在操作之间挂起，正常返回、抛错或取消都会关闭会话；关闭失败不会覆盖原业务异常。单独使用 `openAwait` 时，成功获得会话后由调用方负责释放。
+
 `openAwait`、`getAwait`、`putAwait`、`deleteAwait`、`entriesAwait` 等待现有 provider 的异步操作；不会在调用线程另起一个阻塞引擎。已取消的打开操作若后来返回会话，会自动释放该会话。
 
 `transactionAwait { ... }` 的事务块刻意保持普通、不可挂起函数，仍由 provider 的事务执行器管理。取消等待不代表底层已开始的 JDBC 写入被回滚；需要原子性时把关联写入放入同一事务。

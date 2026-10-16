@@ -398,7 +398,7 @@ import org.bukkit.Material
 val model = menu("工具", 1) {
     layout("x        ")
     character('x') {
-        item(item(Material.STONE) { amount(1) })
+        item(item(Material.STONE) { amount = 1 })
         onClick { /* 使用现有 MenuClick / session API */ }
     }
 }

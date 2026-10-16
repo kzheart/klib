@@ -1054,28 +1054,39 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
                 import me.kzheart.klib.command.*
                 import me.kzheart.klib.command.api.Commands
                 import me.kzheart.klib.config.*
-                import me.kzheart.klib.item.item
+                import me.kzheart.klib.item.*
                 import me.kzheart.klib.ui.menu
                 import me.kzheart.klib.data.*
                 import org.bukkit.Material
                 data class Settings(val name: String = "Klib", val nullable: String? = null)
                 fun configure(commands: Commands) {
-                    val amount = Arguments.integer("amount", 1, 64)
+                    val amountArgument = Arguments.integer("amount", 1, 64)
                     commands.command("coins") {
                         permission("coins.admin")
-                        literal("give") { argument(amount) { executes { value ->
+                        literal("give") { argument(amountArgument) { executes { value ->
                             val typed: Int = value
                             sender().sendMessage("count=" + typed)
                         } } }
                     }
                     menu("tools", 1) {
                         layout("x        ")
-                        character('x') { item(item(Material.STONE) { amount(1) }); onClick {} }
+                        character('x') { item(item(Material.STONE) { amount = 1 }); onClick {} }
                     }
+                    val level = TagKey.integer("demo:level")
+                    val tagged = item(Material.STONE) { amount = 1; name = "Tool"; this[level] = 5 }
+                    val current: Int? = tagged[level]
                     configDefaults<Settings>()
                 }
                 suspend fun save(session: StorageSession) {
                     session.transactionAwait { put("n", "k", byteArrayOf(1)) }
+                }
+            """.trimIndent()),
+            "WrongTagType" to (false to """
+                import me.kzheart.klib.item.*
+                import org.bukkit.Material
+                fun wrong() {
+                    val level = TagKey.integer("demo:level")
+                    item(Material.STONE) { this[level] = "wrong" }
                 }
             """.trimIndent()),
             "WrongArgumentType" to (false to """
@@ -1117,6 +1128,7 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
             }
             val expectedDiagnostic = mapOf(
                 "WrongArgumentType" to "type mismatch",
+                "WrongTagType" to "type mismatch",
                 "OuterDslReceiver" to "implicit receiver",
                 "SuspendingTransaction" to "suspension functions",
             )[name]

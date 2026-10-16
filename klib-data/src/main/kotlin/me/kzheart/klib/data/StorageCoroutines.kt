@@ -23,3 +23,22 @@ suspend fun StorageSession.entriesAwait(namespace: String): Map<String, ByteArra
 /** The transaction body is deliberately NON-suspending and stays on the provider executor. */
 suspend fun <T> StorageSession.transactionAwait(block: TransactionContext.() -> T): T =
     transaction { it.block() }.await()
+
+/** Owns an async session for a suspending block, closing it on success, failure or cancellation.
+ * The block may suspend between operations; transactionAwait bodies remain non-suspending.
+ */
+suspend fun <T> StorageProvider.withSession(block: suspend StorageSession.() -> T): T {
+    val session = openAwait()
+    var failure: Throwable? = null
+    try {
+        return session.block()
+    } catch (cause: Throwable) {
+        failure = cause
+        throw cause
+    } finally {
+        try { session.dispose() } catch (closeFailure: Throwable) {
+            if (failure == null) throw closeFailure
+            if (failure !== closeFailure) failure.addSuppressed(closeFailure)
+        }
+    }
+}

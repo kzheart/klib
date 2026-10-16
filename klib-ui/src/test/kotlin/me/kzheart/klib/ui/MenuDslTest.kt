@@ -8,7 +8,7 @@ class MenuDslTest {
     @Test fun `documentation hierarchical example compiles`() {
         val model = menu("工具", 1) {
             layout("x        ")
-            character('x') { item(item(Material.STONE) { amount(1) }); onClick {} }
+            character('x') { item(item(Material.STONE) { amount = 1 }); onClick {} }
         }
         assertEquals(Material.STONE, model.entry(0).get().item().type)
     }

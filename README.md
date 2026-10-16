@@ -5,7 +5,7 @@
 <h1 align="center">Klib</h1>
 
 <p align="center">
-  面向 Bukkit、Spigot 与 Paper 插件的模块化 Java 基础库<br>
+  面向 Bukkit、Spigot 与 Paper 插件的模块化 Java / Kotlin 基础库<br>
   按需组合公共能力，明确管理生命周期。
 </p>
 
@@ -25,6 +25,8 @@
 </p>
 
 ---
+
+Kotlin API 直接内置于 Core、Config、Command、UI、Item、Data 与 Script，无需额外 Kotlin 模块。Java API 继续使用同一套引擎；公共运行时保持 Java 8 字节码边界。
 
 Klib 把插件里反复要写的基础能力拆成独立模块：命令、配置、语言、物品、菜单、数据存储、脚本和外部插件集成。按需选用，资源随插件生命周期自动释放。
 

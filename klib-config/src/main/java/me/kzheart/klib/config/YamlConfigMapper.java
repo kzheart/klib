@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -24,12 +23,13 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import me.kzheart.klib.config.annotation.*;
+import me.kzheart.klib.config.annotation.Range;
+import me.kzheart.klib.config.annotation.Validate;
 import me.kzheart.klib.random.DoubleRange;
 import me.kzheart.klib.random.IntRange;
 import me.kzheart.klib.reflect.Declarations;
 
-/** 将能感知路径的 YAML 节点映射为 Java 8 POJO。 */
+/** 将能感知路径的配置节点映射为 Java POJO 或 Kotlin 主构造器模型。 */
 public final class YamlConfigMapper {
     private static final Logger LOGGER =
             Logger.getLogger(YamlConfigMapper.class.getName());
@@ -60,7 +60,7 @@ public final class YamlConfigMapper {
         return type.cast(mapped);
     }
 
-    private Object convert(ConfigNode node, Type targetType) {
+    Object convert(ConfigNode node, Type targetType) {
         if (targetType instanceof Class<?>) {
             return convertClass(node, (Class<?>) targetType);
         }
@@ -172,39 +172,44 @@ public final class YamlConfigMapper {
             throw node.mappingError("cannot instantiate " + type.getName());
         }
 
-        final Object instance;
+        final ConfigTypePlan plan;
         try {
-            Constructor<?> constructor = type.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            instance = constructor.newInstance();
-        } catch (ReflectiveOperationException failure) {
-            throw node.mappingError(type.getName() + " requires an accessible no-argument constructor", failure);
+            plan = ConfigTypePlan.of(type);
+        } catch (ConfigException failure) {
+            throw node.mappingError(failure.getMessage(), failure);
+        }
+        final Object instance;
+        if (plan.kotlin != null) {
+            instance = plan.kotlin.construct(this, node);
+        } else {
+            try {
+                Constructor<?> constructor = type.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                instance = constructor.newInstance();
+            } catch (ReflectiveOperationException failure) {
+                throw node.mappingError(type.getName() + " requires an accessible no-argument constructor", failure);
+            }
         }
 
-        Set<String> declaredNames = new LinkedHashSet<String>();
-        for (Field field : fields(type)) {
-            // 保留 static/transient/合成字段的名字：它们虽然不参与映射，
-            // 但同名 YAML 键属于“有意忽略”，不应被报成拼写错误。
-            Key alias = field.getAnnotation(Key.class);
-            String key = alias == null ? field.getName() : alias.value();
-            if (key.trim().isEmpty() || !declaredNames.add(key)) throw node.mappingError("blank or duplicate field key: " + key);
-            int modifiers = field.getModifiers();
-            if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isSynthetic()) {
+        for (ConfigTypePlan.FieldPlan declaration : plan.fields) {
+            if (declaration.ignored) continue;
+            Field field = declaration.field;
+            ConfigNode fieldNode = node.child(declaration.name);
+            if (!fieldNode.exists() || plan.kotlin != null && plan.kotlin.isConstructorField(field)) {
+                if (plan.kotlin != null) plan.kotlin.validateField(instance, fieldNode, field);
+                validateRange(instance, declaration, fieldNode);
                 continue;
             }
-            ConfigNode fieldNode = node.child(key);
-            if (!fieldNode.exists()) {
-                validateRange(instance, field, fieldNode);
-                continue;
-            }
-            if (Modifier.isFinal(modifiers)) {
+            if (Modifier.isFinal(field.getModifiers())) {
                 throw fieldNode.mappingError("cannot assign final field " + field.getName());
             }
-            Object value = convert(fieldNode, field.getGenericType());
+            Object value = plan.kotlin == null
+                    ? convert(fieldNode, field.getGenericType())
+                    : plan.kotlin.convertField(this, fieldNode, field);
             try {
                 field.setAccessible(true);
                 field.set(instance, value);
-                validateRange(instance, field, fieldNode);
+                validateRange(instance, declaration, fieldNode);
             } catch (IllegalAccessException failure) {
                 throw fieldNode.mappingError("cannot assign field " + field.getName(), failure);
             } catch (IllegalArgumentException failure) {
@@ -220,12 +225,13 @@ public final class YamlConfigMapper {
                 throw node.mappingError("validation failed at " + method.getName() + ": " + failure.getMessage(), failure);
             }
         }
-        warnUnknownKeys(node, type, declaredNames);
+        warnUnknownKeys(node, type, plan.declaredNames);
         return instance;
     }
 
-    private static void validateRange(Object instance, Field field, ConfigNode node) {
-        Range range = field.getAnnotation(Range.class);
+    private static void validateRange(Object instance, ConfigTypePlan.FieldPlan declaration, ConfigNode node) {
+        Field field = declaration.field;
+        Range range = declaration.range;
         if (range == null) return;
         try {
             field.setAccessible(true);
@@ -259,7 +265,7 @@ public final class YamlConfigMapper {
                 continue;
             }
             String keyPath = basePath.isEmpty() ? key : basePath + "." + key;
-            if (!warnedUnknownKeys.add(node.sourceName() + ' ' + keyPath)) {
+            if (!warnedUnknownKeys.add(node.sourceName() + '\0' + keyPath)) {
                 continue;
             }
             LOGGER.warning(child.keyLocationPrefix()
@@ -313,22 +319,7 @@ public final class YamlConfigMapper {
         }
     }
 
-    private static List<Field> fields(Class<?> type) {
-        List<Class<?>> hierarchy = new ArrayList<Class<?>>();
-        for (Class<?> current = type; current != null && current != Object.class;
-                current = current.getSuperclass()) {
-            hierarchy.add(0, current);
-        }
-        List<Field> fields = new ArrayList<Field>();
-        for (Class<?> current : hierarchy) {
-            for (Field field : current.getDeclaredFields()) {
-                fields.add(field);
-            }
-        }
-        return fields;
-    }
-
-    private static Collection<Object> newCollection(ConfigNode node, Class<?> type) {
+    static Collection<Object> newCollection(ConfigNode node, Class<?> type) {
         if (type.isInterface() || Modifier.isAbstract(type.getModifiers())) {
             if (Set.class.isAssignableFrom(type)) {
                 return new LinkedHashSet<Object>();
@@ -344,7 +335,7 @@ public final class YamlConfigMapper {
         return collection;
     }
 
-    private static Map<String, Object> newMap(ConfigNode node, Class<?> type) {
+    static Map<String, Object> newMap(ConfigNode node, Class<?> type) {
         if (type.isInterface() || Modifier.isAbstract(type.getModifiers())) {
             return new LinkedHashMap<String, Object>();
         }

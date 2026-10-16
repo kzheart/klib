@@ -9,7 +9,7 @@ description: 按 kzheart/klib 官方 Wiki 为 Bukkit、Spigot 或 Paper 插件�
 
 ## 使用流程
 
-1. 读取目标项目的指令、构建文件和插件入口，确认 Java、服务器 API、Klib 库及 Gradle 插件版本。
+1. 读取目标项目的指令、构建文件和插件入口，确认 Java / Kotlin、服务器 API、Klib 库及 Gradle 插件版本。
 2. 读取 [Wiki 首页](https://github.com/kzheart/klib/wiki)，确认文档适用版本；再按任务读取下表对应页面，不必加载全部 Wiki。
 3. 按页面提供的依赖、安装入口、生命周期和线程要求实现。保留目标项目的架构与外部插件约束。
 4. 涉及多个模块时，读取各模块的初始化及资源释放要求。不要仅根据相似框架或记忆推断 Klib API。

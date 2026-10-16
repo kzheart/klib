@@ -1,6 +1,6 @@
 # Config 模块
 
-把类路径中的默认 YAML 提取到插件数据目录，并映射为 Java 8 POJO。支持默认值合并、注释保留、文件监听、原子重载、版本迁移和目录型配置注册表。
+把类路径中的默认 YAML 提取到插件数据目录，并映射为 Kotlin 主构造器模型或 Java 8 POJO。支持默认值合并、注释保留、文件监听、原子重载、版本迁移和目录型配置注册表。
 
 | 模块名 | 制品 | 自动带入 |
 | --- | --- | --- |
@@ -39,8 +39,9 @@ database:
 
 **2. 创建配置类型。**
 
-- 字段可以不是 `public`，但类型必须有无参数构造器。
-- `final` 字段只要 YAML 里出现同名键就会加载失败，**参与映射的字段不要声明为 `final`**。
+- Kotlin 类型直接使用主构造器，支持 `data class`、`val`、默认参数与可空类型，见下方「Kotlin 配置模型」。
+- Java POJO 字段可以不是 `public`，但类型必须有无参数构造器。
+- Java `final` 字段只要 YAML 里出现同名键就会加载失败，**Java 参与映射的字段不要声明为 `final`**。
 
 ```java
 public final class Settings {
@@ -89,6 +90,68 @@ protected void setup() {
 
 请求路径必须是数据目录内的非空相对路径，`../` 等越界路径会被拒绝。
 
+### Kotlin 配置模型
+
+原生 Kotlin API 随 `config` 模块提供，无需额外模块；配置对象仍由同一文档与作用域管理。
+
+```kotlin
+import me.kzheart.klib.config.ConfigModule
+import me.kzheart.klib.config.annotation.ConfigFile
+import me.kzheart.klib.config.annotation.Key
+import me.kzheart.klib.config.annotation.Range
+import me.kzheart.klib.config.load
+
+@ConfigFile("config.yml")
+data class Settings(
+    val debug: Boolean = false,
+    @field:Key("heartbeat-ticks") val heartbeatTicks: Long = 1200,
+    val database: Database = Database(),
+    val message: String? = null,
+)
+
+data class Database(
+    val host: String = "localhost",
+    @field:Range(min = 1.0, max = 65535.0) val port: Int = 3306,
+)
+
+// 在 KPlugin 子类中，先安装能力，再加载同一作用域持有的文档
+override fun setup() {
+    ConfigModule.install(this)
+    val config = configs().load<Settings>()
+    val named = configs().load<Settings>("config.yml")
+}
+```
+
+示例的默认资源使用 `heartbeat-ticks` 键；`@field:Key` 的名称按原样匹配，不会把点号拆成路径。
+
+| 主构造器参数 | YAML 缺失 | YAML 显式 `null` |
+| --- | --- | --- |
+| 非空、有默认参数 | 执行 Kotlin 默认参数 | 失败，报告字段路径 |
+| 可空、有默认参数 | 执行 Kotlin 默认参数 | 传入 `null`，不使用默认参数 |
+| 非空、无默认参数 | 失败，参数必填 | 失败，报告字段路径 |
+| 可空、无默认参数 | 失败，参数仍必填 | 传入 `null` |
+
+- 使用主构造器实际调用与默认参数，不要求 Kotlin 无参构造器，也不反射修改主构造器的 `val`。
+- `List<T>`、`Set<T>`、`Map<String, T>`、数组与嵌套对象保留元素的可空约束；例如 `List<String>` 的 null 元素报告 `names[1]`，`List<String?>` 接受它。
+- 类体内的额外 `var` 属性按字段映射并校验可空类型；额外 `val` 不可写。计算属性没有 backing field，不参与映射。未赋值的非空 `lateinit` 属性会加载失败。
+- `@Key`、`@Range`、`@Comment` 使用 `@field:`；`@Validate` 放在公开无参、返回 `Unit` 的实例方法上。
+- 需要普通、有主构造器的非 inner 类；不支持 object、vararg 构造参数、星投影或尚未确定实际类型的泛型参数。
+- 构造器、类型或校验失败都进入原有原子重载流程，保留先前有效对象，监听器不会收到半成品。
+
+直接映射已取得的节点或显式生成默认 YAML：
+
+```kotlin
+import me.kzheart.klib.config.configDefaults
+import me.kzheart.klib.config.read
+
+val settings = mapper.read<Settings>(document.root())
+val sameType = mapper.read(document.root(), Settings::class)
+val yaml = configDefaults<Settings>()
+```
+
+`Configs.load(Settings::class)` 与 `load(Settings::class, "config.yml")` 同样可用。
+`configDefaults` 要求每个主构造器参数都有真实默认值，并复用映射器的字段、别名、注释和校验规则；只返回文本，不写入现有文件。集合中的模型默认值也可生成；循环引用会被拒绝。
+
 ### 声明与校验注解
 
 | 注解 / API | 作用 |
@@ -116,9 +179,9 @@ protected void setup() {
 | 普通数组 | — |
 | `List<T>`、`Set<T>` 等集合 | 必须带泛型参数；原始集合类型没有元素类型信息，不支持 |
 | `Map<String, T>` | 键类型必须是 `String` |
-| 嵌套 POJO | 包括从父类继承的实例字段 |
+| 嵌套 Java POJO / Kotlin 配置模型 | 包括从父类继承的实例字段；Kotlin 构造器遵循上述规则 |
 
-POJO 映射规则：
+Java POJO 映射规则：
 
 - 类型必须可实例化并有可访问的无参数构造器；Klib 会反射访问非公开构造器和字段。
 - `static`、`transient` 和编译器生成字段会被跳过。
@@ -137,7 +200,7 @@ config.yml:12:5 (database.port): expected a number, got String
 
 ### 未知键提示
 
-YAML 中某个键在目标 POJO 里找不到同名字段时，Klib 以 `WARNING` 记录一次：
+YAML 中某个键在目标类型里找不到匹配字段或 Kotlin 构造器参数时，Klib 以 `WARNING` 记录一次：
 
 ```text
 config.yml:4:3 (database.prot): unknown configuration key is ignored; com.example.Settings$Database has no matching field
@@ -396,7 +459,7 @@ String text = settings.sectionText();
 ## 线程与生命周期
 
 - `ConfigDocument`、文件监听器、变更监听注册和 `Registry` 都属于创建它们的作用域；作用域关闭后不可继续重载。
-- `value()` 和 `Registry.snapshot()` 发布的是完整替换后的快照，但配置 POJO 本身**不是**不可变对象：
+- `value()` 和 `Registry.snapshot()` 发布的是完整替换后的快照；Java POJO、Kotlin `var` 和可变集合本身**不会**自动变为不可变对象：
   - `value()` 返回活对象，不是防御性拷贝，把它当只读快照用；
   - 修改字段不会写回 YAML，下一次 reload 后随实例被替换而丢失；
   - 多线程访问以 reload 发布的新实例为准；需要长期持有时每次都重新调用 `value()`，不要缓存旧实例。

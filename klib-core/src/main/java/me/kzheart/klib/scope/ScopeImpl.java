@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 生命周期操作串行化的线程安全作用域实现。
@@ -31,6 +32,7 @@ public final class ScopeImpl implements Scope {
     private final Map<Class<?>, Object> capabilities = new HashMap<Class<?>, Object>();
 
     private State state = State.OPEN;
+    private ScopeGeneration generation;
 
     public ScopeImpl(String name) {
         this(name, null, null, new ReentrantLock());
@@ -46,6 +48,7 @@ public final class ScopeImpl implements Scope {
         this.parent = parent;
         this.rebuildAction = rebuildAction;
         this.lifecycleLock = lifecycleLock;
+        this.generation = new ScopeGeneration(this, parent == null ? null : parent.generation);
     }
 
     /**
@@ -202,6 +205,7 @@ public final class ScopeImpl implements Scope {
             if (teardownFailure != null) {
                 throw teardownFailure;
             }
+            generation = new ScopeGeneration(this, parent == null ? null : parent.generation);
             if (rebuildAction != null) {
                 initializeUnderLock();
             } else {
@@ -284,7 +288,9 @@ public final class ScopeImpl implements Scope {
     }
 
     private ScopeLifecycleException releaseResources(String message) {
-        ScopeLifecycleException aggregate = null;
+        // Invalidate the entire subtree before cancelling jobs or releasing any resource.
+        invalidateGenerations();
+        ScopeLifecycleException aggregate = releaseGenerationAttachments(null, message);
         for (int index = resources.size() - 1; index >= 0; index--) {
             try {
                 resources.get(index).dispose();
@@ -301,6 +307,76 @@ public final class ScopeImpl implements Scope {
         return aggregate;
     }
 
+    private void invalidateGenerations() {
+        generation.invalidate();
+        for (ScopeImpl child : children.values()) child.invalidateGenerations();
+    }
+
+    private ScopeLifecycleException releaseGenerationAttachments(
+            ScopeLifecycleException aggregate, String message
+    ) {
+        // Parent cancellation also cancels linked child jobs. Every generation is already invalid.
+        aggregate = generation.releaseAttachments(aggregate, message);
+        for (ScopeImpl child : children.values()) {
+            aggregate = child.releaseGenerationAttachments(aggregate, message);
+        }
+        return aggregate;
+    }
+
+    ScopeGeneration generation() {
+        lifecycleLock.lock();
+        try {
+            ensureRegistrationAllowed();
+            return generation;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    <T> T inGeneration(ScopeGeneration expected, Supplier<T> action) {
+        lifecycleLock.lock();
+        try {
+            if (generation != expected || !expected.isActive()) {
+                throw new IllegalStateException("Scope generation is no longer active: " + name);
+            }
+            ensureRegistrationAllowed();
+            return action.get();
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    boolean runInGeneration(ScopeGeneration expected, Runnable action) {
+        lifecycleLock.lock();
+        try {
+            if (generation != expected || !expected.isActive()
+                    || state != State.OPEN && state != State.BUILDING) return false;
+            action.run();
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    void removeInGeneration(ScopeGeneration expected, Disposable resource) {
+        Objects.requireNonNull(resource, "resource");
+        lifecycleLock.lock();
+        try {
+            if (generation == expected && expected.isActive()) remove(resource);
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    void closeInGeneration(ScopeGeneration expected) {
+        lifecycleLock.lock();
+        try {
+            if (generation == expected && expected.isActive()) close();
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
     int resourceCount() {
         lifecycleLock.lock();
         try {
@@ -311,7 +387,7 @@ public final class ScopeImpl implements Scope {
     }
 
     private void ensureRegistrationAllowed() {
-        if (state != State.OPEN && state != State.BUILDING) {
+        if (!generation.isActive() || state != State.OPEN && state != State.BUILDING) {
             throw new IllegalStateException("Cannot register resources while scope is " + state + ": " + name);
         }
     }

@@ -655,6 +655,19 @@ KetherScriptEngine engine = new KetherScriptEngine(
 
 </details>
 
+## Kotlin 挂起执行
+
+```kotlin
+import me.kzheart.klib.script.*
+
+suspend fun evaluate(engine: ScriptEngine): Any? {
+    val context = scriptContext { variable("name", "Klib") }
+    return engine.evalAwait("literal hello", context)
+}
+```
+
+`evalAwait` 与 `evalConditionAwait` 直接等待原引擎结果，并将协程取消传给结果 future。解析器、宿主线程规则和作用域释放沿用原有实现；同步业务回调不会被自动改为异步。
+
 ## 线程与生命周期
 
 - 注册语句的 `Scope` 关闭后，该注册立即失效。引擎和注册表可由较长生命周期持有，业务语句应安装在可重建子作用域中。

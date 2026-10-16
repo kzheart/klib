@@ -316,6 +316,12 @@ public final class CustomCompat extends AbstractCompatProvider {
 }
 ```
 
+## 现代数据包实现共享
+
+现代侧边栏公共逻辑集中在 Compat 内部实现，版本模块只保留版本选择入口。相同 packet shape 不复制整套反射、差异更新或文本逻辑；旧版文本拆分仍由旧版适配器处理。
+
+版本解析成功只代表选择到适配器，不等于每个服务端补丁版本均经过实服验证。验证范围以 [验证记录](../validation/native-kotlin-test-plan.md) 为准。
+
 ## 线程与生命周期
 
 - 解析器、版本对象、提供者和能力矩阵都是纯 Java 对象，不创建线程，也不需要释放。

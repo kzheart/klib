@@ -69,6 +69,7 @@ abstract class CheckJava8RuntimeDependencies : DefaultTask() {
 
 plugins {
     base
+    kotlin("jvm") version "2.4.21" apply false
 }
 
 group = "me.kzheart.klib"
@@ -111,6 +112,8 @@ val klibLibraryProjectPaths = listOf(
 val javaProjectPaths = klibLibraryProjectPaths + ":klib-guard-api"
 val javaProjects = javaProjectPaths.map(::project)
 val publishableProjects = javaProjects
+
+val runtimeTestJavaVersion = providers.gradleProperty("testJavaVersion").map(String::toInt).orElse(21)
 
 val junitBom = libs.junit.bom
 val junitJupiter = libs.junit.jupiter
@@ -156,6 +159,15 @@ fun publicationDisplayName(projectName: String): String = when (projectName) {
 
 configure(javaProjects) {
     apply(plugin = "java-library")
+    if (name in setOf("klib-core", "klib-config", "klib-command", "klib-ui", "klib-item", "klib-data", "klib-script")) {
+        apply(plugin = "org.jetbrains.kotlin.jvm")
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+                freeCompilerArgs.add("-Xjdk-release=8")
+            }
+        }
+    }
     group = rootProject.group
     version = if (path == ":klib-guard-api") klibGuardApiVersion else klibVersion
 
@@ -190,9 +202,19 @@ configure(javaProjects) {
         add("testImplementation", platform(junitBom))
         add("testImplementation", junitJupiter)
         add("testRuntimeOnly", junitLauncher)
+        // Java 8 eagerly initializes Bukkit enum return types when generating test proxies.
+        // These host dependencies belong only to the test fixture, never public runtime POMs.
+        if (name !in setOf("klib-guard-api", "klib-data", "klib-data-json", "klib-data-jdbc",
+                "klib-data-sqlite", "klib-data-mysql", "klib-data-postgresql")) {
+            add("testRuntimeOnly", "com.google.guava:guava:21.0")
+        }
     }
 
     tasks.withType<Test>().configureEach {
+        javaLauncher.set(project.extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>()
+            .launcherFor { languageVersion.set(JavaLanguageVersion.of(runtimeTestJavaVersion.get())) })
+        doFirst { logger.lifecycle("$path runtime: ${javaLauncher.get().metadata.languageVersion} " +
+            javaLauncher.get().metadata.installationPath.asFile) }
         useJUnitPlatform()
         testLogging {
             events("failed", "skipped")
@@ -286,6 +308,8 @@ configure(publishableProjects) {
 
 project(":klib-core") {
     dependencies {
+        add("api", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+        add("testImplementation", "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         val compileSpigot = create(spigotApi.get()) as ModuleDependency
         val testSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false
@@ -338,6 +362,7 @@ project(":klib-compat-v26") {
 
 project(":klib-config") {
     dependencies {
+        add("implementation", "org.jetbrains.kotlin:kotlin-reflect:2.4.21")
         val compileSpigot = create(spigotApi.get()) as ModuleDependency
         compileSpigot.isTransitive = false
         add("compileOnly", compileSpigot)
@@ -709,7 +734,9 @@ tasks.register("verifyMavenStaging") {
                 throw GradleException(
                     "$baseName.pom must not publish the host-provided Spigot API")
             }
-            expectedPublicationDependencies[module.name]?.let { expected ->
+            expectedPublicationDependencies[module.name]?.let { javaExpected ->
+                val expected = if (module.name == "klib-data")
+                    javaExpected + "org.jetbrains.kotlin:kotlin-stdlib:compile" else javaExpected
                 val actual = pomDependencies(pom)
                 if (actual != expected) {
                     throw GradleException(
@@ -1003,3 +1030,101 @@ publishableProjects.forEach { module ->
         }
     }
 }
+
+// Compile consumer contracts separately: valid Kotlin snippets and intentional type/DSL failures.
+val kotlinConsumerCompiler = configurations.create("kotlinConsumerCompiler")
+dependencies.add(kotlinConsumerCompiler.name, "org.jetbrains.kotlin:kotlin-compiler-embeddable:2.4.21")
+val consumerModules = listOf("core", "config", "command", "item", "ui", "data", "script").map { project(":klib-$it") }
+val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts") {
+    group = "verification"
+    description = "Compiles real Kotlin consumer snippets and checks invalid DSL/type contracts are rejected."
+    dependsOn(consumerModules.map { it.tasks.named("classes") })
+    doLast {
+        val root = layout.buildDirectory.dir("kotlin-consumer-contracts").get().asFile
+        root.mkdirs()
+        val consumerClasspath = consumerModules.flatMap { module ->
+            module.configurations.getByName("compileClasspath").files +
+                module.extensions.getByType<org.gradle.api.tasks.SourceSetContainer>()
+                    .getByName("main").output.files
+        }.filter { it.exists() }.distinct().joinToString(File.pathSeparator) { it.absolutePath }
+        val compilerClasspath = kotlinConsumerCompiler.files.joinToString(File.pathSeparator) { it.absolutePath }
+        val javaExecutable = File(System.getProperty("java.home"), "bin/java").absolutePath
+        val fixtures = mapOf(
+            "Valid" to (true to """
+                import me.kzheart.klib.command.*
+                import me.kzheart.klib.command.api.Commands
+                import me.kzheart.klib.config.*
+                import me.kzheart.klib.item.item
+                import me.kzheart.klib.ui.menu
+                import me.kzheart.klib.data.*
+                import org.bukkit.Material
+                data class Settings(val name: String = "Klib", val nullable: String? = null)
+                fun configure(commands: Commands) {
+                    val amount = Arguments.integer("amount", 1, 64)
+                    commands.command("coins") {
+                        permission("coins.admin")
+                        literal("give") { argument(amount) { executes { value ->
+                            val typed: Int = value
+                            sender().sendMessage("count=" + typed)
+                        } } }
+                    }
+                    menu("tools", 1) {
+                        layout("x        ")
+                        character('x') { item(item(Material.STONE) { amount(1) }); onClick {} }
+                    }
+                    configDefaults<Settings>()
+                }
+                suspend fun save(session: StorageSession) {
+                    session.transactionAwait { put("n", "k", byteArrayOf(1)) }
+                }
+            """.trimIndent()),
+            "WrongArgumentType" to (false to """
+                import me.kzheart.klib.command.*
+                import me.kzheart.klib.command.api.Commands
+                fun wrong(commands: Commands) {
+                    commands.command("x") { argument(Arguments.integer("n")) { executes { value ->
+                        val wrong: String = value
+                    } } }
+                }
+            """.trimIndent()),
+            "OuterDslReceiver" to (false to """
+                import me.kzheart.klib.command.*
+                import me.kzheart.klib.command.api.Commands
+                fun wrong(commands: Commands) {
+                    commands.command("x") { argument(Arguments.integer("n")) { permission("outer") } }
+                }
+            """.trimIndent()),
+            "SuspendingTransaction" to (false to """
+                import me.kzheart.klib.data.*
+                import kotlinx.coroutines.delay
+                suspend fun wrong(session: StorageSession) {
+                    session.transactionAwait { delay(1) }
+                }
+            """.trimIndent()),
+        )
+        fixtures.forEach { (name, contract) ->
+            val source = root.resolve("$name.kt").apply { writeText(contract.second) }
+            val output = root.resolve("$name-classes").apply { mkdirs() }
+            val log = root.resolve("$name.log")
+            val process = ProcessBuilder(javaExecutable, "-cp", compilerClasspath,
+                "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
+                "-jvm-target", "1.8", "-classpath", consumerClasspath,
+                "-d", output.absolutePath, source.absolutePath)
+                .redirectErrorStream(true).redirectOutput(log).start()
+            val status = process.waitFor()
+            if ((status == 0) != contract.first) {
+                throw GradleException("Kotlin consumer contract $name failed (exit=$status):\n${log.readText()}")
+            }
+            val expectedDiagnostic = mapOf(
+                "WrongArgumentType" to "type mismatch",
+                "OuterDslReceiver" to "implicit receiver",
+                "SuspendingTransaction" to "suspension functions",
+            )[name]
+            if (expectedDiagnostic != null && !log.readText().contains(expectedDiagnostic)) {
+                throw GradleException("$name failed for an unexpected reason:\n${log.readText()}")
+            }
+            logger.lifecycle("Kotlin consumer contract $name: passed")
+        }
+    }
+}
+tasks.named("check") { dependsOn(checkKotlinConsumerContracts) }

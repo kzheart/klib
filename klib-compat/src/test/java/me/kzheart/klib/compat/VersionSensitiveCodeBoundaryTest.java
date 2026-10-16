@@ -32,7 +32,9 @@ class VersionSensitiveCodeBoundaryTest {
             "(?:net\\.minecraft|org\\.bukkit\\.craftbukkit)\\.");
     // CompatProviders 的反射发现白名单必须写完整实现类名字面量（重定位器按常量池整串改写），属有意豁免。
     private static final Set<String> EXEMPT_FILES = new HashSet<String>(Arrays.asList(
-            "klib-compat/src/main/java/me/kzheart/klib/compat/CompatProviders.java"
+            "klib-compat/src/main/java/me/kzheart/klib/compat/CompatProviders.java",
+            // Shared packet shape lives in compat; concrete providers still select version ranges.
+            "klib-compat/src/main/java/me/kzheart/klib/compat/internal/ModernSidebarBridge.java"
     ));
 
     @Test

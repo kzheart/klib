@@ -15,6 +15,10 @@ public final class Events {
     public <E extends Event> Disposable on(Class<E> type, Consumer<? super E> handler) {
         return owner.on(type, handler);
     }
+    public <E extends Event> Disposable on(Class<E> type, EventPriority priority,
+            boolean ignoreCancelled, Consumer<? super E> handler) {
+        return owner.on(type, priority, ignoreCancelled, handler);
+    }
     public Disposable register(Listener listener) {
         Objects.requireNonNull(listener, "listener");
         List<Method> methods = new ArrayList<Method>();

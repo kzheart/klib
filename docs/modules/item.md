@@ -215,6 +215,18 @@ ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 It
 - `ExternalItems` 实例不可变，`with(source)` 返回追加了该来源的新实例。前缀 `minecraft` 保留给原版材质。
 - `ExternalItems` 同时实现旧的 `ExternalItemProvider`，可以直接传给 `ItemSpec.Builder.external(...)`。
 
+## Kotlin 物品声明
+
+```kotlin
+import me.kzheart.klib.item.*
+import org.bukkit.Material
+
+val icon = item(Material.STONE) { amount(2); name("&a石头") }
+val copy = icon.editItem { amount(3) }
+```
+
+`item` 与 `editItem` 共用 `ItemBuilder` 的校验与版本处理。编辑不会更改原物品，返回值也不共享 builder 的可变物品。
+
 ## 线程与生命周期
 
 - `ItemBuilder` 和标签操作处理 `ItemStack`；涉及在线玩家背包或世界掉落时，在 Bukkit 主线程执行。

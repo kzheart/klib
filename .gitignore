@@ -17,3 +17,5 @@
 *.db
 *.sqlite
 *.sqlite3
+
+.kotlin/

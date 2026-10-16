@@ -9,8 +9,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** 访问 1.12.2 API 中尚不存在的 ItemMeta 方法；按实现类缓存查找结果。 */
 final class ItemMetaReflection {
-    private static final ConcurrentHashMap<String, Optional<Method>> METHODS =
-            new ConcurrentHashMap<String, Optional<Method>>();
+    // Class identity, not its binary name, defines reflective compatibility.
+    // ClassValue also lets unloaded host/plugin class loaders be collected.
+    private static final ClassValue<ConcurrentHashMap<String, Optional<Method>>> METHODS =
+            new ClassValue<ConcurrentHashMap<String, Optional<Method>>>() {
+                @Override
+                protected ConcurrentHashMap<String, Optional<Method>> computeValue(Class<?> type) {
+                    return new ConcurrentHashMap<String, Optional<Method>>();
+                }
+            };
 
     private ItemMetaReflection() {
     }
@@ -52,11 +59,11 @@ final class ItemMetaReflection {
     }
 
     private static Optional<Method> find(Class<?> type, String name, Class<?>... parameters) {
-        StringBuilder key = new StringBuilder(type.getName()).append('#').append(name);
+        StringBuilder key = new StringBuilder(name);
         for (Class<?> parameter : parameters) {
             key.append(',').append(parameter.getName());
         }
-        return METHODS.computeIfAbsent(key.toString(), ignored -> {
+        return METHODS.get(type).computeIfAbsent(key.toString(), ignored -> {
             try {
                 Method method = type.getMethod(name, parameters);
                 method.setAccessible(true);

@@ -388,6 +388,24 @@ MenuRenderer menus = MenuRenderer.install(
 
 </details>
 
+## Kotlin 层级菜单
+
+```kotlin
+import me.kzheart.klib.ui.*
+import me.kzheart.klib.item.item
+import org.bukkit.Material
+
+val model = menu("工具", 1) {
+    layout("x        ")
+    character('x') {
+        item(item(Material.STONE) { amount(1) })
+        onClick { /* 使用现有 MenuClick / session API */ }
+    }
+}
+```
+
+`slot(index) { ... }` 也接受同样的条目块。编译仍走 `MenuTemplate` 与 `MenuCompiler`，保留重复槽位、行数与布局校验；传入与读出的物品均为防御性副本。
+
 ## 线程与生命周期
 
 - `MenuRenderer` 和 `BukkitChatPrompts` 都必须安装到 `Scope`。作用域关闭时，监听器、打开的菜单、刷新任务和未完成提示统一清理。

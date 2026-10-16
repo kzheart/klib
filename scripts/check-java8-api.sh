@@ -4,16 +4,8 @@ set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$project_root"
 
-if find . -path '*/src/main/kotlin/*' -type f -name '*.kt' -print -quit | grep -q .; then
-  echo 'Kotlin production source is forbidden.' >&2
-  exit 1
-fi
-
-if rg -n --glob '*.gradle' --glob '*.gradle.kts' --glob '*.toml' \
-  'org\.jetbrains\.kotlin|kotlin\("' .; then
-  echo 'Kotlin build plugins are forbidden.' >&2
-  exit 1
-fi
+# Kotlin uses -Xjdk-release=8; Java uses --release 8. Check outputs, not source language.
+command -v javac >/dev/null || { echo 'A full JDK with javac is required.' >&2; exit 1; }
 
 forbidden_api='\b(Map|List|Set)\.of[[:space:]]*\(|java\.net\.http|Files\.(readString|writeString)[[:space:]]*\(|Optional\.isEmpty[[:space:]]*\(|String\.(strip|isBlank|lines|repeat)[[:space:]]*\('
 if rg -n --glob '*.java' "$forbidden_api" .; then
@@ -23,7 +15,7 @@ fi
 
 publishable_projects=(
   klib-core klib-command klib-config klib-lang klib-item klib-data klib-data-json
-  klib-data-jdbc klib-data-sqlite klib-data-mysql klib-ui klib-script
+  klib-data-jdbc klib-data-sqlite klib-data-mysql klib-data-postgresql klib-ui klib-script
   klib-hook klib-compat klib-compat-v1_12 klib-compat-v1_20 klib-compat-v1_21
   klib-compat-v26 klib-remote klib-guard-api
 )

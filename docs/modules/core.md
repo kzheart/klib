@@ -19,19 +19,7 @@
 ## 快速开始
 
 ```kotlin
-plugins {
-    id("me.kzheart.klib") version "<gradle-plugin-version>"
-}
-
-klib {
-    name("MyPlugin")
-    main("com.example.myplugin.MyPlugin")
-    version(project.version.toString())
-    targetPackage("com.example.myplugin")
-    modules {
-        core()
-    }
-}
+klib { modules { core() } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。仍需按目标服务端添加 `spigot-api` 或 `paper-api` 的 `compileOnly` 依赖。
@@ -166,6 +154,35 @@ config.onChange(gameplay::rebuild);
 
 </details>
 
+## Kotlin 原生入口
+
+Core 在现有制品中提供 Kotlin API，不需要单独的扩展模块。`setup()` 仍是普通同步方法，下面的初始化块也同步完成。
+
+```kotlin
+import me.kzheart.klib.KLogger
+import me.kzheart.klib.KPlugin
+import me.kzheart.klib.event.on
+import me.kzheart.klib.scope.childScope
+import me.kzheart.klib.scope.requireCapability
+import org.bukkit.event.player.PlayerJoinEvent
+
+class MyPlugin : KPlugin() {
+    override fun setup() {
+        context().scope().childScope("gameplay") {
+            val log = requireCapability<KLogger>()
+            on<PlayerJoinEvent> { event ->
+                log.info("${event.player.name} joined")
+            }
+        }
+    }
+}
+```
+
+- `scope(name) { ... }` 创建可重建根作用域，`childScope(name) { ... }` 使用接收者块创建子作用域。
+- `requireCapability<T>()` 返回类型化能力，`findCapability<T>()` 未找到时返回 `null`，`registerCapability<T>(value)` 注册能力。
+- `Scope.on<E>(priority = ..., ignoreCancelled = ...) { event -> ... }` 和 `events().on<E> { ... }` 支持 reified 类型与命名参数。
+- 事件块是普通函数，不是挂起函数；事件优先级、取消和 Bukkit 事件线程语义保持不变。
+
 ## 事件
 
 ```java
@@ -274,6 +291,41 @@ public void loadAndApply(final Player player) {
 ```
 
 多步组合中，**每个**访问 Bukkit 状态的回调都显式使用 `scope.syncExecutor()`。即使阶段由 `AsyncTasks.onSync(stage, scope)` 在主线程完成，完成后从其他线程追加的非 `Async` 回调也不保证在主线程运行。
+
+### Kotlin 协程
+
+`scope.coroutines` 返回当前构建代的协程入口；同一代重复读取返回同一实例，重建后使用全新的实例和 `SupervisorJob`。
+
+```kotlin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import me.kzheart.klib.scope.coroutines
+
+val runtime = context().scope().coroutines
+runtime.launch {
+    val profile = withContext(Dispatchers.IO) {
+        repository.loadPlayer(playerId)
+    }
+    // 默认恢复到本代主线程调度器；只在这里访问 Bukkit 状态
+    applyProfile(player, profile)
+}
+```
+
+| 入口 | 行为 |
+| --- | --- |
+| `runtime.launch { ... }` | 返回 `Job`，默认排队到主线程 |
+| `runtime.async { ... }` | 返回类型化 `Deferred<T>`，默认仍在主线程；耗时 I/O 显式切到 `Dispatchers.IO` |
+| `runtime.mainDispatcher` | 需要时用 `withContext(runtime.mainDispatcher)` 回到本代主线程 |
+| `runtime.scope` | 固定当前代的 `Scope` 视图，失效后拒绝注册和能力查询 |
+| `runtime.job` | 本代 `SupervisorJob`；单个协程失败不会取消兄弟协程 |
+
+- 子作用域的 Job 属于父作用域的 Job；关闭、重建或初始化失败时，先使整个子树失效并取消 Job，再逆序释放普通资源。
+- 默认 `launch`/`async` 支持 `DEFAULT` 和 `LAZY` 启动；拒绝替换生命周期 `Job` 或使用绕过初始取消检查的启动方式。
+- 调度被拒绝、已排队的恢复任务被关闭取消时，continuation 仍会完成取消，不会因静默丢弃而永远挂起。
+- `close()`/`rebuild()` 不等待协程完成，不在主线程使用 `runBlocking` 或 `join`。取消收尾可能在 `Dispatchers.Default` 上执行，`finally` 中不得访问 Bukkit，也不能依赖已释放的作用域资源。
+- 取消是协作式的。阻塞 I/O 必须设置超时；`NonCancellable` 代码、捕获的原始 `Scope` 或其他资源引用不会被强制撤销。跨挂起点使用 `runtime.scope`，不要通过原始可重建作用域查询新代能力。
+- 旧 `runtime` 在重建后保持取消，不能用来启动新任务；从新代 `Scope` 重新获取入口。此集成要求 Klib 创建的 `ScopeImpl` 和已注册的 `SchedulerFactory`。
+- 不要把现有 `syncExecutor()` 直接传给 `asCoroutineDispatcher()`：它关闭后允许丢弃命令，不能负责 continuation 的取消收尾。
 
 ## 冷却
 

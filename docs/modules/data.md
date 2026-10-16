@@ -303,6 +303,22 @@ CompletionStage<PlayerDataCache<PlayerProfile>> cacheStage =
 
 </details>
 
+## Kotlin 挂起调用
+
+```kotlin
+import me.kzheart.klib.data.*
+
+suspend fun save(session: StorageSession) {
+    session.putAwait("players", "demo", byteArrayOf(1))
+    val bytes = session.getAwait("players", "demo")
+    session.deleteAwait("players", "demo")
+}
+```
+
+`openAwait`、`getAwait`、`putAwait`、`deleteAwait`、`entriesAwait` 等待现有 provider 的异步操作；不会在调用线程另起一个阻塞引擎。已取消的打开操作若后来返回会话，会自动释放该会话。
+
+`transactionAwait { ... }` 的事务块刻意保持普通、不可挂起函数，仍由 provider 的事务执行器管理。取消等待不代表底层已开始的 JDBC 写入被回滚；需要原子性时把关联写入放入同一事务。
+
 ## 线程与生命周期
 
 - 所有存储操作都是异步的，返回 JDK `CompletionStage`。

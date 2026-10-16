@@ -495,6 +495,26 @@ CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
 
 </details>
 
+## Kotlin 层级 DSL
+
+原生声明直接生成同一棵 Java 命令树；`argument` 的执行块根据参数句柄推断类型，读取其他参数仍用 `get(handle)`。
+
+```kotlin
+import me.kzheart.klib.command.*
+
+val amount = Arguments.integer("amount", 1, 64)
+commands().command("coins") {
+    permission("coins.admin")
+    literal("give") {
+        argument(amount) {
+            executes { value -> sender().sendMessage("数量：$value") }
+        }
+    }
+}
+```
+
+DSL 接收者有 `@DslMarker` 边界，嵌套配置不会意外修改外层节点。注册、权限、补全、解析和异常反馈复用 Java 引擎；执行块不允许挂起。
+
 ## 线程与生命周期
 
 - 安装和声明命令必须在启动阶段、在主线程执行。从异步线程注册会失败。

@@ -75,6 +75,6 @@
 
 ## 环境与退出门槛
 
-初查云端具备 JDK 21、Node、Python、FFmpeg、Mesa GL；无 mct 安装、DISPLAY/Xvfb、服务器/客户端缓存或已接受 EULA。mc-pilot 官方 HEAD 0425bcf，CLI 0.20.0；27 个客户端 variant 不是 Klib 测试成绩。新 EULA 必须获授权；无权限时实服标 BLOCKED，继续其余验证。
+初次检查的隔离 shell 视图具备 JDK 21、Node、Python、FFmpeg、Mesa GL，未看到 mct 安装、DISPLAY/Xvfb 或服务器/客户端缓存；这只是该执行视图的观察，不代表整个云端没有图形会话。后续已通过云端原生 CUA 的 Xfce 显示启动真实客户端并进入隔离服，原先据此推导整体 GUI 不可用的判断已撤回。mc-pilot 官方 HEAD 0425bcf，CLI 0.20.0；27 个客户端 variant 不是 Klib 测试成绩。新 EULA 必须获授权；无权限时实服标 BLOCKED，继续其余验证。
 
 最终必须运行仓库要求的 check/publishToMavenLocal/centralDryRunBundle（后两者依赖可用配置），以及 Gradle 插件验证；每个失败和未测项给具体原因、影响和补测入口。所有实服使用隔离临时项目、回环地址，不接触用户电脑或生产；结束后停止自有进程。不得把计划、模拟、协议 bot、工具单测报告为真实客户端通过。

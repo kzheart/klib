@@ -45,9 +45,19 @@ PostgreSQL 验证使用 `KLIB_POSTGRESQL_TEST_URL`、`KLIB_POSTGRESQL_TEST_USER`
 | 未覆盖范围 | 状态与原因 |
 | --- | --- |
 | 最终重定位 Kotlin/reflect/coroutines 成品 | 由独立 Gradle 插件与实服测试验证；本页的普通 Maven classpath 通过不等于重定位通过 |
-| 每个 Minecraft 版本的玩家交互/截图 | 由 MCT/实服矩阵单独记录；无真实客户端证据时必须标 BLOCKED 或 NOT_RUN |
+| 未执行的客户端/patch/显示配置组合 | 已执行的基准组合见下方客户端记录；其他客户端版本、显示配置与未列交互不由服务端或已测组合推导为通过 |
 | 任意第三方反射库、任意 Kotlin compiler/runtime 组合 | 未做无限组合验证，不承诺任意隔离兼容 |
 | Guard 全功能 Kotlin runtime | 当前公开 Guard 校验对条目数与 multi-release 有额外限制；不得把 Bukkit 成功推导为 Guard 成功 |
 | 外部生产 MySQL/PostgreSQL | 未访问生产；本次只使用隔离测试环境 |
 
 测试策略、边界分区与探索章程见 [测试计划](native-kotlin-test-plan.md)。
+
+## 真实客户端补测与环境判断更正
+
+首次只检查了隔离 shell 的显示视图，其 Xvfb 本地 socket 启动失败不能证明整个云端没有可用图形环境。后续使用本次云端已有原生 CUA/Xfce 显示，真实启动 Minecraft 客户端并连接隔离服，撤回先前交付报告的整体 GUI BLOCKED 判断。
+
+真实客户端验证与原九个基准版本的无玩家服务端矩阵分别保留，不互相替代。测试仍使用原已核对 SHA 的最终双插件 JAR，生产源码基线为 `cf46ac4`，这次仓库补充仅修改验证文档。
+
+本轮实际动作包括菜单打开与左右/Shift/数字键交互、点击后的服务端计数和物品同步、双插件界面、侧边栏显示/隐藏、断线重连后重开。具体客户端/服务端配对、断言数量、截图和未测项目以本次交付覆盖报告及 `qa/evidence/gui-reinvestigation/client-version-matrix.json` 为准。
+
+初轮工具失败也保留：聊天等待曾只检查外层成功而遗漏嵌套 TIMEOUT；修正后检查完整返回值、服务端状态与同步后的截图。旧版客户端的 LWJGL2 XRandR 解析问题使用其官方应用属性处理，没有更改系统安全设置；这些不记作 Klib 产品缺陷。

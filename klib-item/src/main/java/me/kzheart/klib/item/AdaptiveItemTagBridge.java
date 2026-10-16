@@ -6,8 +6,8 @@ import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 /**
- * 在 1.13 及以上服务端优先使用 PDC，读取时则会回退到旧版根 NBT，
- * 使升级前写入的物品仍能保留标签；命中旧版标签时会择机迁移到 PDC。
+ * 优先使用服务端的 PDC；只有旧版 NBT API 支持当前平台时才回退读取根 NBT。
+ * 命中可读取的旧版标签时会择机迁移到 PDC。
  */
 public final class AdaptiveItemTagBridge implements ItemTagBridge {
     private final ItemTagBridge pdc;
@@ -88,9 +88,9 @@ public final class AdaptiveItemTagBridge implements ItemTagBridge {
         if (!handled) {
             throw new IllegalStateException("No item tag bridge is available to remove the tag:"
                     + " this server has no PersistentDataContainer support and no legacy NBT bridge"
-                    + " for this item. On 1.13+ make sure the server exposes"
-                    + " ItemMeta#getPersistentDataContainer; on 1.12 make sure the Item-NBT-API"
-                    + " classes (de.tr7zw.changeme.nbtapi) are on the runtime classpath, and that the"
+                    + " for this item. Make sure the server exposes"
+                    + " ItemMeta#getPersistentDataContainer, or the Item-NBT-API"
+                    + " classes (de.tr7zw.changeme.nbtapi) support this server revision, and that the"
                     + " item is not air.");
         }
     }
@@ -112,10 +112,10 @@ public final class AdaptiveItemTagBridge implements ItemTagBridge {
     private void requireLegacy() {
         if (!legacySupported.getAsBoolean()) {
             throw new IllegalStateException("No item tag bridge is available for this server:"
-                    + " PersistentDataContainer is unsupported (pre 1.13) and the Item-NBT-API classes"
-                    + " (de.tr7zw.changeme.nbtapi) are missing from the runtime classpath."
-                    + " Shade Item-NBT-API into the plugin jar (the me.kzheart.klib Gradle plugin does"
-                    + " this) or run the plugin on 1.13+.");
+                    + " PersistentDataContainer is unavailable and Item-NBT-API"
+                    + " (de.tr7zw.changeme.nbtapi) is missing or does not support this server revision."
+                    + " Provide a compatible shaded Item-NBT-API, or use a server exposing"
+                    + " ItemMeta#getPersistentDataContainer.");
         }
     }
 }

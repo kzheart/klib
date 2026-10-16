@@ -4,6 +4,7 @@ package me.kzheart.klib.config
 
 import me.kzheart.klib.config.api.ConfigDocument
 import me.kzheart.klib.config.api.Configs
+import kotlin.jvm.javaObjectType
 import kotlin.reflect.KClass
 
 /** Load an annotated config model through the scope-owned config capability. */
@@ -20,7 +21,7 @@ fun <T : Any> Configs.load(type: KClass<T>, path: String): ConfigDocument<T> = l
 inline fun <reified T : Any> YamlConfigMapper.read(node: ConfigNode): T = read(node, T::class)
 
 fun <T : Any> YamlConfigMapper.read(node: ConfigNode, type: KClass<T>): T =
-    read(node, type.java) ?: throw node.mappingError("null cannot be assigned to non-null Kotlin type ${type.qualifiedName}")
+    read(node, type.javaObjectType) ?: throw node.mappingError("null cannot be assigned to non-null Kotlin type ${type.qualifiedName}")
 
 /** Generate defaults explicitly; all Kotlin constructor parameters must have defaults. */
 inline fun <reified T : Any> configDefaults(): String = ConfigDefaults.yaml(T::class.java)

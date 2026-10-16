@@ -127,7 +127,9 @@ TOOL_TYPE.find(item).ifPresent(type -> player.sendMessage("工具类型：" + ty
 
 - 支持 Persistent Data Container 的服务端：写入 PDC。
 - 1.12 等旧版服务端：通过 Item-NBT-API 写入根 NBT。
-- 升级服务器后读取旧标签时，适配器会尽力把标签迁移到 PDC。
+- 只有内嵌 Item-NBT-API 能识别当前服务端并提供物品写回接口时，才回退读取旧标签并尝试迁移到 PDC。
+- NBT API 不支持当前平台时，PDC 的读取、存在检查和删除不会调用旧 NBT；旧标签暂不可读，需要先在受支持的平台上迁移。
+- 在支持的平台上，显式读取或删除遇到的 NBT 操作、类型错误仍会抛出；迁移写回继续尽力而为，不会把读取损坏数据伪装成标签缺失。
 
 ## 背包中的扣除与发放
 

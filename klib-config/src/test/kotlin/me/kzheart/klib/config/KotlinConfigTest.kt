@@ -407,5 +407,23 @@ class KotlinConfigTest {
         assertTrue(error.message!!.contains("Cyclic"))
     }
 
+    @Test
+    fun `KClass scalar reads box primitive Java class tokens`() {
+        val source = node("int: 42\nboolean: true\nlong: 2147483648\ndouble: 1.5\n")
+        assertEquals(42, mapper.read(source.child("int"), Int::class))
+        assertEquals(true, mapper.read(source.child("boolean"), Boolean::class))
+        assertEquals(2147483648L, mapper.read(source.child("long"), Long::class))
+        assertEquals(1.5, mapper.read(source.child("double"), Double::class))
+    }
+
+    @Test
+    fun `reified scalar reads box primitive Java class tokens`() {
+        val source = node("int: 42\nboolean: false\nlong: 2147483648\ndouble: 1.5\n")
+        assertEquals(42, mapper.read<Int>(source.child("int")))
+        assertEquals(false, mapper.read<Boolean>(source.child("boolean")))
+        assertEquals(2147483648L, mapper.read<Long>(source.child("long")))
+        assertEquals(1.5, mapper.read<Double>(source.child("double")))
+    }
+
     private fun node(yaml: String): ConfigNode = YamlDocument.parse("settings.yml", yaml).root()
 }

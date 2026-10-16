@@ -7,7 +7,8 @@ import java.util.concurrent.CompletableFuture
 class StorageCoroutinesTest {
     private class Session : StorageSession {
         val values = linkedMapOf<String, ByteArray>()
-        var closed = 0
+        @Volatile var closed = 0
+        var onClose: (() -> Unit)? = null
         var closeFailure: RuntimeException? = null
         override fun get(namespace: String, key: String) = CompletableFuture.completedFuture(Optional.ofNullable(values[key]))
         override fun put(namespace: String, key: String, value: ByteArray): CompletableFuture<Void> {
@@ -18,7 +19,7 @@ class StorageCoroutinesTest {
         }
         override fun entries(namespace: String) = CompletableFuture.completedFuture(values.toMap())
         override fun <T> transaction(transaction: StorageTransaction<T>): CompletableFuture<T> = throw UnsupportedOperationException()
-        override fun dispose() { closed++; closeFailure?.let { throw it } }
+        override fun dispose() { onClose?.invoke(); closed++; closeFailure?.let { throw it } }
     }
     @Test fun `CRUD awaits the same session and reads absent after delete`() = runBlocking {
         val session = Session()
@@ -40,6 +41,7 @@ class StorageCoroutinesTest {
         job.cancelAndJoin()
         val acquired = Session()
         future.complete(acquired)
+        withTimeout(5000) { while (acquired.closed == 0) delay(1) }
         assertEquals(1, acquired.closed)
     }
     @Test fun `cancel between acquisition completion and dispatch releases session`() = runBlocking {
@@ -58,6 +60,7 @@ class StorageCoroutinesTest {
         job.cancel()
         while (true) (queue.poll() ?: break).run()
         job.join()
+        withTimeout(5000) { while (acquired.closed == 0) delay(1) }
         assertEquals(1, acquired.closed)
     }
 
@@ -96,6 +99,73 @@ class StorageCoroutinesTest {
         }
         job.cancelAndJoin()
         assertEquals(1, session.closed)
+    }
+
+    @Test fun `blocking close does not block caller dispatcher and cancellation awaits cleanup`() = runBlocking {
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "storage-test-main") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val session = Session()
+        session.onClose = {
+            assertNotEquals("storage-test-main", Thread.currentThread().name)
+            entered.countDown()
+            check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        }
+        try {
+            val started = CompletableDeferred<Unit>()
+            val job = launch(dispatcher) { provider(session).withSession { started.complete(Unit); awaitCancellation() } }
+            started.await()
+            job.cancel()
+            assertTrue(withContext(Dispatchers.IO) { entered.await(5, java.util.concurrent.TimeUnit.SECONDS) })
+            withTimeout(5000) { withContext(dispatcher) { assertFalse(job.isCompleted) } }
+            release.countDown()
+            job.join()
+            assertEquals(1, session.closed)
+        } finally { release.countDown(); dispatcher.close() }
+    }
+
+    @Test fun `cancelled acquisition dispatches blocking disposal away from completion thread`() = runBlocking {
+        val future = CompletableFuture<StorageSession>()
+        val provider = object : StorageProvider {
+            override fun open() = future
+            override fun dispose() {}
+        }
+        val acquired = Session()
+        val completingThread = Thread.currentThread()
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        acquired.onClose = {
+            assertNotSame(completingThread, Thread.currentThread())
+            entered.countDown()
+            check(release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        }
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { provider.openAwait() }
+        job.cancelAndJoin()
+        try {
+            future.complete(acquired)
+            assertTrue(withContext(Dispatchers.IO) { entered.await(5, java.util.concurrent.TimeUnit.SECONDS) })
+            assertEquals(0, acquired.closed)
+        } finally { release.countDown() }
+        withTimeout(5000) { while (acquired.closed == 0) delay(1) }
+        assertEquals(1, acquired.closed)
+    }
+
+    @Test fun `orphaned acquisition cleanup failure reaches owner exception handler`() = runBlocking {
+        val reported = CompletableDeferred<Throwable>()
+        val handler = CoroutineExceptionHandler { _, failure -> reported.complete(failure) }
+        val future = CompletableFuture<StorageSession>()
+        val provider = object : StorageProvider {
+            override fun open() = future
+            override fun dispose() {}
+        }
+        val job = launch(handler, start = CoroutineStart.UNDISPATCHED) { provider.openAwait() }
+        job.cancelAndJoin()
+        val expected = IllegalStateException("orphan close")
+        val acquired = Session().apply { closeFailure = expected }
+        future.complete(acquired)
+        assertSame(expected, withTimeout(5000) { reported.await() })
+        assertEquals(1, acquired.closed)
     }
 
 }

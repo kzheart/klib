@@ -1,5 +1,11 @@
 package me.kzheart.klib.data
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resumeWithException
@@ -9,7 +15,11 @@ suspend fun StorageProvider.openAwait(): StorageSession = suspendCancellableCoro
     // Do not cancel acquisition: its eventual resource must be observed and disposed.
     open().whenComplete { session, failure ->
         if (failure != null) continuation.resumeWithException(failure)
-        else continuation.resume(session) { _, acquired, _ -> acquired.dispose() }
+        else continuation.resume(session) { _, acquired, context ->
+            // Acquisition can win just before cancellation. Never block the cancelling thread,
+            // and do not attach resource cleanup to the already cancelled owner Job.
+            CoroutineScope(context.minusKey(Job) + Dispatchers.IO).launch { acquired.dispose() }
+        }
     }
 }
 suspend fun StorageSession.getAwait(namespace: String, key: String): ByteArray? =
@@ -36,7 +46,12 @@ suspend fun <T> StorageProvider.withSession(block: suspend StorageSession.() -> 
         failure = cause
         throw cause
     } finally {
-        try { session.dispose() } catch (closeFailure: Throwable) {
+        // Return the exception as a value so coroutine stack-trace recovery does not copy it
+        // before attaching it to the original business failure.
+        val closeFailure = withContext(NonCancellable + Dispatchers.IO) {
+            try { session.dispose(); null } catch (cause: Throwable) { cause }
+        }
+        if (closeFailure != null) {
             if (failure == null) throw closeFailure
             if (failure !== closeFailure) failure.addSuppressed(closeFailure)
         }

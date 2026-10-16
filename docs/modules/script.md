@@ -666,7 +666,29 @@ suspend fun evaluate(engine: ScriptEngine): Any? {
 }
 ```
 
-`evalAwait` 与 `evalConditionAwait` 直接等待原引擎结果，并将协程取消传给结果 future。解析器、宿主线程规则和作用域释放沿用原有实现；同步业务回调不会被自动改为异步。
+`evalAwait` 与 `evalConditionAwait` 等待原引擎结果，不改变解析器、初始求值线程或正常续接的执行器。
+
+两参重载会在**发起取消的线程**取消结果 future 并清理原生帧。即使协程从主线程开始，`withTimeout` 或后台 `Job.cancel()` 也可能在后台清理；含 Bukkit 清理动作时不能依赖这个重载保证线程安全。
+
+需要指定清理线程时，传入第三个参数 `cancellationExecutor`：
+
+```kotlin
+import java.util.concurrent.Executor
+import kotlinx.coroutines.withTimeout
+
+suspend fun evaluateOnHost(
+    engine: ScriptEngine,
+    context: ScriptContext,
+    hostCleanupExecutor: Executor,
+): Any? = withTimeout(5_000) {
+    engine.evalAwait("wait 1s\nliteral done", context, hostCleanupExecutor)
+}
+```
+
+- 三参 `evalAwait`、`evalConditionAwait` 只把取消请求投递到指定执行器；调用者仍须在合法线程开始求值，并为引擎提供正确的普通续接执行器。
+- 执行器必须把已接收的任务真正执行完，且在原生清理结束前保持可用。取消请求实际执行前，原生脚本仍可能继续；协程完成取消也不表示排队的清理已完成。
+- 投递被拒绝时，通过 `CoroutineExceptionHandler` 报告取消处理失败，**不会改在错误线程清理**。此时须由 `ScopedScriptRuntime` 的拥有者在宿主线程调用 `cancelPending()` 或 `close()` 完成收尾。
+- `Scope.syncExecutor()` 在作用域关闭后可以静默丢弃任务，不能单独承担可靠清理。关闭流程应在主线程先关闭 `ScopedScriptRuntime`，再关闭调度器；不要把清理投到已经关闭的作用域。
 
 ## 线程与生命周期
 

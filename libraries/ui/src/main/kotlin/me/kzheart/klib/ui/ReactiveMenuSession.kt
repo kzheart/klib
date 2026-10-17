@@ -109,11 +109,14 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
                     try {
                         val model = buildModel()
                         if (matchesWindow(current, model)) current.refresh(model)
-                        else navigate(Runnable {
+                        else if (!navigate(Runnable {
                             val latest = buildModel()
                             if (matchesWindow(current, latest)) current.refresh(latest)
                             else mount(current.renderer, latest)
-                        })
+                        })) {
+                            // A pending navigation may expire or stay on this page; retain the render request.
+                            invalidate()
+                        }
                     }
                     catch (failure: RuntimeException) { failRender(current, failure); throw failure }
                     catch (failure: Error) { failRender(current, failure); throw failure }

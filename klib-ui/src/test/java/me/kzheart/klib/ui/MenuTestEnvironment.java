@@ -55,6 +55,7 @@ final class MenuTestEnvironment implements AutoCloseable {
     int tick;
     int opens;
     boolean rejectScheduling;
+    boolean wrapTopInventory;
 
     MenuTestEnvironment() throws Exception {
         ItemFactory itemFactory = proxy(ItemFactory.class, (p, m, args) -> {
@@ -169,11 +170,23 @@ final class MenuTestEnvironment implements AutoCloseable {
 
     private InventoryView view(Player viewer, Inventory top, PlayerInventory bag) {
         return new InventoryView() {
-            @Override public Inventory getTopInventory() { return top; }
+            @Override public Inventory getTopInventory() {
+                return wrapTopInventory ? wrap(top, top.getHolder()) : top;
+            }
             @Override public Inventory getBottomInventory() { return bag; }
             @Override public HumanEntity getPlayer() { return viewer; }
             @Override public InventoryType getType() { return InventoryType.CHEST; }
         };
+    }
+
+    /** Different Bukkit wrapper objects can retain the same backing contents and owner. */
+    Inventory wrap(Inventory source, InventoryHolder owner) {
+        return proxy(Inventory.class, (p, method, args) -> {
+            if (method.getName().equals("getHolder")) return owner;
+            if (method.getName().equals("hashCode")) return System.identityHashCode(p);
+            if (method.getName().equals("equals")) return p == args[0];
+            return method.invoke(source, args);
+        });
     }
 
     private synchronized TaskHandle schedule(Scope owner, Ticks delay, Runnable action, boolean repeat) {

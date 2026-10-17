@@ -102,11 +102,12 @@ ReactiveMenuSession<Integer> counter = menus.openReactive(
 | `invalidate()` | 可从任意线程通知；下一 tick 合并一次重建，关闭后的通知忽略 |
 | `bind(subscription)` | 把 `Disposable` 订阅交给已有菜单 Scope，关闭、替换、父作用域重建/关闭时释放 |
 | `holder()` / `scope()` | 获取同一个 `MenuHolder` 与 `MenuSession.scope()`，继续复用投放区和定时器 |
-| `isCurrent()` | 主线程检查原 Player 实例仍在线，且仍查看本次打开的 Inventory |
+| `isCurrent()` | 主线程检查原 Player 实例仍在线，且顶部物品栏持有本次打开唯一的 `MenuHolder` |
 | `navigate(action)` | 下一 tick 执行导航；等待期间的重复调用返回 false，状态改变或会话失效会丢弃动作 |
 
 - 视图函数在首次打开和刷新时调用，只构建完整 `MenuModel`。不要在里面扫描解锁、查询数据库、订阅事件或修改状态；读取/扫描放在打开前或明确的业务事件中。
 - 相同菜单定义可以复用，每次打开的状态、读取与订阅不共享。框架不会深复制任意业务状态，不能原地修改状态对象来绕过 `update`。
+- Bukkit 可能为同一个底层物品栏返回不同包装对象；会话使用 `MenuHolder` 对象身份判断当前菜单，仍拒绝其他 holder、已关闭会话和重连后的旧 Player。
 - 例如图鉴 lore 翻页只更新以条目 ID 为键的页码；商品浏览使用已准备好的目录/计数器快照。配方、价格、解锁规则仍由业务决定。
 
 外部变更源返回 `Disposable` 时直接绑定，异步通知只请求刷新：

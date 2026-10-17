@@ -235,7 +235,9 @@ public final class ReactiveMenuSession<S> {
         return !closed && current != null && !current.session().isClosed()
                 && viewer.isOnline()
                 && (Bukkit.getServer() == null || Bukkit.getPlayer(viewer.getUniqueId()) == viewer)
-                && viewer.getOpenInventory().getTopInventory() == current.getInventory();
+                // Bukkit may wrap the same backing inventory in a different Inventory object.
+                // The unique holder identifies this opening across those wrappers.
+                && viewer.getOpenInventory().getTopInventory().getHolder() == current;
     }
 
     private MenuHolder requireAttached() {

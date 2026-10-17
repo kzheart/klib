@@ -13,6 +13,8 @@ import java.util.function.BiFunction;
 import me.kzheart.klib.scope.Scope;
 import me.kzheart.klib.scope.ScopeImpl;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +38,64 @@ class ReactiveMenuSessionTest {
             assertEquals(2, renders.get());
             first.update(value -> value);
             assertEquals(0, f.queued(), "equal immutable state does not schedule a render");
+        }
+    }
+
+    @Test void differentInventoryWrappersPreserveTheSameOpeningIdentity() throws Exception {
+        try (MenuTestEnvironment f = new MenuTestEnvironment()) {
+            f.wrapTopInventory = true;
+            AtomicInteger renders = new AtomicInteger();
+            AtomicInteger released = new AtomicInteger();
+            ReactiveMenuSession<Integer> ui = open(f, f.player, 0, renders);
+            Inventory first = f.player.getOpenInventory().getTopInventory();
+            Inventory second = f.player.getOpenInventory().getTopInventory();
+            assertNotSame(ui.holder().getInventory(), first);
+            assertNotSame(first, second);
+            assertSame(ui.holder(), first.getHolder());
+            assertSame(first.getHolder(), second.getHolder());
+            assertTrue(ui.isCurrent());
+            ui.bind(released::incrementAndGet);
+            ui.update(value -> value + 1); f.tick();
+            assertEquals(Integer.valueOf(1), ui.state());
+            assertEquals(2, renders.get());
+            CompletionStage<Boolean> applied = ui.readLatest("wrapped", CompletableFuture.completedFuture(4),
+                    (state, value) -> value, failure -> fail(failure));
+            f.tick(); f.tick();
+            assertTrue(applied.toCompletableFuture().join());
+            assertEquals(Integer.valueOf(4), ui.state());
+            AtomicInteger navigated = new AtomicInteger();
+            assertTrue(ui.navigate(navigated::incrementAndGet));
+            f.tick(); assertEquals(1, navigated.get());
+            f.player.closeInventory();
+            assertEquals(1, released.get());
+            assertFalse(ui.isCurrent());
+        }
+    }
+
+    @Test void wrapperSupportStillRejectsForeignHoldersMenusAndPlayerConnections() throws Exception {
+        try (MenuTestEnvironment f = new MenuTestEnvironment()) {
+            f.wrapTopInventory = true;
+            ReactiveMenuSession<Integer> ui = open(f, f.player, 0, new AtomicInteger());
+            Inventory original = ui.holder().getInventory();
+            InventoryHolder foreign = () -> original;
+            f.current.put(f.player, f.wrap(original, foreign));
+            assertFalse(ui.isCurrent(), "same backing contents with another holder are not this opening");
+            assertThrows(IllegalStateException.class, () -> ui.update(value -> value + 1));
+            f.current.put(f.player, original);
+            Player other = f.player(java.util.UUID.randomUUID());
+            ReactiveMenuSession<Integer> otherMenu = open(f, other, 9, new AtomicInteger());
+            CompletableFuture<Integer> pending = new CompletableFuture<Integer>();
+            CompletionStage<Boolean> stale = ui.readLatest("switch", pending, (state, value) -> value, failure -> fail(failure));
+            f.current.put(f.player, otherMenu.holder().getInventory());
+            assertFalse(ui.isCurrent(), "another live MenuHolder of the same size/title is rejected");
+            assertThrows(IllegalStateException.class, () -> ui.navigate(() -> fail("wrong menu navigation")));
+            pending.complete(7); f.tick();
+            assertFalse(stale.toCompletableFuture().join());
+            f.current.put(f.player, original);
+            assertTrue(ui.isCurrent());
+            f.player(f.player.getUniqueId());
+            assertFalse(ui.isCurrent(), "matching holder cannot authorize an old Player connection");
+            assertThrows(IllegalStateException.class, () -> ui.update(value -> value + 1));
         }
     }
 

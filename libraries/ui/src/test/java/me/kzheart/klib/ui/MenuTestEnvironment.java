@@ -56,6 +56,7 @@ final class MenuTestEnvironment implements AutoCloseable {
     int opens;
     boolean rejectScheduling;
     boolean wrapTopInventory;
+    int failNextInventorySlot = -1;
 
     MenuTestEnvironment() throws Exception {
         ItemFactory itemFactory = proxy(ItemFactory.class, (p, m, args) -> {
@@ -140,6 +141,8 @@ final class MenuTestEnvironment implements AutoCloseable {
 
     Inventory inventory(InventoryHolder holder, int size) {
         Contents state = new Contents(size);
+        state.failSlot = failNextInventorySlot;
+        failNextInventorySlot = -1;
         Inventory created = proxy(Inventory.class, (p, m, args) -> {
             switch (m.getName()) {
                 case "getHolder": return holder;

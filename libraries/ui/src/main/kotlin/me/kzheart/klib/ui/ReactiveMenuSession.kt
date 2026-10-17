@@ -32,11 +32,44 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
     @Volatile private var renderingThread: Thread? = null
     private var updating = false
     private var navigationPending = false
+    private lateinit var page: MenuPage<S>
+    private lateinit var navigation: MenuNavigation
+    @Volatile private var replacing = false
+
+    internal fun initialize(page: MenuPage<S>, navigation: MenuNavigation) {
+        this.page = page
+        this.navigation = navigation
+    }
+
+    /** 旧窗口先解除逻辑控制器的附着；其物品与 Scope 仍由既有 open/close 协议释放。 */
+    internal fun mount(renderer: MenuRenderer, model: MenuModel) {
+        val previous = holder
+        replacing = true
+        holder = null
+        refreshPending.set(false)
+        navigationPending = false
+        discardReads()
+        var mounted: MenuHolder? = null
+        try {
+            mounted = renderer.open(viewer, page.id, model, page.configureWindow)
+            attach(mounted)
+            replacing = false
+            check(isCurrent()) { "menu was replaced while opening" }
+            page.onOpen.accept(this)
+        } catch (failure: Throwable) {
+            release()
+            (mounted ?: previous)?.let {
+                try { renderer.failRender(it, failure) }
+                catch (cleanup: Throwable) { if (cleanup !== failure) failure.addSuppressed(cleanup) }
+            }
+            throw failure
+        } finally { replacing = false }
+    }
 
     @JvmName("attach") internal fun attach(attached: MenuHolder) {
         check(holder == null) { "reactive session is already attached" }
         holder = attached
-        attached.session().scope().install(Disposable { release() })
+        attached.session().scope().install(Disposable { if (holder === attached) release() })
     }
     @JvmName("buildModel") internal fun buildModel(): MenuModel {
         MenuRenderer.ensureMainThread("构建状态菜单")
@@ -66,13 +99,22 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
     /** 任意线程通知合并到下一个 tick；关闭后忽略，视图内禁止递归通知。 */
     fun invalidate() {
         check(Thread.currentThread() !== renderingThread) { "menu views must not invalidate themselves" }
+        if (closed || replacing) return
         val current = holder ?: throw IllegalStateException("menu view must not invalidate while opening")
         if (closed || current.session().isClosed() || !refreshPending.compareAndSet(false, true)) return
         try {
             current.session().scope().after(Ticks.of(1)) {
                 refreshPending.set(false)
-                if (isCurrent()) {
-                    try { current.refresh(buildModel()) }
+                if (isWindowCurrent(current)) {
+                    try {
+                        val model = buildModel()
+                        if (matchesWindow(current, model)) current.refresh(model)
+                        else navigate(Runnable {
+                            val latest = buildModel()
+                            if (matchesWindow(current, latest)) current.refresh(latest)
+                            else mount(current.renderer, latest)
+                        })
+                    }
                     catch (failure: RuntimeException) { failRender(current, failure); throw failure }
                     catch (failure: Error) { failRender(current, failure); throw failure }
                 }
@@ -83,8 +125,13 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
         }
     }
     private fun failRender(current: MenuHolder, failure: Throwable) {
-        if (!current.session().isClosed()) current.renderer.failRender(current, failure)
+        if (!current.session().isClosed() || viewer.openInventory.topInventory.holder === current) {
+            try { current.renderer.failRender(current, failure) }
+            catch (cleanup: Throwable) { if (cleanup !== failure) failure.addSuppressed(cleanup) }
+        }
     }
+    private fun matchesWindow(current: MenuHolder, model: MenuModel): Boolean =
+        model.size() == current.model().size() && model.title() == current.model().title()
     fun <D : Disposable> bind(subscription: D): D {
         try { requireMutable(); return scope().install(subscription) }
         catch (failure: RuntimeException) {
@@ -98,13 +145,14 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
                        onFailure: Consumer<in Throwable>): CompletionStage<Boolean> {
         requireMutable()
         require(key.trim().isNotEmpty()) { "read key must not be blank" }
+        val current = requireAttached()
         val read = Read(revision)
         read.result.whenComplete { _, _ -> reads.remove(key, read); read.releaseDelivery() }
         reads.put(key, read)?.discard()
         try {
             val outcome = source.handle { value, failure -> Outcome(value, failure) }
             val delivery = scope().submitSync(outcome) { completed ->
-                if (read.result.isDone || !isCurrent() || revision != read.revision || !reads.remove(key, read)) false
+                if (read.result.isDone || !isWindowCurrent(current) || revision != read.revision || !reads.remove(key, read)) false
                 else {
                     if (completed.failure != null) {
                         val failure = AsyncTasks.unwrap(completed.failure)
@@ -121,7 +169,7 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
                 reads.remove(key, read)
                 when {
                     failure == null -> read.result.complete(applied)
-                    closed || holder!!.session().isClosed() || AsyncTasks.unwrap(failure) is CancellationException || read.result.isDone -> read.result.complete(false)
+                    closed || current.session().isClosed() || holder !== current || AsyncTasks.unwrap(failure) is CancellationException || read.result.isDone -> read.result.complete(false)
                     else -> read.result.completeExceptionally(AsyncTasks.unwrap(failure))
                 }
             }
@@ -134,10 +182,22 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
         navigationPending = true
         discardReads()
         val expected = revision
-        try { scope().after(Ticks.of(1)) { navigationPending = false; if (isCurrent() && revision == expected) navigation.run() } }
+        val current = requireAttached()
+        try { scope().after(Ticks.of(1)) {
+            navigationPending = false
+            if (isWindowCurrent(current) && revision == expected) {
+                try { navigation.run() }
+                catch (failure: Throwable) { failRender(current, failure); throw failure }
+            }
+        } }
         catch (failure: RuntimeException) { navigationPending = false; throw failure }
         return true
     }
+    fun <C> push(childPage: MenuPage<C>, childState: C): Boolean {
+        Objects.requireNonNull(childState, "childState")
+        return navigate(Runnable { navigation.push(page, state, childPage, childState) })
+    }
+    fun back(): Boolean = navigate(Runnable { navigation.back() })
     @get:JvmName("currentProperty")
     @get:JvmSynthetic
     val isCurrent: Boolean get() = isCurrent()
@@ -148,6 +208,7 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
             (Bukkit.getServer() == null || Bukkit.getPlayer(viewer.uniqueId) === viewer) &&
             viewer.openInventory.topInventory.holder === current
     }
+    private fun isWindowCurrent(expected: MenuHolder): Boolean = holder === expected && isCurrent()
     private fun requireAttached(): MenuHolder = holder ?: throw IllegalStateException("menu view cannot use an unattached session")
     private fun requireMutable() {
         MenuRenderer.ensureMainThread("修改菜单状态")
@@ -155,7 +216,12 @@ class ReactiveMenuSession<S> internal constructor(private val viewer: Player, in
         requireAttached()
         check(isCurrent()) { "reactive menu session is no longer current" }
     }
-    private fun release() { closed = true; refreshPending.set(false); discardReads() }
+    internal fun release() {
+        closed = true
+        refreshPending.set(false)
+        discardReads()
+        if (::navigation.isInitialized) navigation.release(this)
+    }
     private fun discardReads() { val discarded = reads.values.toList(); reads.clear(); discarded.forEach { it.discard() } }
     private class Read(val revision: Long) {
         val result = CompletableFuture<Boolean>()

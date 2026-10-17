@@ -479,6 +479,7 @@ project(":klib-ui") {
         add("testImplementation", testSpigot)
         add("testImplementation", project(":klib-config"))
         add("testImplementation", "com.google.guava:guava:21.0")
+        add("testRuntimeOnly", "commons-lang:commons-lang:2.6")
     }
 }
 

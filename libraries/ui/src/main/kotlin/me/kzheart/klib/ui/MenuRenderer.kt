@@ -52,19 +52,29 @@ class MenuRenderer private constructor(private val owner: Scope, private val plu
             render(menuHolder)
             player.openInventory(inventory)
             return menuHolder
-        } catch (failure: RuntimeException) {
+        } catch (failure: Throwable) {
             synchronized(this) { open.remove(menuHolder) }
-            try { session.close(CloseReason.REPLACED) } catch (cleanup: RuntimeException) { failure.addSuppressed(cleanup) }
+            try { session.close(CloseReason.RENDER_FAILED) } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+            menuHolder.getInventory()?.viewers?.toList()?.forEach { viewer ->
+                try { viewer.closeInventory() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+            }
             throw failure
         }
     }
     fun <S> openReactive(player: Player, name: String, initialState: S,
                           view: Function<in ReactiveMenuSession<S>, MenuModel>): ReactiveMenuSession<S> {
+        return openReactive(player, MenuPage.builder(name, view).build(), initialState, Runnable { player.closeInventory() })
+    }
+    fun <S> openReactive(player: Player, page: MenuPage<S>, initialState: S, rootBack: Runnable): ReactiveMenuSession<S> {
         ensureMainThread("打开状态菜单"); ensureOpen()
-        val reactive = ReactiveMenuSession(player, initialState, view)
-        val holder = open(player, name, reactive.buildModel())
-        try { reactive.attach(holder); return reactive }
-        catch (failure: RuntimeException) { holder.close(CloseReason.REPLACED); throw failure }
+        return openPage(player, page, initialState, MenuNavigation(this, player, rootBack))
+    }
+    internal fun <S> openPage(player: Player, page: MenuPage<S>, initialState: S, navigation: MenuNavigation): ReactiveMenuSession<S> {
+        val reactive = ReactiveMenuSession(player, initialState, page.view)
+        reactive.initialize(page, navigation)
+        navigation.activate(reactive)
+        try { reactive.mount(this, reactive.buildModel()); return reactive }
+        catch (failure: Throwable) { reactive.release(); throw failure }
     }
     @JvmName("update") internal fun update(holder: MenuHolder, model: MenuModel) {
         ensureMainThread("刷新菜单"); ensureOwned(holder)
@@ -138,6 +148,7 @@ class MenuRenderer private constructor(private val owner: Scope, private val plu
             zone != null -> handleDropZoneClick(holder, zone, event)
             top -> holder.model().entry(rawSlot).orElse(null)?.let { entry ->
                 event.isCancelled = true
+                if (type != MenuClickType.LEFT && type != MenuClickType.RIGHT && type != MenuClickType.SHIFT_LEFT && type != MenuClickType.SHIFT_RIGHT) return
                 val player = event.whoClicked as Player
                 if (dispatchAction(logger, errorHandler, holder.model(), entry, MenuClick(player, rawSlot, type))) playClick(player, entry)
             }
@@ -146,7 +157,7 @@ class MenuRenderer private constructor(private val owner: Scope, private val plu
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onDrag(event: InventoryDragEvent) {
         val holder = holder(event.view.topInventory) ?: return
-        if (event.whoClicked !== holder.viewer) { event.isCancelled = true; return }
+        if (event.whoClicked !== holder.viewer || holder.session().isClosed()) { event.isCancelled = true; return }
         val topSize = event.view.topInventory.size
         val touchesZone = event.rawSlots.any { it >= 0 && it < topSize && holder.session().dropZoneAt(it).isPresent }
         if (!touchesZone && !MenuEventPolicy.cancelDrag(holder.model(), event.rawSlots, topSize)) return
@@ -164,12 +175,23 @@ class MenuRenderer private constructor(private val owner: Scope, private val plu
     }
     override fun dispose() {
         val snapshot = synchronized(this) { if (disposed) return; disposed = true; open.toList() }
-        HandlerList.unregisterAll(this)
-        for (holder in snapshot) {
-            reportUnreturned(holder, holder.session().close(CloseReason.PLUGIN_DISABLED))
-            holder.getInventory()?.viewers?.toList()?.forEach { it.closeInventory() }
+        var failure: Throwable? = null
+        fun record(caught: Throwable) {
+            if (failure == null) failure = caught else if (failure !== caught) failure.addSuppressed(caught)
         }
-        synchronized(this) { open.clear() }
+        try {
+            for (holder in snapshot) {
+                try { reportUnreturned(holder, holder.session().close(CloseReason.PLUGIN_DISABLED)) }
+                catch (caught: Throwable) { record(caught) }
+                holder.getInventory()?.viewers?.toList()?.forEach {
+                    try { it.closeInventory() } catch (caught: Throwable) { record(caught) }
+                }
+            }
+        } finally {
+            HandlerList.unregisterAll(this)
+            synchronized(this) { open.clear() }
+        }
+        failure?.let { throw it }
     }
 
     private fun handleDropZoneClick(holder: MenuHolder, zone: DropZoneController, event: InventoryClickEvent) {

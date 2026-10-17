@@ -89,7 +89,7 @@ ReactiveMenuSession<Integer> counter = menus.openReactive(
 | `state()` / `update(reducer)` | 主线程读写；状态按 `equals` 相等时不刷新，返回 null 或重入更新直接失败 |
 | `invalidate()` | 可从任意线程通知；下一 tick 合并一次重建，关闭后的通知忽略 |
 | `bind(subscription)` | 把 `Disposable` 订阅交给已有菜单 Scope，关闭、替换、父作用域重建/关闭时释放 |
-| `holder()` / `scope()` | 获取同一个 `MenuHolder` 与 `MenuSession.scope()`，继续复用投放区和定时器 |
+| `holder()` / `scope()` | 获取当前窗口的 `MenuHolder` 与 `MenuSession.scope()`；标题或尺寸变化会更换窗口和 Scope |
 | `isCurrent()` | 主线程检查原 Player 实例仍在线，且顶部物品栏持有本次打开唯一的 `MenuHolder` |
 | `navigate(action)` | 下一 tick 执行导航；等待期间的重复调用返回 false，状态改变或会话失效会丢弃动作 |
 
@@ -143,9 +143,51 @@ CompletionStage<Boolean> applied = counter.readLatest(
 - `navigate(...)` 用显式一 tick 延迟处理打开/关闭物品栏、返回和其他界面跳转；不要在 `InventoryClickEvent` 动作里直接调用 `openInventory` / `closeInventory`。
 - `MenuHolder.refresh(...)` 先校验完整候选模型，再比较每个展示槽位的完整 `ItemStack.equals`，包括数量和 meta；相等图标跳过 `setItem`，但动作表仍更新到新模型。
 - 消失的展示槽置空，不再全页 `clear`。未归框架管理的槽位不参与展示 diff；投放区始终使用 `DropZoneController` 的权威快照，关闭归还协议不变。
-- 标题、尺寸变化仍要求显式打开新菜单；刷新重叠投放区直接拒绝。玩家真实输入只放在投放区，不能用普通展示条目或空白槽代替所有权管理。
+- 状态菜单的标题、尺寸变化会自动经 `navigate` 重开；底层 `MenuHolder.refresh` 仍只接受相同标题和尺寸。刷新重叠投放区直接拒绝。
+- 展示按钮只响应左、右及 Shift 左右点击；数字键、双击、丢弃、副手交换及未知输入不触发业务动作。玩家真实输入只放在投放区。
 - 槽位提交失败时关闭会话，原动作表不会发布一半；关闭原因是 `RENDER_FAILED`。状态菜单的视图构建失败也会关闭并记录错误，防止半更新界面继续接受动作。
 - 聊天输入会关闭当前 Inventory 时，不要尝试复活已关闭的状态会话。需要跨输入恢复的流程由业务在外层 Scope 保留导航上下文，再显式打开新会话。
+
+### 页面导航与结构变化
+
+`MenuPage<S>` 保存可重用的页面定义。`push(childPage, childState)` 进入子页，`back()` 返回实际父页；父页保留离开时的状态引用，业务必须使用不可变状态。
+两者与 `navigate` 共用一 tick 门禁；同 tick 重复请求返回 false，执行前重新核对 Player 实例、holder 和状态代际。
+
+```java
+import me.kzheart.klib.ui.MenuPage;
+
+MenuPage<Integer> detail = MenuPage.<Integer>builder("detail", ui ->
+        MenuCompiler.compile(MenuTemplate.builder("详情：" + ui.state(), 1)
+                .slot(8, MenuEntry.of(Items.of("ARROW").name("返回").build(),
+                        click -> ui.back())).build())).build();
+
+MenuPage<Integer> browse = MenuPage.<Integer>builder("browse", ui ->
+        MenuCompiler.compile(MenuTemplate.builder("列表", 1)
+                .slot(0, MenuEntry.of(Items.of("PAPER").name("查看").build(),
+                        click -> ui.push(detail, ui.state()))).build()))
+        .onOpen(ui -> ui.bind(catalogChanges.subscribe(ui::invalidate)))
+        .build();
+
+menus.openReactive(player, browse, Integer.valueOf(0), () -> openMain(player));
+```
+
+`catalogChanges` 和 `openMain` 由业务提供。根页的 `back()` 执行传入的根动作；没有强制命令、服务器名或默认主菜单。
+原有 `openReactive(player, name, state, view)` 共用该引擎，根动作默认关闭物品栏。
+
+| 页面入口 | 执行时机与用途 |
+| --- | --- |
+| `builder(id, view)` | 声明页面 ID 与纯视图；视图只返回 `MenuModel` |
+| `configureWindow(Consumer<MenuSession>)` | 每个新窗口显示前配置投放区；不能依赖已经附着的 UI 或在此导航 |
+| `onOpen(Consumer<ReactiveMenuSession<S>>)` | 窗口附着并打开后绑定订阅、定时器及 `readLatest` 读取 |
+| `push(page, state)` / `back()` | 下一 tick 切换；父页返回时重新创建会话、窗口与订阅 |
+
+- 同页标题或尺寸变化时，刷新 tick 只安排导航，下一 tick 再按最新模型重建；标题、尺寸相同仍走差量刷新。
+- 同页重建保留状态和逻辑 UI 控制器，但 holder 和 Scope 更换。不要缓存旧 `holder()`、`scope()`；旧窗口的排队导航和异步观察不能作用到新窗口。
+- 离开或重建时，旧窗口的投放物按关闭协议恰好归还一次，旧订阅释放；新投放区为空，由 `configureWindow` 重建，不迁移真实玩家物品。
+- 每个新窗口都重新执行 `onOpen`。这里只重建读取与订阅，不发起购买、扣款或领取等业务写操作；源业务 future 不取消，也不重放。
+- 手动关窗、退出、被外部界面替换、Scope 关闭或渲染失败会清除导航链。关闭流程中的旧 holder 在实际关窗前仍拦截点击和拖拽。
+
+需要 MiniMessage 字体标题时，在安装时复用 `MenuRenderer.install(scope, plugin, BukkitAdventure::inventory, errorHandler)`；布局只存标题文本，不计算资源包背景偏移。
 
 ## 从配置编译菜单
 
@@ -153,6 +195,53 @@ CompletionStage<Boolean> applied = counter.readLatest(
 
 - 支持的键：`title`、`rows`、`cancel-clicks`、`layout`、`items`、`slots`。
 - 业务通过 `YamlItemResolver` 把配置中的物品 ID 解析成 `MenuEntry`，配置层不需要知道 Bukkit 或第三方物品 API。
+
+### 配置布局与动态字符绑定
+
+动态菜单使用 `MenuLayout.from(yaml, sourcePath, functionalCharacters, resolver)` 加载不可变候选布局，再在纯视图里 `compile(bindings)`。
+配置使用上述相同键；`items` 中的值是交给 resolver 的物品 ID，代码只绑定功能字符，不固定槽位和列表容量。
+
+```yaml
+title: '物品列表'
+rows: 2
+layout:
+  - 'MMMMMMMMM'
+  - '    B    '
+items:
+  B: back
+```
+
+```kotlin
+val layouts = ConfigSnapshot(MenuLayout.from(yaml, "menus.yml:browse", setOf('M', 'B'), resolver))
+val browse = MenuPage.builder<BrowseState>("browse") { ui ->
+    val layout = layouts.value()
+    val page = Paginator(values, layout.slots('M').size).page(ui.state().page)
+    layout.compile { bindings ->
+        bindings.entries('M', page.values().map { value ->
+            MenuEntry.of(value.icon(), MenuAction { ui.push(detail, value.id) })
+        })
+        bindings.action('B', MenuAction { ui.back() })
+    }
+}.build()
+```
+
+`ConfigSnapshot` 来自 Config 模块；`BrowseState`、`values`、`detail` 和 `resolver` 由业务提供，数据读取在进入视图前完成。
+`slots('M')` 按布局行列顺序返回不可修改列表，可直接作为现有 `Paginator` 的容量来源。
+Java 使用相同入口，例如 `layout.compile(b -> { b.entries('M', entries); b.action('B', click -> ui.back()); })`。
+
+| `MenuBindings` 方法 | 行为 |
+| --- | --- |
+| `character(char, MenuEntry)` | 对该字符全部槽位绑定同一展示条目 |
+| `action(char, MenuAction)` | 保留该字符在 YAML 的图标和点击声音，只绑定动作；必须配置图标 |
+| `entries(char, List<MenuEntry>)` | 顺序填充，剩余槽位为空；超过布局容量时报错，不截断 |
+| `hide(char)` | 明确绑定但不显示图标，例如没有上一页 |
+| `reserve(char)` | 明确留空；需要真实物品输入时仍必须由 `configureWindow` 添加 `DropZoneController` |
+
+- 加载时校验 1～6 行、每行 9 字符、所有功能字符存在、静态字符有图标、显式槽位不冲突及未知配置键。
+- 编译时每个功能字符必须且只能绑定一次。条件不满足也要调用 `hide` 或 `reserve`；绑定对象不能保存到编译回调之外使用。
+- 加载和绑定错误包含 `sourcePath` 及具体路径，例如 `menus.yml:browse.layout[0][3]`、`menus.yml:browse.bindings[M]`。
+- `from` 不发布配置。把所有布局放进现有 `ConfigSnapshot.prepare(...)` 候选，全部通过后 `commit`；加载失败保留旧快照，UI 不新增另一套重载机制。
+- 重载后调用当前 UI 的 `invalidate()`；视图读取本轮快照。会话投放区槽位若需变化，应通过标题／尺寸改变或显式导航重开窗口，不在原窗口覆盖真实输入槽。
 
 ## 分页
 

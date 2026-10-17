@@ -477,6 +477,7 @@ project(":klib-ui") {
         testSpigot.isTransitive = false
         add("compileOnly", compileSpigot)
         add("testImplementation", testSpigot)
+        add("testImplementation", project(":klib-config"))
         add("testImplementation", "com.google.guava:guava:21.0")
     }
 }

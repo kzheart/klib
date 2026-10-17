@@ -116,6 +116,14 @@ ReactiveMenuSession<Integer> counter = menus.openReactive(
 counter.bind(catalogChanges.subscribe(counter::invalidate));
 ```
 
+Kotlin 直接传入已有 `Disposable`；把业务取消函数适配为订阅时显式写 SAM，避免泛型 `bind` 的裸 lambda 推断失败：
+
+```kotlin
+import me.kzheart.klib.scope.Disposable
+
+counter.bind(Disposable { unsubscribe() }) // unsubscribe 由业务提供
+```
+
 这里的 `catalogChanges` 由业务提供。没有默认轮询；需要定时刷新时复用 `counter.scope().every(period, counter::invalidate)`。
 
 ### 异步读取与过期结果

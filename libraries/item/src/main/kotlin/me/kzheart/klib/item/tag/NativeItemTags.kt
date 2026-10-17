@@ -65,6 +65,17 @@ object NativeItemTags {
         return operation { access().createItem(tags) }
     }
 
+    internal fun completeItemCount(tags: NbtCompound, storage: ItemTagStorage): Int {
+        val legacy = storage == ItemTagStorage.LEGACY_ROOT
+        val key = if (legacy) "Count" else "count"
+        val expected = if (legacy) NbtType.BYTE else NbtType.INT
+        val count = tags[key]
+        require(count != null && count.type == expected) { "Complete item data requires $key as $expected" }
+        val value = (count.value() as Number).toInt()
+        require(value > 0) { "Complete item count must be positive" }
+        return value
+    }
+
     private fun access(): Access = accessOrNull()
         ?: throw IllegalStateException("Native item NBT is unavailable for this server layout", failure)
 
@@ -174,9 +185,12 @@ object NativeItemTags {
         fun readItem(item: ItemStack): NbtCompound = decode(fullItem.save(toNative.invoke(null, item)))
 
         fun createItem(tags: NbtCompound): ItemStack {
+            // Mojang 的宽松 optional 字段可能把非法 count 变为默认 1，不能据 result 存在即当输入有效。
+            val count = completeItemCount(tags, storage)
             val handle = fullItem.load(encode(tags))
             val item = toBukkit.invoke(null, handle) as ItemStack
             require(!InventoryItems.isAir(item) && item.amount > 0) { "Complete item data produced an empty or unknown item" }
+            require(item.amount == count) { "Server item codec normalized count $count to ${item.amount}" }
             return item
         }
 

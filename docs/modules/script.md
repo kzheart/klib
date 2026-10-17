@@ -1,6 +1,6 @@
 # Script 模块
 
-一个保持 Java 8 字节码边界、由 Kotlin 实现的 Kether 运行时：把条件、奖励和流程编排放进配置，再通过受控的宿主服务连接消息、命令、权限和占位符。
+Klib 的脚本运行时，保持 Java 8 字节码边界并由 Kotlin 实现：把条件、奖励和流程编排放进配置，再通过受控的宿主服务连接消息、命令、权限和占位符。
 
 | 模块名 | 制品 | 自动带入 |
 | --- | --- | --- |
@@ -21,21 +21,13 @@ klib {
 }
 ```
 
-还要复用同服 TabooLib 的完整 Kether parser 时，改为启用单 JAR 互操作入口，它会自动加入 `script` 模块：
-
-```kotlin
-klib {
-    ketherInterop(true)
-}
-```
-
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
 
 打包要点：
 
-- Kether 解析核心已经包含在 `klib-script` 中，普通执行不依赖 TabooLib 运行时。
+- 脚本解析核心已经包含在 `klib-script` 中，普通执行无需额外脚本插件。
 - `calc` / `invoke` 通过传递运行时依赖使用 Apache Commons JEXL 与 Commons Logging。构建插件会打包它们，**请用上面的显式重定位**避免与同服插件冲突。
-- 手动打包也必须包含并重定位这两个依赖。移植来源与许可全文见 [Kether 归属](../../runtime/script/src/main/resources/META-INF/LICENSE-TabooLib-Kether.txt) 和 [Sponge Coerce 归属](../../runtime/script/src/main/resources/META-INF/LICENSE-Sponge-Coerce.txt)，对应资源随 JAR 分发。
+- 手动打包也必须包含并重定位这两个依赖。
 
 最小示例：先创建注册表和引擎，再为每次执行建立隔离的 `ScriptContext`。
 
@@ -155,7 +147,7 @@ statements.registerKether(scope, "myplugin", "twice", QuestActionParser.of(reade
 ```
 
 - **同名不同类型**：`registerKether(...)` 只接受 `me.kzheart.klib.script.kether.core.QuestActionParser`。`me.kzheart.klib.script.QuestActionParser` 是 `Statements` 系列使用的 `execute(StatementCall, ScriptContext)` 接口，两者不能混用。同一文件确实需要两种接口时才写限定名。
-- `kether.core` 包里只有 `QuestActionParser`、`QuestReader`、`ParsedAction`、`QuestAction`、`QuestContext` 属于对外使用面。其余是移植来的解析器内部实现，**不要依赖**，也不要假定结构稳定。
+- `kether.core` 包里只有 `QuestActionParser`、`QuestReader`、`ParsedAction`、`QuestAction`、`QuestContext` 属于对外使用面。其余是解析器内部实现，**不要依赖**，也不要假定结构稳定。
 - 这是需要完整 Kether 语法时的低层入口；普通固定参数业务语句仍优先用 `Statements.combine()`。
 - `QuestReader.nextValue()` 接受动作或字面量参数；`nextParsedAction()` 保持严格动作解析。二者都不会吞掉已识别动作内部的错误。
 
@@ -228,7 +220,7 @@ sender
 
 | 语句 | 规则 |
 | --- | --- |
-| `math` | 支持列表式 add/sub/mul/div（或 `+`、`-`、`*`、`/`）及中缀左结合，**不采用乘除优先级**。所有操作数可转为 Int 时返回整数，整数除法截断；否则用 Double。列表的操作数异常沿原动作规则打印错误并取 0；中缀首值错误向调用方传播，不复制原框架可能不结束的 Future |
+| `math` | 支持列表式 add/sub/mul/div（或 `+`、`-`、`*`、`/`）及中缀左结合，**不采用乘除优先级**。所有操作数可转为 Int 时返回整数，整数除法截断；否则用 Double。列表的操作数异常打印错误并取 0；中缀首值错误向调用方传播 |
 | `round` | 返回饱和边界的 Int，半数向正无穷方向取整，NaN 抛错 |
 | `random N` | 对 Int 返回 `[0,N)` |
 | `random A to B` | 整数边界两端包含、自动排序；Double 使用半开区间；相等边界返回该值 |
@@ -241,10 +233,10 @@ sender
 
 - `set key to 动作`：顺序求值，把原始结果写入变量，动作自身返回 null。旧 `set key value` 的类型推断与返回值保留。
 - `set property key from 动作 to 动作` 与 `set &object[key] to 动作`：先交给宿主 `ScriptPropertyAccess`；未支持时用内置的 Map（`@键`）、List 与数组（下标）写入，**不自动反射任意字段**。
-- 不支持的属性写入抛错（原框架在这些分支只输出警告）。赋值值表达式保留“打印错误并完成 null”的规则。
-- 属性读取见[原框架内置语句](#原框架内置语句)。
+- 不支持的属性写入抛错。赋值值表达式失败时打印错误并完成 null。
+- 属性读取见[内置语句](#内置语句)。
 
-不在当前兼容范围：随机区间多行文本的 trimIndent，以及原随机动作的非终止错误链。这里传播异常，不返回永远不结束的 Future。
+随机区间不对多行文本执行公共缩进清理；随机动作求值失败时传播异常，不留下永远不结束的 Future。
 
 ## 比较与宿主查询
 
@@ -262,16 +254,16 @@ check math 2 + 3 == 5
 
 | 写法 | 含义 |
 | --- | --- |
-| `==` / `is`（`check` 另保留 `=`） | 相等，按原算法推断字符串数字及布尔值；两个 Number 以 double 比较 |
+| `==` / `is`（`check` 另保留 `=`） | 相等，推断字符串中的数字及布尔值；两个 Number 以 double 比较 |
 | `!=` / `!is` / `not` | 不相等 |
 | `=!` / `is!` | 不推断类型的相等 |
 | `=!!` / `is!!` | 同一对象（身份） |
 | `=?` / `is?` | 文本忽略大小写 |
-| `>` / `gt`、`>=` / `gte`、`<` / `lt`、`<=` / `lte` | 排序比较，使用原数值强制转换规则 |
+| `>` / `gt`、`>=` / `gte`、`<` / `lt`、`<=` / `lte` | 排序比较，将操作数转换为数值 |
 | `contains` / `has`、`in` | 包含：集合/对象数组查元素，Map 查键，其余值转字符串；不自动展开原始类型数组 |
 
 - 排序比较**不能**当作 BigDecimal 精确比较或字典序排序。
-- 独立 `true` 和 `false` 保留原容错字面量的 String 结果，`null` 返回真实 null。不要把字面量文本的 Java 类型误写成 Boolean。
+- 独立 `true` 和 `false` 在容错字面量解析时返回 String，`null` 返回真实 null。不要把字面量文本的 Java 类型误写成 Boolean。
 
 ### player 与 papi
 
@@ -283,22 +275,22 @@ check math 2 + 3 == 5
 
 `player` 属性名：
 
-- 按原框架操作名表匹配多词名称（如 `block x`、`bed spawn x`、`on ground`、`display name`），取最长的完整匹配。
+- 按玩家操作名表匹配多词名称（如 `block x`、`bed spawn x`、`on ground`、`display name`），取最长的完整匹配。
 - 不在表中的单个词元按宿主自定义属性传入。名称以小写、空格分隔传给宿主。
-- `=` 仍留给外围 `check` 的相等别名。独立 `player level = 5` **解析失败**，不会改变玩家（原框架把 `=` 当作写入）。
+- `=` 仍留给外围 `check` 的相等别名。独立 `player level = 5` **解析失败**，不会改变玩家。
 
 `papi`：
 
-- 多词文本须用引号，如 `papi "hi %name%"`。null 输入转为空串，其他值用原 trimIndent 规则。
-- 沿原字符串辅助算法：输入 Future 或首次展开失败时打印错误，再以空串展开一次；第二次失败则传播。
+- 多词文本须用引号，如 `papi "hi %name%"`。null 输入转为空串，其他值去除公共缩进。
+- 输入 Future 或首次展开失败时打印错误，再以空串展开一次；第二次失败则传播。
 - 输入动作在返回 Future 之前同步抛错则直接传播，不进入这条重试链。
-- 参数消费、发送者要求与旧扁平 PAPI 实现不同，**控制台不能再直接展开**。
+- 此入口要求玩家发送者，**控制台不能直接展开**。
 
 异步参数完成后，通过 frame 的续接执行器调用宿主查询。宿主仍须负责 Bukkit 主线程检查和实际插件集成。
 
-## 原框架内置语句
+## 内置语句
 
-引擎内置 TabooLib 6.3.0 的通用语句，写法与语义按原框架实现，同一份脚本在两边都能运行。
+Klib 内置流程、集合、文本、时间与游戏语句。语法和执行规则如下，涉及服务器状态的语句仍需要对应宿主服务。
 
 | 类别 | 语句 |
 | --- | --- |
@@ -321,12 +313,12 @@ command "give @sender diamond 1" as op
 
 - **列表**：列表语句就地修改变量中的列表（`array` 生成可变列表）。
 - **循环**：`for`、`map`、`while` 同步执行时以循环推进，次数多也不会耗尽调用栈；异步迭代通过续接执行器恢复。`for`/`map` 遍历 Map 时额外提供 `键-key`、`键-value` 变量，结束后移除。
-- **exit**：与原框架一样只设置退出状态。后续语句不再执行，脚本以最后的值正常完成，不报错。
+- **exit**：只设置退出状态。后续语句不再执行，脚本以最后的值正常完成，不报错。
 - **pause**：返回永不完成的 Future，宿主应自行限制等待。
 - **wait**：通过 `DelayScheduler` 等待；结束时发送者为已离线玩家（`ScriptSenderQuery.isOnline`）则停止脚本。
 - **@sender**：在 `tell`、`actionbar`、`broadcast`、`title`、`command` 中替换为发送者名称；`command ... as console` 替换为 `console`。`command` 文本会去除公共缩进。
 - **switch**：切换本次脚本后续语句的发送者；嵌套 `inline` 求值不继承切换结果。
-- **sound**：省略 `by` 时音量与音调为 0（原框架行为）。名称以 `resource:` 开头时为资源包音效，否则把 `.` 换为 `_` 并转大写后按枚举查找。
+- **sound**：省略 `by` 时音量与音调为 0。名称以 `resource:` 开头时为资源包音效，否则把 `.` 换为 `_` 并转大写后按枚举查找。
 
 属性读取：
 
@@ -344,16 +336,15 @@ command "give @sender diamond 1" as op
 
 ### 容错解析
 
-原框架默认把未注册的词元当作字面量，所以 `array [ 1 2 ]`、`if true then 1` 可以直接写。Klib 默认仍是**严格解析**，以便在加载时发现拼写错误。兼容原框架脚本时使用四参数构造器：
+Klib 默认使用**严格解析**，以便在加载时发现拼写错误。确实需要将未注册词元作为字面量时，用四参数构造器显式开启容错：
 
 ```java
-KetherScriptEngine engine = new KetherScriptEngine(statements, interop, mainThread, true);
+KetherScriptEngine engine = new KetherScriptEngine(statements, null, mainThread, true);
 ```
 
 - 字面量词元是字符串，例如 `array [ 1 2 ]` 得到 `["1", "2"]`。
-- 安装 `TabooLibKetherInterop` 时，未注册的词元先交给同服 TabooLib 容器解析；没有容器认领才按字面量处理。远端语句自身的语法错误照常抛出。
-- 容错模式下引号括起的文本总是字面量，即使与语句同名（原框架会把 `"mm"` 这类与语句同名的引号文本解析为语句）。
-- Klib 另有原框架没有的内置语句名：`add`、`sub`、`mul`、`div`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`and`、`or`、`unset`、`list`、`namespace`。当文字使用时要加引号或 `*` 前缀。
+- 容错模式下引号括起的文本总是字面量，即使与语句同名。已注册动作内部的语法错误照常抛出。
+- 以下也是 Klib 的内置语句名：`add`、`sub`、`mul`、`div`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`and`、`or`、`unset`、`list`、`namespace`。当文字使用时要加引号或 `*` 前缀。
 
 ### 游戏语句的宿主服务
 
@@ -377,7 +368,7 @@ ScriptContext context = BukkitScriptServices.apply(ScriptContext.builder().sende
 | `MessageSink` | |
 | `CommandSink` | 含 `as op` |
 | `ScriptSenderQuery` | |
-| `PlayerQuery` | 原框架全部玩家操作，含写入与取值范围限制 |
+| `PlayerQuery` | 玩家属性查询与写入，包含取值范围限制 |
 | `DelayScheduler` | 按 50 毫秒一刻向下取整 |
 | `ScriptLogger` | 插件日志 |
 | `ScriptPlatform` | |
@@ -551,116 +542,12 @@ KetherCompatibility.installLegacyCases(context().scope(), statements);
 - 允许 `case` 的 `else -> value`，也保留默认支持的 `else value`。
 - 针对旧显示映射，允许一行分支结果中的连续大写文字标签，例如 `VERY SLOW`。注册过的动作、带引号字符串、嵌套表达式和注释不会按标签合并；新配置仍推荐给多词文字加引号。
 - 注册由作用域持有，释放后恢复默认 case 解析器。
-- 它**不打开全局容错**，也不发现 TabooLib。需要旧框架宽松字面量行为时仍显式选择 `toleranceParser=true`。
+- 它**不打开全局容错**。需要宽松字面量解析时仍显式选择 `toleranceParser=true`。
 - 宽松模式下未知独立词元可能成为合法文字，已注册动作内部的语法错误仍失败。数字文字通常保留字符串，需要数值结果时用 `math`、`type` 或传入有类型的变量。**不要把宽松模式当成拼写检查器。**
-
-## 与 TabooLib 共享语句互操作
-
-需要双向复用完整 Kether parser 时，安装 `TabooLibKetherInterop`，并通过 `registerShared(...)` 显式发布语句：
-
-```java
-TabooLibKetherInterop interop = TabooLibKetherInterop.install(
-        scope,
-        statements,
-        plugin.getName());
-
-statements.registerShared(scope, "myplugin", "custom-action",
-        QuestActionParser.of(reader -> {
-            String value = reader.nextToken();
-            return new QuestAction<Object>() {
-                @Override
-                public CompletableFuture<Object> process(QuestContext.Frame frame) {
-                    return CompletableFuture.<Object>completedFuture(value);
-                }
-            };
-        }));
-
-KetherScriptEngine engine = new KetherScriptEngine(
-        statements,
-        interop,
-        mainThread);
-```
-
-| 注册方式 | 当前 Klib 运行时 | 发布到 TabooLib OpenContainer |
-| --- | --- | --- |
-| `register(...)` | 是 | 永不自动共享 |
-| `registerKether(...)` | 是 | 永不自动共享 |
-| `registerShared(...)` | 是 | 是 |
-
-- 后加载的容器由作用域调度器定期发现并重放；Scope 关闭时注销远端 action。
-- 远端导入的 action 不会再次导出。
-- Bukkit 容器发现先按插件入口类名筛选 TabooLib 插件，再读取容器信息，避免解析无关插件公开方法中未安装的可选依赖类型。
-- TabooLib 会回调业务 JAR 中与其 OpenContainer 约定一致的 `OpenAPI`。`klib-script` 已携带 `me.kzheart.klib.script.taboolib.common.OpenAPI` 与相应 `OpenResult` 形状；Klib Gradle 插件打包时把它们和兼容主入口一起 relocation 到业务插件的私有路径，**开发者不需要自己创建协议类**。
-
-namespace 与版本：
-
-- 共享 action 应使用插件独占 namespace，例如 `myplugin` 或 `myplugin.shop`。
-- TabooLib 的移除协议不携带 owner：多个插件覆盖同一个 `namespace:name` 后，任一插件注销都可能删除当前生效项。所以**不要默认发布到 `kether`、`global` 或统一的 `klib` namespace**。
-- 互操作按 OpenContainer channel 能力工作，不锁定精确 TabooLib 构建版本。当前协议测试基线为 6.2.4 和 6.3.0。
-- 插件类加载器级热卸载仍受 TabooLib 容器缓存限制。配置和 Scope 重建受支持；替换插件 JAR 后应重启服务器。
-
-### 旧 OpenContainerBridge
-
-<details>
-<summary>展开：只适合已有定制执行适配的扁平语句桥</summary>
-
-旧的 `OpenContainerBridge` 只能作为执行级 `UnknownStatementResolver`，适合由适配器自行处理的简单、扁平语句：
-
-```java
-OpenContainerBridge bridge = new OpenContainerBridge(discovery);
-KetherScriptEngine engine = new KetherScriptEngine(
-        statements,
-        bridge,
-        mainThread);
-```
-
-它不会把真实 `QuestReader`、嵌套 action 或 Frame 状态交给远端，因此不能用于完整 TabooLib Kether 兼容。新接入应使用 `TabooLibKetherInterop`；`OpenContainerBridge` 仅为已有的定制执行适配保留。
-
-</details>
-
-### Guard 云端商品
-
-Guard 商品没有独立 Bukkit 主类，不能生成商品自己的 `OpenAPI`，改用门户级 Broker：
-
-```java
-GuardKetherInterop interop = GuardKetherInterop.install(
-        root,
-        statements,
-        host());
-
-statements.registerShared(root, "myproduct", "custom-action", parser);
-
-ScopedScriptRuntime engine = new ScopedScriptRuntime(
-        root,
-        statements,
-        interop,
-        root.syncExecutor(),
-        true);
-```
-
-- `GuardKetherInterop` 同样双向共享：`registerShared(...)` 发布商品 action，门户发现的外部 TabooLib action 会导入商品注册表。
-- `ScopedScriptRuntime` 自己跟踪并取消原生执行；不能仅靠续接 `Executor` 保证关闭时的脚本结果终结。关闭仍须在宿主线程完成。
-- 商品 Scope 关闭会撤销全部发布与导入、清除句柄并取消未完成的 future，因此旧 generation 不能继续调用新版本商品。
-- 构建时 `klib-script` 必须保持商品私有 relocation；`klib-guard-api` 与 `klib-core` 由 Guard 父加载器提供。
-- 启用 Gradle DSL `ketherInterop(true)` 的 Guard 商品应生成协议 marker，**不能**包含 `plugin.yml` 或商品级 TabooLib Bukkit 主类。
-
-<details>
-<summary>展开：类加载器边界、句柄上限与撤销权限</summary>
-
-- 与 TabooLib 互操作的差异：action 解析结果只以 `long` 句柄进入门户；商品私有的 Kether parser、action 和 frame 始终留在商品类加载器内。
-- 商品 action 的完成值受类加载器边界约束：
-  - 字符串、基础数值和安全的父加载器对象可直接返回；
-  - 集合、Map 与数组会递归检查并复制；
-  - 商品私有 DTO 会被拒绝，避免外部插件通过返回值长期持有已卸载商品的 ClassLoader。
-- 门户最多同时保留 4096 个待外部释放的解析句柄，在 action facade 被回收或商品关闭时释放。
-- 新版 Klib OpenContainer 撤销 action 时会携带 owner，门户只允许原发布者撤销。
-- 旧版两参数 `kether_remove_action` 无法证明调用者身份，因此只在 owner 容器消失后由发现循环清理，不允许仍在线的冲突插件借清理请求撤销别人的路由。
-
-</details>
 
 ## Kotlin 挂起执行
 
-挂起入口与 Java 的 `CompletionStage` 调用同一引擎。编译缓存、解析器、帧/变量生命周期、异步续接和容器互操作由模块内的 Kotlin 实现承担；宿主只提供注册表、上下文与明确的服务能力。
+挂起入口与 Java 的 `CompletionStage` 调用同一引擎。编译缓存、解析器、帧/变量生命周期和异步续接由模块内的 Kotlin 实现承担；宿主只提供注册表、上下文与明确的服务能力。
 
 ```kotlin
 import me.kzheart.klib.script.*
@@ -704,7 +591,6 @@ suspend fun evaluateOnHost(
 ## 线程与生命周期
 
 - 注册语句的 `Scope` 关闭后，该注册立即失效。引擎和注册表可由较长生命周期持有，业务语句应安装在可重建子作用域中。
-- `TabooLibKetherInterop` 必须安装在不短于 shared action 的 Scope 中；关闭时先停止接收协议调用，再清除远端注册和容器引用。
 - `ScriptContext` 的变量映射支持并发访问，但放入其中的可变对象不因此变成线程安全对象。
 - 异步动作需要显式续接执行器；脚本含 Bukkit 操作时用主线程执行器。
 - Bukkit 宿主服务的构建、调用和释放都在主线程。
@@ -715,10 +601,10 @@ suspend fun evaluateOnHost(
 - 编译结果按脚本文本、命名空间和注册表版本缓存；注册或注销语句会让相关缓存失效。**不要自行缓存底层 Kether `Quest`。**
 - 脚本应设置来源、长度和业务复杂度上限。运行时已有动作数、嵌套深度和缓存大小保护，但不能代替调用方的权限与资源限制。
 - 默认构造器遇到异步续接会直接失败（`continuation-executor-required`），不是 bug。
-- 默认严格解析：未注册的词元会报错，兼容原框架脚本要显式开启容错。
+- 默认严格解析：未注册的词元会报错，需要宽松字面量行为时显式开启容错。
 
 ## 相关页面
 
 - [Core](core.md)：`Scope`、调度与回主线程
-- [构建与打包](../../README.md)：模块选择、重定位与 `ketherInterop(true)`
-- 仓库中的 `klib-script` 测试覆盖内置动作、异步续接、错误定位、编译缓存和 OpenContainer 互操作，可作为扩展语句行为的事实来源。
+- [构建与打包](../../README.md)：模块选择与重定位
+- 仓库中的 `klib-script` 测试覆盖内置动作、异步续接、错误定位、编译缓存与扩展解析器，可作为扩展语句行为的事实来源。

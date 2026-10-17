@@ -200,7 +200,6 @@ for (CompatCapabilityMatrix.Row row : matrix.rows()) {
 - 标题和行只以数据包形式发给目标玩家的客户端。
 - **不读取、不替换、不修改**玩家的 Bukkit `Scoreboard`，原有队伍、计分项和其他插件的记分板保持不变。
 - 更新时只发送与上一次不同的标题和行。
-- 实现改写自 TabooLib 的 `NMSScoreboard`，来源与许可全文见 [侧边栏归属](../../platform/compat/src/main/resources/META-INF/LICENSE-TabooLib-Scoreboard.txt)，对应资源随 Compat 与版本适配 JAR 分发。
 
 需要 `core()`，以及覆盖目标服务端版本的 `compat-v*`（Gradle 插件自动补入 `compat`）：
 

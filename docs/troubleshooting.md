@@ -11,9 +11,12 @@
 
 ### `Could not find de.tr7zw:item-nbt-api`
 
-- **症状**：选了 `item` 或 `ui` 模块后，依赖解析失败于 `de.tr7zw:item-nbt-api`。
-- **原因**：`klib-item` 的运行时依赖只发布在 CodeMC 仓库，`klib-ui` 又依赖 `klib-item`；使用方仓库列表里没有 CodeMC。
-- **修复**：在 `settings.gradle.kts` 的 `dependencyResolutionManagement.repositories` 加入 `maven("https://repo.codemc.io/repository/maven-public/")`。见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
+- **症状**：依赖解析失败于 `de.tr7zw:item-nbt-api`，构建的实际依赖图仍请求该制品。
+- **原因**：当前 `klib-item` 与 `klib-ui` 不依赖 Item-NBT-API；标签由模块内原生实现提供。应先查清实际解析到的依赖来源，而不是为 Klib 标签功能补加 CodeMC。
+- **修复**：
+  - 用 Gradle 依赖报告定位引入方，核对 `libraryVersion` 与实际解析的 Klib 制品。
+  - 清理构建中仅为 Klib 标签功能手工添加的 Item-NBT-API 依赖；若其他库仍需要它，按该库的依赖说明处理。
+  - Klib 标签功能无需 CodeMC 仓库，原生标签的存储范围与限制见 [Item · 原生 NBT 标签](modules/item.md#原生-nbt-标签)。
 
 ### `Could not find me.kzheart.klib:klib-*` 或插件 ID `me.kzheart.klib` 无法解析
 
@@ -49,7 +52,7 @@
 - **症状**：插件加载时找不到 Klib 类。
 - **原因**：部署的是普通 `jar`，不是包含并重定位了 Klib 的 `shadowJar` 产物；服务器上也没有别的插件提供这些类。
 - **修复**：执行 `./gradlew clean shadowJar`，部署 `build/libs/<project>-<version>-all.jar`。
-  - 启用 `ketherInterop(true)` 时尤其注意：TabooLib 互操作入口**只存在于** `-all.jar` 中。
+  - 检查最终部署包包含所选 Klib 模块及其运行时依赖，不要把仅含业务类的普通 JAR 当作部署产物。
   - 详见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
 
 ### 插件在 1.12.2 上加载失败或产生 api-version 告警

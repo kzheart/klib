@@ -45,4 +45,24 @@ class NbtCodecJavaInteropTest {
         assertThrows(IllegalArgumentException.class, () -> NbtCodec.fromSnbt("128b"));
         assertThrows(IllegalArgumentException.class, () -> NbtCodec.fromJson("{\"x\":\"1i\",\"x\":\"2i\"}"));
     }
+    @Test
+    void binaryFailuresDoNotLeakUndeclaredCheckedExceptionsToJava() {
+        IllegalArgumentException truncated = assertThrows(IllegalArgumentException.class,
+                () -> NbtCodec.fromBytes(new byte[]{10, 0}));
+        assertTrue(truncated.getCause() instanceof java.io.EOFException);
+        char[] chars = new char[65536];
+        java.util.Arrays.fill(chars, 'x');
+        NbtCompound tooLong = new NbtCompound().put("text", NbtTag.string(new String(chars)));
+        IllegalArgumentException encoding = assertThrows(IllegalArgumentException.class,
+                () -> NbtCodec.toBytes(tooLong));
+        assertTrue(encoding.getCause() instanceof java.io.UTFDataFormatException);
+        // A Java consumer may handle the complete public data-error contract without catch(Exception).
+        try {
+            NbtCodec.fromBytes(new byte[0]);
+            fail("Malformed input must fail");
+        } catch (RuntimeException expected) {
+            assertTrue(expected instanceof IllegalArgumentException);
+        }
+    }
+
 }

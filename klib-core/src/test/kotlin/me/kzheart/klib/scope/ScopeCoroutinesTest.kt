@@ -1,5 +1,6 @@
 package me.kzheart.klib.scope
 
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -28,6 +29,24 @@ import java.util.function.Supplier
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScopeCoroutinesTest {
+    @Test
+    fun `Java result and coroutine dispatch share the same queued close boundary`() {
+        val queue = MainQueue()
+        val root = newScope(queue)
+        val source = CompletableFuture<Int>()
+        val waiting = root.submitSync(source) { fail<Int>("old source callback ran") }
+        val queued = root.submitSync { fail<Int>("queued Java callback ran") }
+        val job = root.coroutines.launch { fail<Unit>("queued coroutine body ran") }
+        root.close()
+        awaitCompletion(job)
+        source.complete(1)
+        queue.drain()
+        assertTrue(waiting.isCancelled)
+        assertTrue(queued.isCancelled)
+        assertTrue(job.isCancelled)
+        assertEquals(1, source.join())
+    }
+
     @Test
     fun `setup stays synchronous and launch is queued on the main scheduler`() {
         val queue = MainQueue()

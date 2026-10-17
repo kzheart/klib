@@ -95,7 +95,7 @@ klib {
 
 | 模块 | 主要能力 | 文档 |
 | :--- | :--- | :---: |
-| `klib-core` | 插件与作用域、组件、事件、调度、冷却与加权随机 | [Core](docs/modules/core.md) |
+| `klib-core` | 插件与作用域、代际受管异步结果、组件、事件、调度、冷却与加权随机 | [Core](docs/modules/core.md) |
 | `klib-config` | YAML 映射、原值树、迁移与原子重载 | [Config](docs/modules/config.md) |
 | `klib-lang` | 多语言、占位符、富文本与宿主 Adventure 适配 | [Lang](docs/modules/lang.md) |
 | `klib-command` | 命令树、注解、权限、建议、帮助样式与业务异常策略 | [Command](docs/modules/command.md) |

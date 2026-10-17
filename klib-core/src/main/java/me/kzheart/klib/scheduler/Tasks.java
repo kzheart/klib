@@ -2,6 +2,7 @@ package me.kzheart.klib.scheduler;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
@@ -15,6 +16,9 @@ public final class Tasks {
     public TaskHandle every(Ticks ticks, Runnable task) { return owner.every(ticks, task); }
     public TaskHandle after(Ticks ticks, Runnable task) { return owner.after(ticks, task); }
     public TaskHandle sync(Runnable task) { return owner.sync(task); }
+    public <T> CompletableFuture<T> submitSync(Supplier<T> action) { return owner.submitSync(action); }
+    public <S, T> CompletableFuture<T> submitSync(CompletionStage<S> stage,
+            Function<? super S, ? extends T> action) { return owner.submitSync(stage, action); }
     public <T> AsyncTask<T> async(Supplier<T> task) { return owner.async(task); }
     public <T> CompletionStage<T> thenSync(CompletionStage<T> stage, Consumer<? super T> success,
             Consumer<? super Throwable> failure) {

@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.logging.Logger;
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.scope.ScopeImpl;
@@ -36,11 +38,12 @@ class BukkitSchedulerSyncDispatchTest {
     }
 
     @Test
-    void submissionAfterCloseIsSilentlyDropped() {
+    void submissionAfterCloseIsRejected() {
         Fixture fixture = new Fixture();
         fixture.scope.close();
 
-        fixture.scheduler.syncExecutor().execute(() -> { throw new AssertionError("closed scope"); });
+        assertThrows(RejectedExecutionException.class, () ->
+                fixture.scheduler.syncExecutor().execute(() -> { throw new AssertionError("closed scope"); }));
 
         assertTrue(fixture.tasks.isEmpty());
     }
@@ -92,6 +95,21 @@ class BukkitSchedulerSyncDispatchTest {
         assertEquals(Arrays.asList("first-start", "first-end", "second", "nested"), calls);
         assertEquals(3, fixture.tasks.size());
         fixture.scope.close();
+    }
+
+    @Test
+    void ownedResultIsCancelledBeforeBukkitDispatchWithoutRunningCallback() {
+        Fixture fixture = new Fixture();
+        fixture.scope.registerCapability(SchedulerFactory.class, ignored -> fixture.scheduler);
+        AtomicBoolean executed = new AtomicBoolean();
+        CompletableFuture<Boolean> result = fixture.scope.submitSync(() -> {
+            executed.set(true);
+            return true;
+        });
+        fixture.scope.close();
+        assertTrue(result.isCancelled());
+        fixture.tasks.get(0).command.run();
+        assertFalse(executed.get());
     }
 
     private static final class Fixture {

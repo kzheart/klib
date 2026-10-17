@@ -36,7 +36,7 @@ public final class BukkitSchedulerAdapter implements KScheduler, DiagnosticSourc
         public void execute(Runnable command) {
             Objects.requireNonNull(command, "command");
             if (scope.isClosed()) {
-                return;
+                throw new RejectedExecutionException("Scope is closed: " + scope.name());
             }
             sync(command);
         }

@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- Scope 新增代际绑定的 `submitSync` 结果原语，Java 阶段桥接与 Kotlin 主线程派发共享终态保证；关闭、排队取消和拒绝不会遗留受管 Future，终态释放源回调引用。
+- 旧 `syncExecutor` 关闭后明确拒绝新任务；已排队的不透明 JDK 组合任务仍需迁到 `submitSync` 或 `AsyncTasks`，聊天与告示牌输入已迁移。
 - 原生 Kotlin API 直接内置现有模块，提供层级命令/菜单、物品属性与 typed 标签操作符、构造器配置和异步存储/脚本挂起调用；withSession 自动管理异步会话释放。
 - 配置映射支持 Kotlin 主构造器、默认参数与递归 nullability，共享 Java 字段元数据并保留原子重载。
 - 旧版 NBT 回退按依赖实际平台能力启用，避免新版 PDC 标签删除/缺失读取触发不支持的 NBT 调用。

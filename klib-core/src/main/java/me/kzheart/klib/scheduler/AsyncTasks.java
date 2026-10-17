@@ -3,7 +3,6 @@ package me.kzheart.klib.scheduler;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import me.kzheart.klib.scope.Scope;
@@ -15,7 +14,7 @@ import me.kzheart.klib.scope.Scope;
  * {@link CompletionStage}，其 {@code thenApply}、{@code thenAccept} 等非 {@code Async}
  * 回调运行在完成该阶段的线程（例如 JDBC、文件 I/O 或诊断线程），不是服务器主线程。
  * 在这些回调里直接调用 Bukkit API 会导致并发问题甚至崩溃。使用本类或
- * {@link Scope#syncExecutor()} 显式切回主线程后再访问 Bukkit 状态。
+ * {@link Scope#submitSync} 显式切回主线程后再访问 Bukkit 状态。
  */
 public final class AsyncTasks {
 
@@ -41,7 +40,8 @@ public final class AsyncTasks {
      * {@code onError}（若为 {@code null} 则忽略失败）。传给 {@code onError} 的异常
      * 已经过 {@link #unwrap(Throwable)} 解包。
      *
-     * <p>作用域关闭后两类回调都不会执行。
+     * <p>等待源阶段与主线程排队都绑定当前作用域构建代。关闭或重建会取消返回结果，
+     * 两类回调都不再执行；源阶段不会被取消，已发生的外部写入不会回滚。
      */
     public static <T> CompletionStage<T> thenSync(
             CompletionStage<T> stage,
@@ -53,31 +53,46 @@ public final class AsyncTasks {
         if (action == null) {
             throw new NullPointerException("action");
         }
-        return stage.whenCompleteAsync(new BiConsumer<T, Throwable>() {
-            @Override
-            public void accept(T value, Throwable failure) {
-                if (scope.isClosed()) {
-                    return;
-                }
-                if (failure != null) {
-                    if (onError != null) {
-                        onError.accept(unwrap(failure));
+        return scope.submitSync(stage.handle(Outcome<T>::new), outcome -> {
+            if (outcome.failure == null) {
+                action.accept(outcome.value);
+            } else {
+                if (onError != null) {
+                    try {
+                        onError.accept(unwrap(outcome.failure));
+                    } catch (Throwable callbackFailure) {
+                        if (callbackFailure != outcome.failure) {
+                            outcome.failure.addSuppressed(callbackFailure);
+                        }
                     }
-                    return;
                 }
-                action.accept(value);
+                if (outcome.failure instanceof CompletionException) {
+                    throw (CompletionException) outcome.failure;
+                }
+                throw new CompletionException(outcome.failure);
             }
-        }, scope.syncExecutor());
+            return outcome.value;
+        });
     }
 
     /**
-     * 返回一个在主线程完成的等价阶段。完成前注册的非 {@code Async} 回调随完成在主线程执行；
-     * 完成后从其他线程追加的非 {@code Async} 回调会直接在追加线程执行，不保证在主线程。
-     * 需要确保主线程时使用 {@link #thenSync} 或显式传入 {@code scope.syncExecutor()}。
+     * 成功结果通过主线程完成；源阶段失败、关闭取消与提交拒绝不保证在主线程完成。
+     * 后续非 Async 回调的线程仍由 JDK 决定，访问 Bukkit 时应再次使用 thenSync。
+     * 关闭或重建会取消返回结果，不取消源阶段。
      */
     public static <T> CompletionStage<T> onSync(CompletionStage<T> stage, Scope scope) {
         require(stage, scope);
-        return stage.thenApplyAsync(Function.<T>identity(), scope.syncExecutor());
+        return scope.submitSync(stage, Function.<T>identity());
+    }
+
+    private static final class Outcome<T> {
+        private final T value;
+        private final Throwable failure;
+
+        private Outcome(T value, Throwable failure) {
+            this.value = value;
+            this.failure = failure;
+        }
     }
 
     /**

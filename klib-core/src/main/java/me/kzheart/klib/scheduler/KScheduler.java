@@ -1,6 +1,5 @@
 package me.kzheart.klib.scheduler;
 
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
@@ -27,11 +26,9 @@ public interface KScheduler {
     }
 
     /**
-     * 返回把命令投递到同步执行器的 {@link Executor}，用于与 JDK
-     * {@link CompletionStage} 组合，例如
-     * {@code stage.thenAcceptAsync(action, scope.syncExecutor())}。
-     *
-     * <p>所属作用域关闭后提交的命令会被丢弃或取消，不会在已关闭的作用域上继续执行。
+     * 返回把命令投递到同步执行器的 Executor。内置后端拒绝关闭后提交的命令，
+     * 并取消已经排队的命令。Executor 无法保证这些命令内部的派生 Future 得到终结；
+     * 需要终态保证时使用 Scope.submitSync 或 AsyncTasks。
      */
     default Executor syncExecutor() {
         return new Executor() {

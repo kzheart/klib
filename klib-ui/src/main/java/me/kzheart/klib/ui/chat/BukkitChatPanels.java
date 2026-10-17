@@ -20,6 +20,7 @@ import me.kzheart.klib.lang.MessageRecipient;
 import me.kzheart.klib.lang.RichText;
 import me.kzheart.klib.lang.RichTextSegment;
 import me.kzheart.klib.lang.TextAction;
+import me.kzheart.klib.scheduler.AsyncTasks;
 import me.kzheart.klib.scheduler.Ticks;
 import me.kzheart.klib.scope.Disposable;
 import me.kzheart.klib.scope.Scope;
@@ -284,16 +285,16 @@ public final class BukkitChatPanels implements Listener, Disposable {
                     .invalidMessage(text(ChatPanelText.INPUT_INVALID).legacyText()).cancelledMessage("").timeoutMessage("").build();
             PromptSession<T> prompt = prompts.start(session.player, spec);
             pending.prompt = prompt;
-            prompt.completionSync().whenCompleteAsync((outcome, failure) -> {
+            AsyncTasks.thenSync(prompt.completionSync(), owner, outcome -> {
                 if (session.pending != pending) return;
                 session.pending = null;
-                if (failure != null) {
-                    logger.error("聊天面板输入失败", failure);
-                    if (active(session)) { session.status = text(ChatPanelText.FAILED); scheduleRedraw(session); }
-                    return;
-                }
                 complete(session, pending, outcome.status(), outcome.value().orElse(null));
-            }, owner.syncExecutor());
+            }, failure -> {
+                if (session.pending != pending) return;
+                session.pending = null;
+                logger.error("聊天面板输入失败", failure);
+                if (active(session)) { session.status = text(ChatPanelText.FAILED); scheduleRedraw(session); }
+            });
         }
         scheduleRedraw(session);
     }

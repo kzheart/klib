@@ -12,6 +12,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SchedulerSyncDispatchTest {
     private static final String SYNC_THREAD = "klib-sync-test";
@@ -152,13 +154,13 @@ class SchedulerSyncDispatchTest {
     }
 
     @Test
-    void syncExecutorDropsCommandsAfterScopeCloses() throws InterruptedException {
+    void syncExecutorRejectsCommandsAfterScopeCloses() throws InterruptedException {
         ScopeImpl scope = newScope();
         Executor executor = scope.syncExecutor();
         scope.close();
 
         AtomicBoolean executed = new AtomicBoolean();
-        executor.execute(() -> executed.set(true));
+        assertThrows(RejectedExecutionException.class, () -> executor.execute(() -> executed.set(true)));
 
         CountDownLatch drained = new CountDownLatch(1);
         syncExecutor.execute(drained::countDown);
@@ -179,6 +181,16 @@ class SchedulerSyncDispatchTest {
         queued.remove().run();
 
         assertFalse(executed.get());
+    }
+
+    @Test
+    void inlineExecutorPreservesBusinessExceptionInsteadOfCallingItARejection() {
+        ScopeImpl scope = new ScopeImpl("inline-failure");
+        ExecutorScheduler scheduler = new ExecutorScheduler(scope, timerExecutor, asyncExecutor, Runnable::run);
+        IllegalStateException failure = new IllegalStateException("business failure");
+        assertSame(failure, assertThrows(IllegalStateException.class,
+                () -> scheduler.syncExecutor().execute(() -> { throw failure; })));
+        scope.close();
     }
 
     @Test

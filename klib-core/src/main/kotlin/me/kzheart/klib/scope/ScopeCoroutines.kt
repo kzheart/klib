@@ -2,7 +2,6 @@
 
 package me.kzheart.klib.scope
 
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.CoroutineContext
@@ -17,9 +16,7 @@ import kotlinx.coroutines.launch as coroutineLaunch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import me.kzheart.klib.scheduler.KScheduler
 import me.kzheart.klib.scheduler.SchedulerFactory
-import me.kzheart.klib.scheduler.TaskHandle
 
 /**
  * Coroutine ownership for exactly one build of a Klib scope.
@@ -32,7 +29,6 @@ import me.kzheart.klib.scheduler.TaskHandle
  */
 public class ScopeCoroutines internal constructor(
     private val lifetime: CoroutineLifetime,
-    scheduler: KScheduler,
 ) : CoroutineScope {
     /** A generation-bound scope; keep this view rather than the original rebuildable Scope. */
     public val scope: Scope = lifetime.generation.view()
@@ -41,7 +37,7 @@ public class ScopeCoroutines internal constructor(
     public val job: Job get() = lifetime.job
 
     /** Always queues through the captured generation's scheduler; never silently drops continuations. */
-    public val mainDispatcher: CoroutineDispatcher = ScopeMainDispatcher(lifetime, scheduler)
+    public val mainDispatcher: CoroutineDispatcher = ScopeMainDispatcher(lifetime)
 
     override val coroutineContext: CoroutineContext =
         job + mainDispatcher + CoroutineName("Klib:${scope.name()}")
@@ -84,36 +80,19 @@ public val Scope.coroutines: ScopeCoroutines
         val generation = ScopeGeneration.of(this)
         return generation.call {
             val lifetime = generation.coroutineLifetime()
-            lifetime.coroutines ?: ScopeCoroutines(
-                lifetime,
+            lifetime.coroutines ?: run {
                 generation.view().requireCapability(SchedulerFactory::class.java)
-                    .forScope(generation.view()),
-            ).also { lifetime.coroutines = it }
+                ScopeCoroutines(lifetime).also { lifetime.coroutines = it }
+            }
         }
     }
 
 internal class CoroutineLifetime(val generation: ScopeGeneration) : Disposable {
     val job: Job = SupervisorJob(generation.parent()?.coroutineLifetime()?.job)
-    val pending: MutableSet<PendingDispatch> = ConcurrentHashMap.newKeySet()
     var coroutines: ScopeCoroutines? = null
 
     override fun dispose() {
-        var failure: Throwable? = null
-        try {
-            job.cancel(CancellationException("Scope generation ended: ${generation.view().name()}"))
-        } catch (cancelFailure: Throwable) {
-            failure = cancelFailure
-        }
-        // No registration can enter this generation after invalidation. Queue handles may be
-        // cancelled by Scope teardown, so resume cancellation ourselves instead of losing it.
-        for (dispatch in pending.toList()) {
-            try {
-                dispatch.reject(null)
-            } catch (cleanupFailure: Throwable) {
-                if (failure == null) failure = cleanupFailure else failure.addSuppressed(cleanupFailure)
-            }
-        }
-        failure?.let { throw it }
+        job.cancel(CancellationException("Scope generation ended: ${generation.view().name()}"))
     }
 }
 
@@ -122,58 +101,26 @@ private fun ScopeGeneration.coroutineLifetime(): CoroutineLifetime =
 
 private class ScopeMainDispatcher(
     private val lifetime: CoroutineLifetime,
-    private val scheduler: KScheduler,
 ) : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
-        val pending = PendingDispatch(lifetime, context, block)
-        try {
-            lifetime.generation.call {
-                lifetime.pending.add(pending)
-                pending.handle = scheduler.sync { pending.runOnMain() }
+        val claimed = AtomicBoolean()
+        // Java and Kotlin share registration, generation checks, rejection and queued cancellation.
+        lifetime.generation.view().submitSync {
+            if (claimed.compareAndSet(false, true)) block.run()
+        }.whenComplete { _, failure ->
+            if (failure != null && claimed.compareAndSet(false, true)) {
+                val cancellation = CancellationException("Klib main dispatcher is no longer available")
+                cancellation.initCause(failure)
+                try {
+                    context[Job]?.cancel(cancellation)
+                } finally {
+                    // Resume only the already-cancelled continuation, away from the closing thread.
+                    // Its finally blocks must not access Bukkit after the generation has ended.
+                    Dispatchers.Default.dispatch(context, block)
+                }
             }
-        } catch (failure: RuntimeException) {
-            pending.reject(failure)
         }
     }
 
     override fun toString(): String = "KlibMain[${lifetime.generation.view().name()}]"
-}
-
-internal class PendingDispatch(
-    private val lifetime: CoroutineLifetime,
-    private val context: CoroutineContext,
-    private val block: Runnable,
-) {
-    private val claimed = AtomicBoolean()
-    var handle: TaskHandle? = null
-
-    fun runOnMain() {
-        // Serialize the synchronous part of a continuation with lifecycle transitions. The
-        // lock is released at suspension; it is never held while waiting for async completion.
-        val accepted = lifetime.generation.run {
-            if (claimed.compareAndSet(false, true)) {
-                lifetime.pending.remove(this)
-                block.run()
-            }
-        }
-        if (!accepted) reject(null)
-    }
-
-    fun reject(failure: Throwable?) {
-        if (!claimed.compareAndSet(false, true)) return
-        lifetime.pending.remove(this)
-        try {
-            handle?.cancel()
-        } finally {
-            val cancellation = CancellationException("Klib main dispatcher is no longer available")
-            if (failure != null) cancellation.initCause(failure)
-            try {
-                context[Job]?.cancel(cancellation)
-            } finally {
-                // Running the already-cancelled continuation is necessary for finally blocks and
-                // completion. Dispatching it to the dead server queue would leave a zombie Job.
-                Dispatchers.Default.dispatch(context, block)
-            }
-        }
-    }
 }

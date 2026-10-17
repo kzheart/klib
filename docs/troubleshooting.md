@@ -101,9 +101,9 @@
   | --- | --- |
   | 异步结果送回主线程 | `scope.async(...).thenSync(...)` |
   | 从任意线程触发主线程任务 | `scope.sync(...)` |
-  | 与 JDK `CompletionStage` 组合 | 把 `scope.syncExecutor()` 作为 executor |
+  | 与 JDK `CompletionStage` 组合并保证关闭时终结 | `scope.submitSync(stage, mapper)` 或 `AsyncTasks.thenSync(stage, scope, action)` |
 
-  作用域关闭后提交的任务不会执行。详见 [Core · 调度](modules/core.md#调度)。
+  作用域关闭后不会执行业务回调，受管结果会取消。`syncExecutor()` 的不透明排队任务被关闭取消时，任意 JDK 派生阶段仍可能不终结；需要结果的流水线应迁到受管接口。详见 [Core · 调度](modules/core.md#调度)。
 
 ### 消息显示成键名，或语言意外回退到 `zh_CN`
 

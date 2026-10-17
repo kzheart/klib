@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-/** Internal generation boundary shared by the Kotlin coroutine integration. */
+/** Internal generation boundary shared by Java results and Kotlin coroutines. */
 final class ScopeGeneration {
     private final ScopeImpl owner;
     private final ScopeGeneration parent;
@@ -28,7 +28,7 @@ final class ScopeGeneration {
         if (scope instanceof ScopeGeneration.View) {
             return ((ScopeGeneration.View) scope).generation();
         }
-        throw new IllegalArgumentException("Klib coroutines require a ScopeImpl-backed scope");
+        throw new IllegalArgumentException("Generation-bound tasks require a ScopeImpl-backed scope");
     }
 
     ScopeGeneration parent() { return parent; }

@@ -144,17 +144,17 @@ PromptSession<Integer> prompt = prompts.start(player, PromptSpec
         .invalidMessage("请输入正整数，或输入 cancel 取消")
         .build());
 
-prompt.completionSync().thenAcceptAsync(outcome -> {
+AsyncTasks.thenSync(prompt.completionSync(), scope, outcome -> {
     if (outcome.status() == PromptStatus.ANSWERED && player.isOnline()) {
         int amount = outcome.value().get().intValue();
         openConfirmMenu(player, amount);
     }
-}, scope.syncExecutor());
+});
 ```
 
 - 同一玩家启动新提示会取消旧提示。
 - 框架会取消对应聊天消息，业务插件不用再维护 `AsyncPlayerChatEvent` 监听器。
-- 示例给消费结果的回调指定了 `scope.syncExecutor()`，保证即使提示已经完成，后续玩家操作也在主线程执行。
+- 示例使用 `AsyncTasks.thenSync` 消费结果，即使提示已经完成，玩家操作也会重新投递到主线程；关闭期间观察结果会终结，不留下悬挂的派生阶段。
 
 ## 聊天控制面板
 

@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -25,7 +26,7 @@ public final class ExecutorScheduler implements KScheduler, DiagnosticSource {
                 throw new NullPointerException("command");
             }
             if (scope.isClosed()) {
-                return;
+                throw new RejectedExecutionException("Scope is closed: " + scope.name());
             }
             sync(command);
         }

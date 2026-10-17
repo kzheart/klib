@@ -104,7 +104,7 @@ final class PaperSignInput implements ChatPanelSignInput, Listener, Disposable {
 
     private void submitted(Event event) {
         if (!Bukkit.isPrimaryThread()) {
-            owner.syncExecutor().execute(() -> submitted(event));
+            owner.submitSync(() -> { submitted(event); return null; });
             return;
         }
         Player player = ((PlayerEvent) event).getPlayer();

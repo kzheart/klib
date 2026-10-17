@@ -212,7 +212,9 @@ root.on(
 | `every(ticks, task)` | Bukkit 同步调度器 | `TaskHandle` | 周期至少 1 tick |
 | `sync(task)` | 主线程下一 tick，可从任意线程调用 | `TaskHandle` | 「回主线程」的官方入口 |
 | `async(supplier)` | Bukkit 异步任务 | 链式 | 接 `thenSync` / `onError` |
-| `syncExecutor()` | 主线程 | `Executor` | 与 JDK `CompletionStage` 组合 |
+| `submitSync(supplier)` | 主线程 | `CompletableFuture<T>` | 有结果的主线程任务，关闭或重建时取消 |
+| `submitSync(stage, action)` | 主线程 | `CompletableFuture<R>` | 等待源阶段并转换结果，等待和排队均绑定当前构建代 |
+| `syncExecutor()` | 主线程 | `Executor` | 低层投递；不能保证被取消的 JDK 派生阶段终结 |
 
 `TaskHandle` 可通过 `cancel()` 提前取消。一次性任务完成后自动移除，长生命周期作用域里不会累积句柄。
 
@@ -251,28 +253,49 @@ root.sync(() -> player.sendMessage("数据已加载"));
 
 `klib-data`、`klib-script` 和 `klib-remote` 返回 JDK `CompletionStage`。**它的 `thenApply`、`thenAccept` 等非 `Async` 回调可能由完成阶段的线程执行，也可能在注册回调时直接执行，不保证在 Bukkit 主线程运行**，在其中直接调用 Bukkit API 是典型的崩溃来源。
 
-`Scope.syncExecutor()` 返回投递到主线程的 `Executor`，可直接与 JDK 组合子搭配：
+需要结果时使用 `Scope.submitSync`。它拥有返回的 Future，等待外部阶段、排队和执行都绑定调用时的作用域构建代：
 
 ```java
-storage.get("profile", playerId)
-        .thenAcceptAsync(value -> player.sendMessage("等级 " + decodeLevel(value)),
-                root.syncExecutor());
+CompletableFuture<Integer> applied = root.submitSync(
+        storage.get("profile", playerId),
+        value -> {
+            int level = decodeLevel(value);
+            player.setLevel(level);
+            return level;
+        });
+
+CompletableFuture<String> currentName = root.submitSync(player::getName);
 ```
 
-- 它与 `Scope.sync(...)` 共用作用域任务句柄：提交时已关闭会跳过，提交后、执行前关闭也会取消回调，不会在失效作用域上产生副作用。
-- Bukkit 后端保持同步调度器原有的排队顺序，不因这个适配器多一轮延迟。
+| 情况 | 返回结果 | 业务回调 |
+| --- | --- | --- |
+| 正常完成 | 正常完成 | 在同步调度器执行一次 |
+| 源阶段或业务回调失败 | 异常完成 | 源失败时不执行转换回调 |
+| 同步调度器拒绝提交 | 异常完成 | 不执行 |
+| 提交时已关闭，或等待/排队中关闭、重建 | 取消 | 不再执行 |
+| 调用方取消返回 Future | 取消 | 未开始的回调不执行 |
+| 主线程回调已经开始 | 生命周期切换等待当前回调退出 | 不强制中断 |
 
-`AsyncTasks` 写法更短：作用域关闭后自动跳过回调，并把 `CompletionException` 解包后交给错误回调。
+- 取消返回结果不会取消源阶段，更不代表数据库写入已回滚。外部 I/O 仍需自己的超时、事务和幂等规则。
+- 正常或异常结束后自动释放作用域资源；重建不会使旧请求进入新一代。
+- `tasks().submitSync(...)` 提供相同入口。该功能要求 `ScopeImpl` 支持的作用域，`KPlugin` 和其子作用域都满足。
+- 业务回调与作用域生命周期切换串行，保持简短、非阻塞；不要在回调中等待需要同一作用域锁的工作。
+
+`AsyncTasks` 保留原结果并在主线程调用成功或错误处理器；异常会解包后传给错误处理器。等待、拒绝、关闭和重建复用上述终态规则：
 
 ```java
 import me.kzheart.klib.scheduler.AsyncTasks;
 
-AsyncTasks.thenSync(
+CompletionStage<Optional<byte[]>> applied = AsyncTasks.thenSync(
         storage.get("profile", playerId),
         root,
         value -> player.sendMessage("等级 " + decodeLevel(value)),
         error -> logger().error("读取玩家数据失败", error));
 ```
+
+- `thenSync` 成功回调结束后保留原值；源阶段失败时返回阶段仍失败，错误回调不把失败转换成成功。
+- `AsyncTasks.onSync(stage, scope)` 只转交成功结果，不注册业务回调。
+- 取消、源失败和提交拒绝的终结通知可能发生在任意线程。返回 Future 上自行追加的 `whenComplete` 等非 `Async` 观察器也遵循 JDK 线程规则，不能在其中无条件访问 Bukkit。
 
 完整回路（异步读库 → 回主线程 → 更新玩家）：
 
@@ -290,7 +313,16 @@ public void loadAndApply(final Player player) {
 }
 ```
 
-多步组合中，**每个**访问 Bukkit 状态的回调都显式使用 `scope.syncExecutor()`。即使阶段由 `AsyncTasks.onSync(stage, scope)` 在主线程完成，完成后从其他线程追加的非 `Async` 回调也不保证在主线程运行。
+多步组合中，**每个**访问 Bukkit 状态的回调都通过 `submitSync` 或 `AsyncTasks.thenSync`。即使某个阶段正常在主线程完成，之后从其他线程追加的非 `Async` 回调也不保证在主线程运行。
+
+### 低层同步 Executor 的限制
+
+`Scope.syncExecutor()` 仍保留：内置后端对关闭后的新提交抛出 `RejectedExecutionException`，已排队的命令随作用域取消。
+
+但 `Executor` 收到的只是一个不透明的 `Runnable`，无法在跳过业务回调的同时替它完成任意 JDK 派生 Future。
+因此 `stage.thenApplyAsync(..., scope.syncExecutor())` 在**先入队、再关闭**时仍可能永不完成；需要可靠结果的流水线使用 `submitSync` 或 `AsyncTasks`。
+
+Bukkit 后端保持原有的同步调度器排队顺序，不额外增加一轮延迟。
 
 ### Kotlin 协程
 
@@ -325,7 +357,8 @@ runtime.launch {
 - `close()`/`rebuild()` 不等待协程完成，不在主线程使用 `runBlocking` 或 `join`。取消收尾可能在 `Dispatchers.Default` 上执行，`finally` 中不得访问 Bukkit，也不能依赖已释放的作用域资源。
 - 取消是协作式的。阻塞 I/O 必须设置超时；`NonCancellable` 代码、捕获的原始 `Scope` 或其他资源引用不会被强制撤销。跨挂起点使用 `runtime.scope`，不要通过原始可重建作用域查询新代能力。
 - 旧 `runtime` 在重建后保持取消，不能用来启动新任务；从新代 `Scope` 重新获取入口。此集成要求 Klib 创建的 `ScopeImpl` 和已注册的 `SchedulerFactory`。
-- 不要把现有 `syncExecutor()` 直接传给 `asCoroutineDispatcher()`：它关闭后允许丢弃命令，不能负责 continuation 的取消收尾。
+- 协程与 Java `submitSync` 复用同一代际终态原语；协程另外负责把被取消 continuation 的清理派发到 `Dispatchers.Default`。
+- 不要把 `syncExecutor()` 直接传给 `asCoroutineDispatcher()`：排队后的命令仍可能被取消，不能负责 continuation 的取消收尾。
 
 ## 冷却
 
@@ -461,9 +494,9 @@ logger().warn("arena", "竞技场配置缺少出生点");
 ## 线程与生命周期
 
 - `KPlugin.setup`、Bukkit 命令注册以及绝大多数 Bukkit API 操作在服务器主线程完成。命令在插件启动时声明，配置重载不重复注册。
-- `after`、`every`、`sync`、`thenSync`、`onError` 的回调运行在同步调度器；`async` 的供应器不在主线程。
+- `after`、`every`、`sync`、`submitSync`、`thenSync`、`onError` 的业务回调运行在同步调度器；`async` 的供应器不在主线程。
 - 不要在 `async` 供应器中读写世界、实体、背包等要求主线程的 Bukkit 状态。先完成纯 I/O 或计算，再在 `thenSync` 中应用结果。
-- JDK `CompletionStage` 的非 `Async` 回调不保证在 Bukkit 主线程执行。触碰 Bukkit 状态前必须经 `Scope.sync`、`Scope.syncExecutor()` 或 `AsyncTasks` 切回主线程。
+- JDK `CompletionStage` 的非 `Async` 回调不保证在 Bukkit 主线程执行。触碰 Bukkit 状态前必须经 `Scope.sync`、`Scope.submitSync` 或 `AsyncTasks` 切回主线程。
 - Bukkit 事件处理器的线程由事件本身决定，异步事件的处理器不会自动切回主线程。
 - `Scope` 的生命周期操作会串行化，但不要并发触发同一作用域的 `rebuild`、`close` 或资源注册。
 - 作用域关闭后，再注册资源、加载能力或访问已关闭的模块运行时会失败。

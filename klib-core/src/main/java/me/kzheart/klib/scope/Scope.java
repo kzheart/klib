@@ -1,9 +1,12 @@
 package me.kzheart.klib.scope;
 
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import me.kzheart.klib.command.api.CommandCapability;
@@ -98,9 +101,29 @@ public interface Scope extends Disposable {
     }
 
     /**
-     * 返回投递到主线程的 {@link Executor}，用于与 JDK {@link CompletionStage}
-     * 组合，例如 {@code stage.thenAcceptAsync(action, scope.syncExecutor())}。
-     * 作用域关闭后提交的命令不再执行。
+     * 提交到主线程并返回结果。关闭或重建会取消尚未完成的结果，不中断已开始的工作。
+     * 提交拒绝与业务异常会使结果异常完成；需要 ScopeImpl 支持的作用域。
+     */
+    default <T> CompletableFuture<T> submitSync(Supplier<T> action) {
+        Objects.requireNonNull(action, "action");
+        return submitSync(CompletableFuture.completedFuture(null), ignored -> action.get());
+    }
+
+    /**
+     * 等待源阶段后在主线程转换结果；等待与排队均绑定调用时的作用域构建代。
+     * 关闭或重建取消返回的结果，但不会取消或回滚外部源阶段的工作。
+     * 源阶段失败时不执行 action。取消/失败及后续非 Async 回调不保证在主线程发生。
+     */
+    default <S, T> CompletableFuture<T> submitSync(
+            CompletionStage<S> source, Function<? super S, ? extends T> action
+    ) {
+        return ScopedFuture.submit(this, source, action);
+    }
+
+    /**
+     * 返回投递到主线程的 Executor。内置后端在关闭后拒绝提交，已排队任务随作用域取消。
+     * Executor 无法终结被取消的 opaque Runnable 所拥有的派生阶段；需要结果终态时
+     * 使用 submitSync 或 AsyncTasks，而不是 JDK Async 组合子加本执行器。
      */
     default Executor syncExecutor() {
         return requireCapability(SchedulerFactory.class).forScope(this).syncExecutor();

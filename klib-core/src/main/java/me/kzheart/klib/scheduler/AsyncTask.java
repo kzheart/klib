@@ -12,7 +12,7 @@ import me.kzheart.klib.scope.Scope;
  * {@code thenAccept} 等非 {@code Async} 回调运行在完成阶段的线程，不会自动切回主线程。
  * 处理 {@code klib-data}、{@code klib-script}、{@code klib-remote} 返回的
  * {@code CompletionStage} 时，请使用 {@link AsyncTasks} 或
- * {@link Scope#syncExecutor()} 显式桥接。
+ * {@link Scope#submitSync} 显式桥接。
  */
 public interface AsyncTask<T> extends TaskHandle {
     /**

@@ -630,13 +630,16 @@ GuardKetherInterop interop = GuardKetherInterop.install(
 
 statements.registerShared(root, "myproduct", "custom-action", parser);
 
-KetherScriptEngine engine = new KetherScriptEngine(
+ScopedScriptRuntime engine = new ScopedScriptRuntime(
+        root,
         statements,
         interop,
-        root.syncExecutor());
+        root.syncExecutor(),
+        true);
 ```
 
 - `GuardKetherInterop` 同样双向共享：`registerShared(...)` 发布商品 action，门户发现的外部 TabooLib action 会导入商品注册表。
+- `ScopedScriptRuntime` 自己跟踪并取消原生执行；不能仅靠续接 `Executor` 保证关闭时的脚本结果终结。关闭仍须在宿主线程完成。
 - 商品 Scope 关闭会撤销全部发布与导入、清除句柄并取消未完成的 future，因此旧 generation 不能继续调用新版本商品。
 - 构建时 `klib-script` 必须保持商品私有 relocation；`klib-guard-api` 与 `klib-core` 由 Guard 父加载器提供。
 - 启用 Gradle DSL `ketherInterop(true)` 的 Guard 商品应生成协议 marker，**不能**包含 `plugin.yml` 或商品级 TabooLib Bukkit 主类。
@@ -688,7 +691,7 @@ suspend fun evaluateOnHost(
 - 三参 `evalAwait`、`evalConditionAwait` 只把取消请求投递到指定执行器；调用者仍须在合法线程开始求值，并为引擎提供正确的普通续接执行器。
 - 执行器必须把已接收的任务真正执行完，且在原生清理结束前保持可用。取消请求实际执行前，原生脚本仍可能继续；协程完成取消也不表示排队的清理已完成。
 - 投递被拒绝时，通过 `CoroutineExceptionHandler` 报告取消处理失败，**不会改在错误线程清理**。此时须由 `ScopedScriptRuntime` 的拥有者在宿主线程调用 `cancelPending()` 或 `close()` 完成收尾。
-- `Scope.syncExecutor()` 在作用域关闭后可以静默丢弃任务，不能单独承担可靠清理。关闭流程应在主线程先关闭 `ScopedScriptRuntime`，再关闭调度器；不要把清理投到已经关闭的作用域。
+- `Scope.syncExecutor()` 在作用域关闭后拒绝新任务，已排队任务也可能被关闭取消，不能单独承担可靠清理。关闭流程应在主线程先关闭 `ScopedScriptRuntime`，再关闭调度器；不要把清理投到已经关闭的作用域。
 
 ## 线程与生命周期
 

@@ -14,6 +14,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.ParameterizedType
+import java.util.Optional
 
 /** 当前服务端真正读写的存储位置，二者不代表相同的原版物品结构。 */
 enum class ItemTagStorage { LEGACY_ROOT, CUSTOM_DATA }
@@ -21,7 +22,8 @@ enum class ItemTagStorage { LEGACY_ROOT, CUSTOM_DATA }
 /**
  * 原生标签的一个小而完整的边界：读取独立快照，编辑后写回同一物品。
  * 旧服务端读写根 NBT；组件服务端仅读写 minecraft:custom_data，保留其他组件。
- * 不提供完整组件编辑或跨存储格式转换；应在 Bukkit 主线程调用。
+ * [readItem] / [createItem] 显式处理当前服务端完整物品格式；不做跨版本数据升级。
+ * 所有物品操作应在 Bukkit 主线程调用。
  */
 object NativeItemTags {
     @Volatile private var cached: Access? = null
@@ -43,6 +45,24 @@ object NativeItemTags {
     @JvmStatic fun write(item: ItemStack, tags: NbtCompound) {
         require(!InventoryItems.isAir(item)) { "Cannot write NBT to an air item" }
         operation { access().write(item, tags) }
+    }
+
+    /** 完整物品的独立快照，包含材质、数量和当前服务端的标签或组件格式。 */
+    @JvmStatic fun readItem(item: ItemStack): NbtCompound {
+        require(!InventoryItems.isAir(item)) { "Cannot serialize an air item" }
+        return operation { access().readItem(item) }
+    }
+
+    /**
+     * 从当前服务端完整物品格式创建新物品，不修改输入树或任何已有 ItemStack。
+     * 未知材质、空气和非法组件明确失败；不接受仅 custom_data 的树，不执行 DataFixer。
+     */
+    @JvmStatic fun createItem(tags: NbtCompound): ItemStack {
+        val id = tags["id"]
+        require(id != null && id.type == NbtType.STRING && (id.value() as String).isNotEmpty()) {
+            "Complete item data requires a non-empty string id"
+        }
+        return operation { access().createItem(tags) }
     }
 
     private fun access(): Access = accessOrNull()
@@ -146,6 +166,63 @@ object NativeItemTags {
             else setComponent!!.invoke(null, component, handle, tag)
             val replacement = toBukkit.invoke(null, handle) as ItemStack
             check(item.setItemMeta(replacement.itemMeta)) { "Bukkit rejected native item tag metadata" }
+        }
+
+        // 完整物品能力延迟解析，不改变现有 root/custom_data 入口的可用性。
+        private val fullItem by lazy { FullItemCodec() }
+
+        fun readItem(item: ItemStack): NbtCompound = decode(fullItem.save(toNative.invoke(null, item)))
+
+        fun createItem(tags: NbtCompound): ItemStack {
+            val handle = fullItem.load(encode(tags))
+            val item = toBukkit.invoke(null, handle) as ItemStack
+            require(!InventoryItems.isAir(item) && item.amount > 0) { "Complete item data produced an empty or unknown item" }
+            return item
+        }
+
+        /** 两种持久化格式在此收敛；编码仍复用唯一 NbtBinary，不泄漏注册表/NMS。 */
+        private inner class FullItemCodec {
+            val save: (Any) -> Any
+            val load: (Any) -> Any
+
+            init {
+                if (storage == ItemTagStorage.LEGACY_ROOT) {
+                    val saver = unique(itemType.methods.filter {
+                        !Modifier.isStatic(it.modifiers) && it.returnType == compound &&
+                            it.parameterTypes.contentEquals(arrayOf(compound))
+                    }, "Complete legacy item save")
+                    val constructor = itemType.getDeclaredConstructor(compound).apply { isAccessible = true }
+                    save = { handle -> saver.invoke(handle, compound.getDeclaredConstructor().newInstance()) }
+                    load = { tag -> constructor.newInstance(tag) }
+                } else {
+                    val codecType = this@Access.load("com.mojang.serialization.Codec")
+                    val codecField = itemType.getField("CODEC")
+                    requireLayout(Modifier.isStatic(codecField.modifiers) && codecType.isAssignableFrom(codecField.type), "Complete item codec")
+                    val codec = codecField.get(null)
+                    val dynamicOps = this@Access.load("com.mojang.serialization.DynamicOps")
+                    val nbtOpsType = this@Access.load("net.minecraft.nbt.NbtOps", "net.minecraft.nbt.DynamicOpsNBT")
+                    val nbtOps = unique(nbtOpsType.fields.filter {
+                        Modifier.isStatic(it.modifiers) && it.type == nbtOpsType
+                    }, "NBT operations singleton").get(null)
+                    val craftRegistry = this@Access.load("$serverPackage.CraftRegistry")
+                    val registryGetter = craftRegistry.getMethod("getMinecraftRegistry")
+                    val provider = this@Access.load("net.minecraft.core.HolderLookup\$Provider")
+                    val contextFactory = provider.getMethod("createSerializationContext", dynamicOps)
+                    fun context(): Any = contextFactory.invoke(registryGetter.invoke(null), nbtOps)
+                    val encoder = this@Access.load("com.mojang.serialization.Encoder").getMethod("encodeStart", dynamicOps, Any::class.java)
+                    val decoder = this@Access.load("com.mojang.serialization.Decoder").getMethod("parse", dynamicOps, Any::class.java)
+                    val resultType = this@Access.load("com.mojang.serialization.DataResult")
+                    val resultMethod = resultType.getMethod("result")
+                    val errorMethod = resultType.getMethod("error")
+                    fun accepted(result: Any): Any {
+                        val value = resultMethod.invoke(result) as Optional<*>
+                        require(value.isPresent) { "Invalid complete item data: ${errorMethod.invoke(result)}" }
+                        return value.get()
+                    }
+                    save = { handle -> accepted(encoder.invoke(codec, context(), handle)) }
+                    load = { tag -> accepted(decoder.invoke(codec, context(), tag)) }
+                }
+            }
         }
 
         private fun encode(tags: NbtCompound): Any = DataInputStream(ByteArrayInputStream(NbtBinary.encode(tags))).use {

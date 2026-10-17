@@ -22,7 +22,7 @@ klib { modules { data { json() } } }
 
 | 模块 | 内容 | 额外后端运行时 |
 | --- | --- | --- |
-| `klib-data` | 契约、迁移、玩家数据缓存 | 无 |
+| `klib-data` | 字节与类型化 KV、迁移、玩家数据缓存 | 无 |
 | `klib-data-json` | JSON 文件提供器 | 无；Gson 由宿主提供 |
 | `klib-data-jdbc` | KV JDBC 会话、独立 SQL 执行器、显式行映射和外部迁移门禁 | 无 |
 | `klib-data-sqlite` | SQLite 提供器 | 无；SQLite JDBC 由宿主提供 |
@@ -73,6 +73,25 @@ public final class PlayerNotes {
 | `put(...)`、`delete(...)`、`entries(...)` | `CompletionStage` |
 
 命名空间隔离同一存储里的不同数据集。稳定的命名空间和键格式由业务层自己定义。
+
+### 类型化 KV
+
+`TypedKeyValueStore<T>` 直接复用现有 `StorageSession` 和 `me.kzheart.klib.data.cache.DataCodec<T>`，不创建另一份存储或事务引擎。
+Java 使用 `new TypedKeyValueStore<>(session, namespace, codec)`；Kotlin 使用扩展入口：
+
+```kotlin
+val profiles = session.typed("profiles", profileCodec)
+profiles.putAwait(playerId, profile)
+val found: Profile? = profiles.getAwait(playerId)
+profiles.transaction {
+    val current = get(playerId).orElse(null)
+    if (current != null) put(playerId, current.copy(level = current.level + 1))
+}
+```
+
+- Java 的 `get` 返回 `CompletionStage<Optional<T>>`，`put/delete/entries/transactionAsync` 同样返回阶段；Kotlin 通过 `getAwait/putAwait/deleteAwait/entriesAwait/transaction` 等待同一操作。
+- empty/null 只表示键不存在，codec 不得编码或解码 null；codec 错误不会伪装成缺失值。编码在提交前完成并复制字节，编码异常可同步抛出。
+- `TypedKeyValueView` 仅在同一 KV 事务回调及线程内有效，退出回调后读取失败。事务块不可挂起；它不会与下面的 SQL 事务组成跨存储原子性。
 
 ## 选择存储后端
 

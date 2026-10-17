@@ -100,7 +100,7 @@ klib {
 | `klib-lang` | 多语言、占位符、富文本与宿主 Adventure 适配 | [Lang](docs/modules/lang.md) |
 | `klib-command` | 命令树、注解、权限、建议、帮助样式与业务异常策略 | [Command](docs/modules/command.md) |
 | `klib-item` | 物品构建、标签、编解码与安全预览适配 | [Item](docs/modules/item.md) |
-| `klib-data` | 存储契约、迁移与玩家缓存 | [Data](docs/modules/data.md) |
+| `klib-data` | 字节与类型化 KV、迁移与玩家缓存 | [Data](docs/modules/data.md) |
 | `klib-ui` | 配置布局与动态绑定、状态差量菜单、页面导航、分页、投放区与聊天管理面板 | [UI](docs/modules/ui.md) |
 | `klib-script` | Kether 动作、编译检查、作用域执行与可选宿主互操作 | [Script](docs/modules/script.md) |
 | `klib-hook` | Vault、PlayerPoints、XConomy、PlaceholderAPI 与消耗奖励 | [Hook](docs/modules/hook.md) |

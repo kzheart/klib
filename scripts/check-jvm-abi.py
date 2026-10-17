@@ -65,6 +65,7 @@ def compare(old, new):
         current = new.get(name)
         if current is None: errors.append(f'{name}: exported class removed'); continue
         if current['major'] > 52: errors.append(f'{name}: exceeds Java 8 class version')
+        if prior.get('Signature') != current.get('Signature'): errors.append(f'{name}: class generic Signature changed')
         if prior['super'] != current['super']: errors.append(f'{name}: superclass changed')
         if not set(prior['interfaces']) <= set(current['interfaces']): errors.append(f'{name}: interface removed')
         # A previously extensible class cannot become final, nor abstract when concrete.
@@ -74,7 +75,7 @@ def compare(old, new):
             if after is None: errors.append(f'{name}: removed {member}'); continue
             if (before['flags'] & 8) != (after['flags'] & 8): errors.append(f'{name}: static changed: {member}')
             if before['flags'] & 1 and not after['flags'] & 1: errors.append(f'{name}: visibility narrowed: {member}')
-            if not prior['flags'] & 0x10 and (after['flags'] & 0x410) & ~(before['flags'] & 0x410): errors.append(f'{name}: final/abstract narrowed: {member}')
+            if not prior['flags'] & 0x10 and not (prior['flags'] & 0x200 and before['flags'] & 8) and (after['flags'] & 0x410) & ~(before['flags'] & 0x410): errors.append(f'{name}: final/abstract narrowed: {member}')
             for attr in ('Signature', 'Exceptions'):
                 if before.get(attr) != after.get(attr): errors.append(f'{name}: {attr} changed: {member}: {before.get(attr)} -> {after.get(attr)}')
     return errors

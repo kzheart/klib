@@ -32,9 +32,11 @@ class VersionSensitiveCodeBoundaryTest {
             "(?:net\\.minecraft|org\\.bukkit\\.craftbukkit)\\.");
     // CompatProviders 的反射发现白名单必须写完整实现类名字面量（重定位器按常量池整串改写），属有意豁免。
     private static final Set<String> EXEMPT_FILES = new HashSet<String>(Arrays.asList(
-            "klib-compat/src/main/java/me/kzheart/klib/compat/CompatProviders.java",
+            "klib-compat/src/main/kotlin/me/kzheart/klib/compat/CompatProviders.kt",
             // Shared packet shape lives in compat; concrete providers still select version ranges.
-            "klib-compat/src/main/java/me/kzheart/klib/compat/internal/ModernSidebarBridge.java"
+            "klib-compat/src/main/kotlin/me/kzheart/klib/compat/internal/ModernSidebarBridge.kt",
+            // Native tag layout discovery is one contained adapter; no NMS type escapes its API.
+            "klib-item/src/main/kotlin/me/kzheart/klib/item/tag/NativeItemTags.kt"
     ));
 
     @Test
@@ -44,15 +46,15 @@ class VersionSensitiveCodeBoundaryTest {
         AtomicInteger inspected = new AtomicInteger();
 
         try (Stream<Path> paths = Files.walk(root)) {
-            paths.filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> normalize(path).contains("/src/main/java/"))
+            paths.filter(path -> path.toString().endsWith(".java") || path.toString().endsWith(".kt"))
+                    .filter(path -> normalize(path).contains("/src/main/java/") || normalize(path).contains("/src/main/kotlin/"))
                     .forEach(path -> {
                         inspected.incrementAndGet();
                         inspect(root, path, violations);
                     });
         }
 
-        assertFalse(inspected.get() == 0, "No production Java files were inspected");
+        assertFalse(inspected.get() == 0, "No production Java/Kotlin files were inspected");
         assertTrue(violations.isEmpty(), "Version-sensitive code escaped compat-v*: " + violations);
     }
 

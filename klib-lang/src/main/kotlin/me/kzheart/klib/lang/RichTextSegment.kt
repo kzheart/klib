@@ -24,7 +24,7 @@ class RichTextSegment(
     fun obfuscated(): Boolean = obfuscated
     fun hover(): TextAction? = hover
     fun click(): TextAction? = click
-    fun withText(value: String): RichTextSegment =
+    @JvmName("withText") internal fun withText(value: String): RichTextSegment =
         RichTextSegment(value, color, bold, italic, underlined, strikethrough, obfuscated, hover, click)
 
     companion object {

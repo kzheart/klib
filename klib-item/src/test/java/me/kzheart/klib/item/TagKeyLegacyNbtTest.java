@@ -36,12 +36,4 @@ class TagKeyLegacyNbtTest {
         assertThrows(IllegalArgumentException.class, () -> TagKey.string("Bad Namespace:value"));
     }
 
-    @Test
-    void supportedNbtApiExposesBoxedNumericSetters() throws Exception {
-        Class<?> nbt = Class.forName("de.tr7zw.changeme.nbtapi.NBTCompound");
-
-        assertEquals(
-                Void.TYPE,
-                nbt.getMethod("setInteger", String.class, Integer.class).getReturnType());
-    }
 }

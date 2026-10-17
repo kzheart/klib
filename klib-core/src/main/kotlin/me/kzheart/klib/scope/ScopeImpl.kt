@@ -55,7 +55,8 @@ class ScopeImpl private constructor(
         }
     }
 
-    override fun <T : Any> registerCapability(type: Class<T>, capability: T): T {
+    override fun <T> registerCapability(type: Class<T>, capability: T): T {
+        if (capability == null) throw NullPointerException("capability")
         require(type.isInstance(capability)) { "Capability does not implement ${type.name}" }
         return lifecycleLock.withLock {
             ensureRegistrationAllowed()
@@ -65,12 +66,13 @@ class ScopeImpl private constructor(
         }
     }
 
-    override fun <T : Any> findCapability(type: Class<T>): Optional<T> {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T> findCapability(type: Class<T>): Optional<T> {
         val local = lifecycleLock.withLock { capabilities[type] }
-        return if (local != null) Optional.of(type.cast(local)) else parent?.findCapability(type) ?: Optional.empty()
+        return if (local != null) Optional.of<Any>(type.cast(local) as Any) as Optional<T> else parent?.findCapability(type) ?: Optional.empty<Any>() as Optional<T>
     }
 
-    override fun <T : Any> requireCapability(type: Class<T>): T = findCapability(type).orElseThrow {
+    override fun <T> requireCapability(type: Class<T>): T = findCapability(type).orElseThrow {
         IllegalStateException("Required capability is not installed: ${type.name}" +
             "; install the module first (e.g. ConfigModule.install / CommandModule.install)" +
             " in this scope or one of its parents before requiring it")
@@ -85,7 +87,7 @@ class ScopeImpl private constructor(
     }
 
     override fun dispose() = close()
-    override fun close() = lifecycleLock.withLock {
+    override fun close(): Unit = lifecycleLock.withLock {
         if (state == State.CLOSED) return
         ensureStableLifecycle()
         closeInternal(false)?.let { throw it }

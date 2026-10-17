@@ -40,8 +40,8 @@ class MessageColor private constructor(private val name: String, private val rgb
             require(rgb in 0..0xFFFFFF) { "rgb must be between 0x000000 and 0xFFFFFF" }
             return MessageColor(String.format(Locale.ROOT, "#%06X", rgb), rgb, null)
         }
-        @JvmStatic fun fromLegacy(code: Char): MessageColor? = LEGACY.firstOrNull { it.code == code.lowercaseChar() }
-        @JvmStatic fun fromTag(tag: String): MessageColor? =
+        @JvmStatic @JvmName("fromLegacy") internal fun fromLegacy(code: Char): MessageColor? = LEGACY.firstOrNull { it.code == code.lowercaseChar() }
+        @JvmStatic @JvmName("fromTag") internal fun fromTag(tag: String): MessageColor? =
             if (tag.matches(Regex("#[0-9a-fA-F]{6}"))) rgb(tag.substring(1).toInt(16))
             else LEGACY.firstOrNull { it.name == tag.lowercase(Locale.ROOT).replace('-', '_') }
     }

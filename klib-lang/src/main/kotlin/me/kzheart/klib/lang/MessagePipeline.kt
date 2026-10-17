@@ -84,7 +84,7 @@ class MessagePipeline(
         return RichText(result)
     }
 
-    fun updatePrefix(replacement: String) { prefix = replacement }
+    @JvmName("updatePrefix") internal fun updatePrefix(replacement: String) { prefix = replacement }
 
     private data class ResolvedText(val route: MessageRoute, val text: String)
     private data class ResolvedMessage(val route: MessageRoute, val message: RichText)

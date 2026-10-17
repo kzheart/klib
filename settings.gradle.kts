@@ -22,13 +22,6 @@ dependencyResolutionManagement {
             }
         }
         maven {
-            name = "codeMc"
-            url = uri("https://repo.codemc.io/repository/maven-public/")
-            content {
-                includeGroup("de.tr7zw")
-            }
-        }
-        maven {
             name = "extendedClip"
             url = uri("https://repo.extendedclip.com/releases/")
             content {

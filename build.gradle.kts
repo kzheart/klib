@@ -121,7 +121,6 @@ val junitLauncher = libs.junit.platform.launcher
 val spigotApi = libs.spigot.api
 val snakeYaml = libs.snakeyaml
 val adventureMiniMessage = libs.adventure.minimessage
-val itemNbtApi = libs.item.nbt.api
 val placeholderApi = libs.placeholderapi
 val sqliteJdbc = libs.sqlite.jdbc
 val mysqlConnector = libs.mysql.connector
@@ -164,6 +163,7 @@ configure(javaProjects) {
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
             compilerOptions {
                 jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+                jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.ENABLE)
                 freeCompilerArgs.add("-Xjdk-release=8")
             }
         }
@@ -448,7 +448,6 @@ project(":klib-item") {
         add("testImplementation", testSpigot)
         add("testImplementation", "com.google.guava:guava:21.0")
         add("testRuntimeOnly", "commons-lang:commons-lang:2.6")
-        add("runtimeOnly", itemNbtApi)
     }
 }
 
@@ -736,7 +735,7 @@ tasks.register("verifyMavenStaging") {
                     "$baseName.pom must not publish the host-provided Spigot API")
             }
             expectedPublicationDependencies[module.name]?.let { javaExpected ->
-                val expected = if (module.name == "klib-data")
+                val expected = if (module.name != "klib-guard-api")
                     javaExpected + "org.jetbrains.kotlin:kotlin-stdlib:compile" else javaExpected
                 val actual = pomDependencies(pom)
                 if (actual != expected) {

@@ -42,9 +42,9 @@ internal class ScopeGeneration(private val owner: ScopeImpl, private val parent:
             val child = owner.scope(name) { configure.accept(of(it).view()) }
             of(child).view()
         }
-        override fun <T : Any> registerCapability(type: Class<T>, capability: T): T = call { owner.registerCapability(type, capability) }
-        override fun <T : Any> findCapability(type: Class<T>): Optional<T> = call { owner.findCapability(type) }
-        override fun <T : Any> requireCapability(type: Class<T>): T = call { owner.requireCapability(type) }
+        override fun <T> registerCapability(type: Class<T>, capability: T): T = call { owner.registerCapability(type, capability) }
+        override fun <T> findCapability(type: Class<T>): Optional<T> = call { owner.findCapability(type) }
+        override fun <T> requireCapability(type: Class<T>): T = call { owner.requireCapability(type) }
         override fun rebuild() = call { owner.rebuild() }
         override fun dispose() = close()
         override fun close() = owner.closeInGeneration(this@ScopeGeneration)

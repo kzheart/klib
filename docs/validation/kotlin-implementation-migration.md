@@ -36,3 +36,18 @@ SFDIPOT 逐维覆盖结构、功能、数据、接口、平台、操作和时间
 3. 持久化与版本边界：JSON/JDBC CRUD、标签旧数据回读、旧/新服务端共享 API 等价与不支持能力的明确失败
 
 以 HICCUPPS（历史、图像/印象、可比产品、用户期望、产品、目的、标准）审查一致性。每一轮报告保留未覆盖矩阵，区分通过、失败、未运行和受限运行时，不能将 Guard/隔离运行时边界宣称完整支持。
+
+## 模块整合计划（迁移实现稳定后统一移动）
+
+保留现有 Gradle 项目名和 Maven 坐标，使用 `settings.gradle.kts` 的 `projectDir` 将物理结构分为：
+
+- `libraries/{core,command,config,lang,item,ui,hook}`：插件应用层的稳定能力
+- `storage/{data,jdbc,json,sqlite,mysql,postgresql}`：统一存储契约和可选驱动
+- `platform/{compat,versions/{v1_12,v1_20,v1_21,v26}}`：共享兼容契约/协议与薄版本入口
+- `runtime/{script,remote,guard-api}`：脚本执行、远程传输以及隔离加载契约
+
+依赖方向保持应用模块到 core、存储驱动到 JDBC/data、版本入口到 compat；core 不依赖 NMS、版本入口或具体数据库驱动。script/remote 消费稳定核心接口，不让核心反向依赖运行引擎。Guard API 独立保留无 Kotlin 加载依赖的 Java 边界，避免隔离加载器启动之前解析 Kotlin 运行时。
+
+目录归组不代替职责整合：现代侧边栏 1.20.4 起的重复 packet discovery/send/score 实现已合入 compat 内部一个深模块，只将可空参数与 Optional 的实际协议差异留在布局解析；v1_20/v1_21/v26 是薄选择入口。旧版 team/prefix 协议仍独立，避免以万能反射框架混合不同语义。各数据库保留独立坐标，防止 JSON 或 SQLite 用户被迫获取其他 JDBC 驱动；共享事务与资源处理已下沉 JDBC。各应用模块仍可按需打包，不能为减少目录数量强制捆绑不相关依赖。
+
+统一移动时同步 CI、文档、AGENTS、发布检查、源码边界扫描与 QA 脚本。最终验收必须从远端新提交干净 clone 编译、发布并运行双语言/旧二进制消费者，再绑定同一产物运行跨 MC 测试；工作区增量通过不替代这一步。

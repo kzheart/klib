@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture
 
 class ReactiveMenuInteropTest {
     @Test
-    fun `Kotlin uses the same Java state and lifecycle core`() {
+    fun `Kotlin uses the same state and lifecycle core`() {
         var released = 0
         MenuTestEnvironment().use { fixture ->
             val ui = fixture.menus.openReactive(fixture.player, "kotlin", State(0)) { session ->

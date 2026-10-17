@@ -1,8 +1,12 @@
 package me.kzheart.klib.ui;
 
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -11,10 +15,14 @@ public final class MenuHolder implements InventoryHolder {
     private final UUID playerId;
     private final MenuSession session;
     final MenuRenderer renderer;
+    final Player viewer;
     private Inventory inventory;
+    // Only framework-owned visual slots: never clear unrelated or player-owned slots.
+    final Map<Integer, ItemStack> renderedItems = new LinkedHashMap<Integer, ItemStack>();
 
-    MenuHolder(UUID playerId, MenuSession session, MenuRenderer renderer) {
-        this.playerId = Objects.requireNonNull(playerId, "playerId");
+    MenuHolder(Player viewer, MenuSession session, MenuRenderer renderer) {
+        this.viewer = Objects.requireNonNull(viewer, "viewer");
+        this.playerId = viewer.getUniqueId();
         this.session = Objects.requireNonNull(session, "session");
         this.renderer = Objects.requireNonNull(renderer, "renderer");
     }

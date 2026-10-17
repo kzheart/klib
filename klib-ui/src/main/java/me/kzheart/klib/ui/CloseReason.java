@@ -5,5 +5,6 @@ public enum CloseReason {
     PLAYER,
     REPLACED,
     SCOPE_CLOSED,
-    PLUGIN_DISABLED
+    PLUGIN_DISABLED,
+    RENDER_FAILED
 }

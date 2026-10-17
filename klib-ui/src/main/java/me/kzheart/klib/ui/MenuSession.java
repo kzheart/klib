@@ -70,7 +70,7 @@ public final class MenuSession implements Disposable {
         return parent.install(new MenuSession(parent, menuScope, model, returnTarget, overflowSink));
     }
 
-    synchronized void updateModel(MenuModel replacement) {
+    synchronized void validateModel(MenuModel replacement) {
         ensureOpen();
         Objects.requireNonNull(replacement, "replacement");
         if (replacement.size() != model.size() || !replacement.title().equals(model.title())) {
@@ -79,6 +79,10 @@ public final class MenuSession implements Disposable {
         for (DropZoneController zone : dropZones) for (Integer slot : zone.slots()) {
             if (replacement.entry(slot).isPresent()) throw new IllegalArgumentException("Refresh overlaps a drop zone: " + slot);
         }
+    }
+
+    synchronized void updateModel(MenuModel replacement) {
+        validateModel(replacement);
         model = replacement;
     }
 

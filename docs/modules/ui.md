@@ -77,6 +77,79 @@ menus.open(player, "gather-main", model);
 - 编译后的模型不可变，可以给多个玩家重复使用。
 - `MenuEntry` 保存物品快照和点击动作。框架拦截已编译条目的移动，统一处理双击、数字键、拖拽和 shift-click。**业务动作不要再自行修改菜单中的展示物品。**
 
+## 会话状态与合并刷新
+
+`openReactive(...)` 在现有 `MenuSession` 上保存每次打开独立的状态。Java 和 Kotlin 共用同一核心；状态由业务定义，使用不可变对象，集合也应复制后再保存。
+
+```java
+import me.kzheart.klib.ui.ReactiveMenuSession;
+
+ReactiveMenuSession<Integer> counter = menus.openReactive(
+        player, "counter", Integer.valueOf(0), ui ->
+                MenuCompiler.compile(MenuTemplate.builder("计数", 1)
+                        .slot(0, MenuEntry.of(
+                                Items.of("PAPER").name("次数：" + ui.state()).build(),
+                                click -> ui.update(value -> value + 1)))
+                        .slot(8, MenuEntry.of(
+                                Items.of("BARRIER").name("关闭").build(),
+                                click -> ui.navigate(() -> ui.viewer().closeInventory())))
+                        .build()));
+```
+
+| 入口 | 行为 |
+| --- | --- |
+| `state()` / `update(reducer)` | 主线程读写；状态按 `equals` 相等时不刷新，返回 null 或重入更新直接失败 |
+| `invalidate()` | 可从任意线程通知；下一 tick 合并一次重建，关闭后的通知忽略 |
+| `bind(subscription)` | 把 `Disposable` 订阅交给已有菜单 Scope，关闭、替换、父作用域重建/关闭时释放 |
+| `holder()` / `scope()` | 获取同一个 `MenuHolder` 与 `MenuSession.scope()`，继续复用投放区和定时器 |
+| `isCurrent()` | 主线程检查原 Player 实例仍在线，且仍查看本次打开的 Inventory |
+| `navigate(action)` | 下一 tick 执行导航；等待期间的重复调用返回 false，状态改变或会话失效会丢弃动作 |
+
+- 视图函数在首次打开和刷新时调用，只构建完整 `MenuModel`。不要在里面扫描解锁、查询数据库、订阅事件或修改状态；读取/扫描放在打开前或明确的业务事件中。
+- 相同菜单定义可以复用，每次打开的状态、读取与订阅不共享。框架不会深复制任意业务状态，不能原地修改状态对象来绕过 `update`。
+- 例如图鉴 lore 翻页只更新以条目 ID 为键的页码；商品浏览使用已准备好的目录/计数器快照。配方、价格、解锁规则仍由业务决定。
+
+外部变更源返回 `Disposable` 时直接绑定，异步通知只请求刷新：
+
+```java
+counter.bind(catalogChanges.subscribe(counter::invalidate));
+```
+
+这里的 `catalogChanges` 由业务提供。没有默认轮询；需要定时刷新时复用 `counter.scope().every(period, counter::invalidate)`。
+
+### 异步读取与过期结果
+
+`readLatest` 只观察已有的读取结果，不负责启动或取消领域操作。它把成功归并与错误处理切回主线程，并检查本次会话、原 Player、当前 Inventory、状态版本和同 key 请求身份。
+
+```java
+CompletionStage<Boolean> applied = counter.readLatest(
+        "available-count", service.readAvailableCount(player.getUniqueId()),
+        (current, available) -> available,
+        failure -> player.sendMessage("读取失败，请重试"));
+```
+
+| 情况 | 观察结果与回调 |
+| --- | --- |
+| 当前读取成功 | 主线程调用 reducer；结果为 true，变化的状态下一 tick 刷新 |
+| 同 key 新读取、状态已改变或菜单关闭/被替换 | 旧观察结果为 false；不调用 reducer 或错误回调 |
+| 同 UUID 已是另一个 Player，或玩家已换 Inventory | 不应用结果，返回 false |
+| 当前来源失败 | 主线程调用错误回调；观察结果保留原异常 |
+| 调度被拒绝、reducer 失败 | 观察结果异常终结 |
+
+- 每次真实状态改变会让此前所有 key 的读取过期，避免旧分类/页码结果覆盖新状态。互相独立的数据可以先在业务层合并为同一快照，再一次更新。
+- `true` 表示结果通过检查并已归并，不代表一定发生槽位写入；相等状态不会重画。返回阶段上的普通 `thenAccept` 等回调没有线程保证，需要 GUI 操作时再次使用 `AsyncTasks.thenSync`。
+- 调用 `applied.toCompletableFuture().cancel(false)` 会立即释放本次观察与排队回调；外部源 future 保持运行。
+- 关闭只终结展示观察，**不会取消传入的源 future，也不会撤销、重试或判定购买/存款/领取结果**。交易寿命和版本核验留在领域服务中，不要用 `readLatest` 包裹写操作。
+
+### 安全导航与槽位差量
+
+- `navigate(...)` 用显式一 tick 延迟处理打开/关闭物品栏、返回和其他界面跳转；不要在 `InventoryClickEvent` 动作里直接调用 `openInventory` / `closeInventory`。
+- `MenuHolder.refresh(...)` 先校验完整候选模型，再比较每个展示槽位的完整 `ItemStack.equals`，包括数量和 meta；相等图标跳过 `setItem`，但动作表仍更新到新模型。
+- 消失的展示槽置空，不再全页 `clear`。未归框架管理的槽位不参与展示 diff；投放区始终使用 `DropZoneController` 的权威快照，关闭归还协议不变。
+- 标题、尺寸变化仍要求显式打开新菜单；刷新重叠投放区直接拒绝。玩家真实输入只放在投放区，不能用普通展示条目或空白槽代替所有权管理。
+- 槽位提交失败时关闭会话，原动作表不会发布一半；关闭原因是 `RENDER_FAILED`。状态菜单的视图构建失败也会关闭并记录错误，防止半更新界面继续接受动作。
+- 聊天输入会关闭当前 Inventory 时，不要尝试复活已关闭的状态会话。需要跨输入恢复的流程由业务在外层 Scope 保留导航上下文，再显式打开新会话。
+
 ## 从配置编译菜单
 
 配置模块把 YAML 解码为普通 `Map<String, Object>` 后，用 `MenuCompiler.compileYaml(...)` 编译：
@@ -410,14 +483,14 @@ val model = menu("工具", 1) {
 
 - `MenuRenderer` 和 `BukkitChatPrompts` 都必须安装到 `Scope`。作用域关闭时，监听器、打开的菜单、刷新任务和未完成提示统一清理。
 - 菜单创建、打开、渲染和玩家背包操作必须在 Bukkit 主线程进行。
-- `MenuRenderer.open(...)`、`MenuRenderer.render(...)` 和 `MenuHolder.refresh()` 在入口断言主线程，从异步线程调用直接抛 `IllegalStateException`。异步流程中先用 `scope.sync(...)` 或 `thenSync(...)` 切回主线程再开菜单。
+- `MenuRenderer.open(...)`、`openReactive(...)`、`MenuRenderer.render(...)`、`MenuHolder.refresh()` 及状态读写/绑定/导航在入口断言主线程，从异步线程调用直接抛 `IllegalStateException`。异步结果用 `scope.submitSync(...)` 或 `AsyncTasks.thenSync(...)` 切回主线程；只有状态菜单的 `invalidate()` 可直接跨线程调用。
 - `MenuSession` 关闭后自动从安装它的父作用域摘除，长生命周期作用域中反复开关菜单不会累积已结束的会话。
 - 聊天解析器由异步聊天事件调用，只做纯解析；不要在里面访问世界、背包或其他主线程状态。
 
 ## 常见坑
 
 - 点击动作抛出普通异常时，渲染器会记录错误并调用 `MenuErrorHandler`。可以在安装时提供统一的玩家提示，但错误处理器本身也应保持轻量。
-- 玩家在提示完成前可能下线：回调里必须再次检查 `isOnline()`，且不要长期保存 `Player` 之外的可变菜单状态。
+- 普通聊天提示回调仍需检查玩家/导航流程是否有效；状态菜单的 `readLatest` 已检查原 Player 和本次 Inventory 身份。不要仅凭相同 UUID 或 `isOnline()` 恢复一个旧流程。
 
 ## 相关页面
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import me.kzheart.klib.KLogger;
 import me.kzheart.klib.scope.Disposable;
@@ -33,6 +35,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -141,7 +144,7 @@ public final class MenuRenderer implements Listener, Disposable {
                 model,
                 items -> returnToInventory(player, items),
                 items -> dropAtPlayer(player, items));
-        MenuHolder menuHolder = new MenuHolder(player.getUniqueId(), session, this);
+        MenuHolder menuHolder = new MenuHolder(player, session, this);
         try {
             configure.accept(session);
             Inventory inventory = createInventory(inventoryFactory, menuHolder, model);
@@ -166,33 +169,112 @@ public final class MenuRenderer implements Listener, Disposable {
         }
     }
 
-    /** 先应用不可变菜单条目，再应用权威投放区状态。 */
+    /** 每次打开创建独立状态；视图函数只读取状态并构建模型，不执行订阅或业务副作用。 */
+    public <S> ReactiveMenuSession<S> openReactive(
+            Player player, String name, S initialState,
+            Function<? super ReactiveMenuSession<S>, MenuModel> view
+    ) {
+        ensureMainThread("打开状态菜单");
+        ensureOpen();
+        ReactiveMenuSession<S> reactive = new ReactiveMenuSession<S>(player, initialState, view);
+        MenuModel initial = reactive.buildModel();
+        MenuHolder holder = open(player, name, initial);
+        try {
+            reactive.attach(holder);
+            return reactive;
+        } catch (RuntimeException failure) {
+            holder.close(CloseReason.REPLACED);
+            throw failure;
+        }
+    }
+
+    /** 先校验完整候选模型，提交所有槽位成功后才发布新的动作表。 */
     void update(MenuHolder holder, MenuModel model) {
         ensureMainThread("刷新菜单");
         ensureOwned(holder);
+        holder.session().validateModel(model);
+        renderModel(holder, model);
         holder.session().updateModel(model);
-        render(holder);
     }
 
     public void render(MenuHolder holder) {
         Objects.requireNonNull(holder, "holder");
         ensureMainThread("渲染菜单");
         ensureOwned(holder);
-        Inventory inventory = Objects.requireNonNull(holder.getInventory(), "holder inventory");
-        inventory.clear();
-        for (Map.Entry<Integer, MenuEntry> entry : holder.model().entries().entrySet()) {
-            inventory.setItem(entry.getKey().intValue(), entry.getValue().item());
+        holder.session().validateModel(holder.model());
+        renderModel(holder, holder.model());
+    }
+
+    private void renderModel(MenuHolder holder, MenuModel model) {
+        Map<Integer, ItemStack> desired = new LinkedHashMap<Integer, ItemStack>();
+        for (Map.Entry<Integer, MenuEntry> entry : model.entries().entrySet()) {
+            desired.put(entry.getKey(), entry.getValue().item());
         }
-        renderDropZones(holder);
+        for (DropZoneController zone : holder.session().dropZones()) {
+            Map<Integer, ItemStack> contents = zone.snapshot();
+            for (Integer slot : zone.slots()) desired.put(slot, contents.get(slot));
+        }
+        commitSlots(holder, desired, true);
+    }
+
+    private void commitSlots(MenuHolder holder, Map<Integer, ItemStack> desired, boolean complete) {
+        Inventory inventory = Objects.requireNonNull(holder.getInventory(), "holder inventory");
+        Set<Integer> slots = new LinkedHashSet<Integer>();
+        if (complete) slots.addAll(holder.renderedItems.keySet());
+        slots.addAll(desired.keySet());
+        try {
+            for (Integer slot : slots) {
+                ItemStack previous = holder.renderedItems.get(slot);
+                ItemStack replacement = desired.get(slot);
+                // equals includes quantity and metadata; isSimilar alone ignores quantity.
+                if (!Objects.equals(previous, replacement)) {
+                    inventory.setItem(slot.intValue(), replacement == null ? null : replacement.clone());
+                }
+            }
+            if (complete) holder.renderedItems.clear();
+            for (Map.Entry<Integer, ItemStack> entry : desired.entrySet()) {
+                ItemStack item = entry.getValue();
+                holder.renderedItems.put(entry.getKey(), item == null ? null : item.clone());
+            }
+        } catch (RuntimeException failure) {
+            failRender(holder, failure);
+            throw failure;
+        } catch (Error failure) {
+            failRender(holder, failure);
+            throw failure;
+        }
+    }
+
+    void failRender(MenuHolder holder, Throwable failure) {
+        logger.error("菜单渲染失败: title=" + holder.model().title()
+                + " player=" + holder.playerId(), failure);
+        try {
+            close(holder, CloseReason.RENDER_FAILED);
+        } catch (RuntimeException closeFailure) {
+            failure.addSuppressed(closeFailure);
+        }
+        Inventory inventory = holder.getInventory();
+        if (inventory != null) {
+            for (HumanEntity viewer : new ArrayList<HumanEntity>(inventory.getViewers())) {
+                try {
+                    viewer.closeInventory();
+                } catch (RuntimeException closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+            }
+        }
     }
 
     MenuCloseResult close(MenuHolder holder, CloseReason reason) {
         Objects.requireNonNull(holder, "holder");
         Objects.requireNonNull(reason, "reason");
         ensureOwned(holder);
-        MenuCloseResult result = holder.session().close(reason);
-        synchronized (this) {
-            open.remove(holder);
+        MenuCloseResult result;
+        try {
+            result = holder.session().close(reason);
+        } finally {
+            synchronized (this) { open.remove(holder); }
+            holder.renderedItems.clear();
         }
         reportUnreturned(holder, result);
         return result;
@@ -204,8 +286,7 @@ public final class MenuRenderer implements Listener, Disposable {
         if (holder == null) {
             return;
         }
-        if (!holder.playerId().equals(event.getWhoClicked().getUniqueId())
-                || !(event.getWhoClicked() instanceof Player)) {
+        if (event.getWhoClicked() != holder.viewer) {
             event.setCancelled(true);
             return;
         }
@@ -292,7 +373,7 @@ public final class MenuRenderer implements Listener, Disposable {
         if (holder == null) {
             return;
         }
-        if (!holder.playerId().equals(event.getWhoClicked().getUniqueId())) {
+        if (event.getWhoClicked() != holder.viewer) {
             event.setCancelled(true);
             return;
         }
@@ -311,8 +392,17 @@ public final class MenuRenderer implements Listener, Disposable {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onClose(InventoryCloseEvent event) {
         MenuHolder holder = holder(event.getView().getTopInventory());
-        if (holder != null && holder.playerId().equals(event.getPlayer().getUniqueId())) {
+        if (holder != null && event.getPlayer() == holder.viewer) {
             close(holder, CloseReason.PLAYER);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        List<MenuHolder> snapshot;
+        synchronized (this) { snapshot = new ArrayList<MenuHolder>(open); }
+        for (MenuHolder holder : snapshot) {
+            if (holder.viewer == event.getPlayer()) close(holder, CloseReason.PLAYER);
         }
     }
 
@@ -536,13 +626,12 @@ public final class MenuRenderer implements Listener, Disposable {
     }
 
     private void renderDropZones(MenuHolder holder) {
-        Inventory inventory = holder.getInventory();
+        Map<Integer, ItemStack> desired = new LinkedHashMap<Integer, ItemStack>();
         for (DropZoneController zone : holder.session().dropZones()) {
             Map<Integer, ItemStack> contents = zone.snapshot();
-            for (Integer slot : zone.slots()) {
-                inventory.setItem(slot.intValue(), contents.get(slot));
-            }
+            for (Integer slot : zone.slots()) desired.put(slot, contents.get(slot));
         }
+        commitSlots(holder, desired, false);
     }
 
     private static List<ItemStack> returnToInventory(Player player, List<ItemStack> items) {
@@ -598,7 +687,7 @@ public final class MenuRenderer implements Listener, Disposable {
     }
 
     /** 主线程断言；无服务端环境（如单元测试）时跳过检查。 */
-    private static void ensureMainThread(String action) {
+    static void ensureMainThread(String action) {
         Server server = Bukkit.getServer();
         if (server != null && !server.isPrimaryThread()) {
             throw new IllegalStateException(action + "必须在服务器主线程执行，"

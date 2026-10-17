@@ -335,6 +335,7 @@ player.inventory.setItem(0, restored)
 
 - 旧格式包含材质、数量、Damage/tag 等持久化字段；现代格式通过服务端 registry-aware codec 处理 id、count 和可持久化 components。树的字段形状属于当前服务端，不是 Klib 的跨版本统一 schema。
 - 现代快照是持久化表示，可能省略默认组件或使用组件差量；它不保证枚举每一种可用组件、所有默认值或不可持久化的运行状态。
+- `minecraft:custom_data` 使用精确 NBT 读写保留原类型；Byte / Int / Long 列表与同值数组保持区别，不由宿主组件 codec 将列表规范化成数组。
 - `readItem` 不修改原物品，`createItem` 不修改输入树或已有物品；返回值不会自动进入背包，仍须显式 `setItem`。不要用依次修改 type/amount/meta 模拟完整重建。
 - 空气物品不能导出；重建要求非空 String `id` 和当前 schema 的正数数量：旧格式 `Count` 为 Byte，现代 `count` 为 Int，仅 custom_data 树不能直接传入。
 - 空气/未知物品结果、数量与请求不一致和服务端 codec 报告的解析失败会抛异常，不退回原物品或接受 partial 结果；未知/多余字段如何处理仍由宿主 codec 决定。

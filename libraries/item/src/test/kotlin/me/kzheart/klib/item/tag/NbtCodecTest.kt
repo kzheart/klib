@@ -37,6 +37,24 @@ class NbtCodecTest {
         }
     }
 
+    @Test fun `numeric lists stay distinct from primitive arrays in nested custom data`() {
+        val data = NbtCompound()
+            .put("byteList", NbtList.of(NbtTag.byteValue(1), NbtTag.byteValue(2)))
+            .put("intList", NbtList.of(NbtTag.intValue(1), NbtTag.intValue(2)))
+            .put("longList", NbtList.of(NbtTag.longValue(1), NbtTag.longValue(2)))
+            .put("byteArray", NbtTag.bytes(byteArrayOf(1, 2)))
+            .put("intArray", NbtTag.ints(intArrayOf(1, 2)))
+            .put("longArray", NbtTag.longs(longArrayOf(1, 2)))
+            .put("emptyList", NbtList())
+        val root = NbtCompound().putCompound("components", NbtCompound().putCompound("minecraft:custom_data", data))
+        val copies = listOf(NbtCodec.fromBytes(NbtCodec.toBytes(root)),
+            NbtCodec.fromSnbt(NbtCodec.toSnbt(root)), NbtCodec.fromJson(NbtCodec.toJson(root)))
+        copies.forEach { assertEquals(root, it) }
+        assertNotEquals(data["byteList"], data["byteArray"])
+        assertNotEquals(data["intList"], data["intArray"])
+        assertNotEquals(data["longList"], data["longArray"])
+    }
+
     @Test fun `public binary codec delegates without changing vanilla wire bytes`() {
         val root = NbtCompound().put("x", NbtTag.intValue(42))
         val expected = byteArrayOf(10, 0, 0, 3, 0, 1, 120, 0, 0, 0, 42, 0)

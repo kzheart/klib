@@ -76,6 +76,16 @@ object NativeItemTags {
         return value
     }
 
+    internal fun completeItemCustomData(tags: NbtCompound): NbtCompound? {
+        val components = tags["components"] as? NbtCompound ?: return null
+        val names = listOf("minecraft:custom_data", "custom_data", ":custom_data")
+        val present = names.filter { components.contains(it) }
+        require(present.size <= 1 && (present.isEmpty() || names.none { components.contains("!$it") })) {
+            "Complete item data has duplicate or conflicting custom_data components"
+        }
+        return present.singleOrNull()?.let { components[it] } as? NbtCompound
+    }
+
     private fun access(): Access = accessOrNull()
         ?: throw IllegalStateException("Native item NBT is unavailable for this server layout", failure)
 
@@ -182,12 +192,31 @@ object NativeItemTags {
         // 完整物品能力延迟解析，不改变现有 root/custom_data 入口的可用性。
         private val fullItem by lazy { FullItemCodec() }
 
-        fun readItem(item: ItemStack): NbtCompound = decode(fullItem.save(toNative.invoke(null, item)))
+        fun readItem(item: ItemStack): NbtCompound {
+            val handle = toNative.invoke(null, item)
+            val snapshot = decode(fullItem.save(handle))
+            if (storage == ItemTagStorage.CUSTOM_DATA) {
+                // Registry codec 的 DynamicOps 会把数字 LIST 规范化为数组；业务 NBT 必须保留精确类型。
+                val raw = getComponent!!.invoke(handle, component)?.let { customTag!!.get(it) }
+                if (raw != null) {
+                    val components = snapshot.getCompound("components") ?: NbtCompound()
+                    components.putCompound("minecraft:custom_data", decode(raw))
+                    snapshot.putCompound("components", components)
+                }
+            }
+            return snapshot
+        }
 
         fun createItem(tags: NbtCompound): ItemStack {
             // Mojang 的宽松 optional 字段可能把非法 count 变为默认 1，不能据 result 存在即当输入有效。
             val count = completeItemCount(tags, storage)
+            val exact = if (storage == ItemTagStorage.CUSTOM_DATA) completeItemCustomData(tags) else null
             val handle = fullItem.load(encode(tags))
+            if (storage == ItemTagStorage.CUSTOM_DATA) {
+                // 其余组件仍由宿主 codec 校验；custom_data 独立恢复，避免 load 再次折叠 LIST 类型。
+                // 宿主也可接受 SNBT 字符串形式；仅 compound 需要保留二进制类型，其他合法形式交给 codec。
+                if (exact != null && !exact.isEmpty()) setComponent!!.invoke(null, component, handle, encode(exact))
+            }
             val item = toBukkit.invoke(null, handle) as ItemStack
             require(!InventoryItems.isAir(item) && item.amount > 0) { "Complete item data produced an empty or unknown item" }
             require(item.amount == count) { "Server item codec normalized count $count to ${item.amount}" }

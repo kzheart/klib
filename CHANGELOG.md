@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 修复完整物品模式中宿主组件 codec 将 custom_data 的同型数字列表转为数组；导出和重建均保留原始 NBT 类型，其他组件继续由宿主校验。
+
 - 第三方改编来源与归属集中到相关模块的许可证资源，随 JAR 保留完整 MIT 条款；移除顶层重复声明并同步许可检查和文档入口。
 
 - 将 Core、Command、Config、Lang、Item、UI、Hook、存储、Compat、Script 与 Remote 的执行实现迁入 Kotlin，共用生命周期、任务、解析和资源处理；保留必要的 Java SPI、注解、开放继承及薄二进制边界，Java 仍使用原有工厂、Builder、SAM 与 `CompletionStage`。

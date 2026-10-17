@@ -56,11 +56,12 @@ abstract class AbstractJdbcStorageProvider : StorageProvider, DiagnosticSource {
             val startedAt = System.currentTimeMillis()
             try {
                 val session = JdbcStorageSession(::createConnection, dialect, executor, { sessions.remove(it) }, logger)
-                sessions.add(session)
-                if (disposed.get()) {
-                    // 发布后再次检查，关闭期间刚发布的连接也必须释放。
-                    sessions.remove(session)
-                    session.dispose()
+                val published = synchronized(sessions) {
+                    if (disposed.get()) false else { sessions.add(session); true }
+                }
+                if (!published) {
+                    // 尚未发布，无业务工作可排队；open 失败前必须完成晚到连接的关闭。
+                    session.disposeBeforePublication()
                     throw IllegalStateException("provider is disposed")
                 }
                 logger?.success("已连接 ${dialect.displayName()} 存储后端，耗时 ${System.currentTimeMillis() - startedAt} 毫秒")

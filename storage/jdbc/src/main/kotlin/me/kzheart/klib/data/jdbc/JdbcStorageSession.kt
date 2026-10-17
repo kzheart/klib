@@ -140,14 +140,7 @@ internal class JdbcStorageSession(
 
     override fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
-        val closed = CompletableFuture.runAsync({
-            try { connection?.close(); connection = null }
-            catch (error: SQLException) { throw StorageException("Could not close JDBC storage", error) }
-        }, executor).whenComplete { _, error ->
-            if (error != null) logger?.error("关闭数据库连接时发生异常", error)
-            executor.shutdown()
-            onClose(this)
-        }
+        val closed = CompletableFuture.runAsync(::closeConnection, executor).whenComplete { _, _ -> finishClose() }
         if (Thread.currentThread() === executorThread) return
         try {
             closed.get(30L, TimeUnit.SECONDS)
@@ -160,6 +153,27 @@ internal class JdbcStorageSession(
         } catch (error: TimeoutException) {
             throw StorageException("Timed out closing JDBC storage", error)
         }
+    }
+
+    /** 仅供打开线程清理未发布的会话；普通 dispose 仍须排在已接受事务之后。 */
+    internal fun disposeBeforePublication() {
+        check(Thread.currentThread() === executorThread) { "Unpublished session must close on its opening thread" }
+        check(disposed.compareAndSet(false, true)) { "Unpublished session was already disposed" }
+        try { closeConnection() } finally { finishClose() }
+    }
+
+    private fun closeConnection() {
+        try { connection?.close(); connection = null }
+        catch (error: SQLException) {
+            val failure = StorageException("Could not close JDBC storage", error)
+            logger?.error("关闭数据库连接时发生异常", failure)
+            throw failure
+        }
+    }
+
+    private fun finishClose() {
+        executor.shutdown()
+        onClose(this)
     }
 
     /** 参数绑定与错误转换集中处理，查询只声明各自的读写逻辑。 */

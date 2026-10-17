@@ -430,7 +430,7 @@ Kotlin 使用相同 SAM／object 回调；`notifications.ready().await()` 等待
 - 认证、数据库或配置错误立即终结；其他连接故障有界重试，`onFailure(error, false)` 报告重试，最终故障通过 `completion` 和终态回调报告。
 - 队列溢出明确失败，排空此前已接受事件，不静默丢弃。容量限制本库分发队列，不代表 pgJDBC 内部接收批次有相同上限。
 - 关闭不会打断已接受的回调，也不等待回调自行启动的外部异步工作。阻塞回调会延迟排空；`dispose` 超时明确失败，不能称资源已关闭。
-- 回调可以调用 `closeAsync()` 后返回，不能 `join/get/await` 自己的关闭或关闭其等待自己的 Scope；直接等待返回的关闭 future 会被拒绝，派生异步链也不得自行阻塞等待。
+- 通知回调与 `ready()` 的同步 continuation 均可以调用 `closeAsync()` 后返回，不能 `join/get/await` 自己的关闭或关闭其等待自己的 Scope；直接等待返回的关闭 future 会被拒绝，派生异步链也不得自行阻塞等待。
 
 连接失败抛出的 `StorageException` 消息带后端类型和实际耗时，用来区分：
 

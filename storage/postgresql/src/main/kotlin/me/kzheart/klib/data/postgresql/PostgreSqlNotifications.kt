@@ -62,7 +62,7 @@ class PostgreSqlListenSession internal constructor(private val connect: () -> Co
     override fun close() = dispose()
     override fun dispose() {
         val completion = closeAsync()
-        check(Thread.currentThread() !== dispatcher && Thread.currentThread() !== receiver) { "Do not wait for LISTEN close inside its callback; use closeAsync and return" }
+        check(!isSessionThread()) { "Do not wait for LISTEN close inside its callback; use closeAsync and return" }
         try { completion.toCompletableFuture().get(options.closeTimeout.toMillis(), TimeUnit.MILLISECONDS) }
         catch (interrupted: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -169,9 +169,10 @@ class PostgreSqlListenSession internal constructor(private val connect: () -> Co
         }
         if (Thread.currentThread() !== receiver) receiver.interrupt()
     }
+    private fun isSessionThread(): Boolean = Thread.currentThread() === dispatcher || Thread.currentThread() === receiver
     private fun closeView(): CompletableFuture<Void> {
         val view = object : CompletableFuture<Void>() {
-            private fun checkWait() { check(isDone || Thread.currentThread() !== dispatcher) { "A LISTEN callback cannot wait for its own close" } }
+            private fun checkWait() { check(isDone || !isSessionThread()) { "A LISTEN callback cannot wait for its own close" } }
             override fun join(): Void? { checkWait(); return super.join() }
             override fun get(): Void? { checkWait(); return super.get() }
             override fun get(timeout: Long, unit: TimeUnit): Void? { checkWait(); return super.get(timeout, unit) }

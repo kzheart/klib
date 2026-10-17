@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 修复 LISTEN 的 `ready()` 同步 continuation 等待自身关闭时 receiver/reaper 互等；与通知回调统一拒绝关闭自等待，仍允许异步发起关闭。
+
 - Data 新增基于现有 `StorageSession` / `DataCodec` 的类型化 KV 及受限事务视图，缺失值明确返回 empty/null，编码值不允许 null。
 - JDBC 新增 `Databases.open` / `Database` 受管资源、Kotlin 薄挂起读写入口、集中参数绑定与生命周期受限的 `SqlRow`；复用有界 SQL 执行器、同连接事务及外部迁移门禁，关闭排空后才释放自有数据源，取消打开也回收晚到资源。
 - 新增按需制品 `klib-data-pool`，以 Java 8 兼容的 Apache Commons DBCP 2.14.0 薄适配提供有界连接池，不向现有 KV 后端传递池依赖。

@@ -119,7 +119,7 @@ klib {
 | `klib-data-pool` | 可选 Apache Commons DBCP 连接池适配；不由其他存储后端自动引入 |
 | `klib-data-sqlite` | SQLite；使用宿主提供的 SQLite JDBC |
 | `klib-data-mysql` | MySQL；包含 MySQL Connector/J |
-| `klib-data-postgresql` | PostgreSQL；包含 pgJDBC、专用 LISTEN 会话与事务迁移 |
+| `klib-data-postgresql` | PostgreSQL；包含 pgJDBC、专用 LISTEN 会话（接收/回调线程防关闭自等待）与事务迁移 |
 
 存储配置与使用方式见 [Data 文档](docs/modules/data.md)。
 

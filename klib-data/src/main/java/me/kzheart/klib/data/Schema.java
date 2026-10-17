@@ -20,6 +20,9 @@ public final class Schema {
             throw new NullPointerException("migrations");
         }
         List<Migration> ordered = new ArrayList<Migration>(migrations);
+        for (Migration migration : ordered) {
+            if (migration == null) throw new NullPointerException("migration");
+        }
         Collections.sort(ordered, Comparator.comparingInt(Migration::version));
         Set<Integer> versions = new HashSet<Integer>();
         for (Migration migration : ordered) {
@@ -33,6 +36,11 @@ public final class Schema {
 
     public String name() {
         return name;
+    }
+
+    /** 最新声明版本；空结构为 0。版本可以不连续，但必须正数且唯一。 */
+    public int version() {
+        return migrations.isEmpty() ? 0 : migrations.get(migrations.size() - 1).version();
     }
 
     public List<Migration> migrations() {

@@ -5,8 +5,8 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 在各自独立的事务中应用每项待处理迁移。版本读取、迁移主体和版本写入
- * 共用同一事务（在方言支持时采用锁定读），因此并发实例不会重复应用
- * 同一项迁移。
+ * 共用同一事务（在方言支持时采用锁定读）。跨实例互斥仍依赖后端锁语义，
+ * 特别是尚无版本行时，不把普通的版本比较视为通用分布式迁移锁。
  */
 public final class MigrationRunner {
     private MigrationRunner() {
@@ -25,6 +25,10 @@ public final class MigrationRunner {
     private static CompletionStage<Integer> step(StorageSession session, Schema schema) {
         return session.transaction(context -> {
             int current = context.schemaVersion(schema.name());
+            if (current < 0 || current > schema.version()) {
+                throw new StorageException("Unsupported schema version " + current
+                        + " for " + schema.name() + "; latest declared version is " + schema.version());
+            }
             Migration next = null;
             for (Migration candidate : schema.migrations()) {
                 if (candidate.version() > current) {

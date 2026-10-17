@@ -484,6 +484,7 @@ project(":klib-data-json") {
 project(":klib-data-jdbc") {
     dependencies {
         add("api", project(":klib-data"))
+        add("testRuntimeOnly", sqliteJdbc)
     }
 }
 
@@ -1034,7 +1035,7 @@ publishableProjects.forEach { module ->
 // Compile consumer contracts separately: valid Kotlin snippets and intentional type/DSL failures.
 val kotlinConsumerCompiler = configurations.create("kotlinConsumerCompiler")
 dependencies.add(kotlinConsumerCompiler.name, "org.jetbrains.kotlin:kotlin-compiler-embeddable:2.4.21")
-val consumerModules = listOf("core", "config", "command", "item", "ui", "data", "script").map { project(":klib-$it") }
+val consumerModules = listOf("core", "config", "command", "item", "ui", "data", "data-jdbc", "script").map { project(":klib-$it") }
 val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts") {
     group = "verification"
     description = "Compiles real Kotlin consumer snippets and checks invalid DSL/type contracts are rejected."
@@ -1079,6 +1080,32 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
                 }
                 suspend fun save(session: StorageSession) {
                     session.transactionAwait { put("n", "k", byteArrayOf(1)) }
+                }
+            """.trimIndent()),
+            "ValidSql" to (true to """
+                import me.kzheart.klib.data.jdbc.*
+                import kotlinx.coroutines.future.await
+                import javax.sql.DataSource
+                data class Profile(val id: Int, val note: String?)
+                suspend fun load(sql: JdbcExecutor, id: Int): Profile? =
+                    sql.work { client ->
+                        client.queryOne("SELECT id, note FROM profile WHERE id = ?",
+                            { statement -> statement.setInt(1, id) },
+                            { row -> Profile(row.getInt("id"), row.getString("note")) })
+                    }.await().orElse(null)
+                suspend fun save(sql: JdbcExecutor, id: Int) {
+                    sql.transaction { client ->
+                        client.update("DELETE FROM profile WHERE id = ?") { statement ->
+                            statement.setInt(1, id)
+                        }
+                    }.await()
+                }
+            """.trimIndent()),
+            "SuspendingSqlTransaction" to (false to """
+                import me.kzheart.klib.data.jdbc.*
+                import kotlinx.coroutines.delay
+                suspend fun wrong(sql: JdbcExecutor) {
+                    sql.transaction { client -> delay(1) }
                 }
             """.trimIndent()),
             "WrongTagType" to (false to """
@@ -1131,6 +1158,7 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
                 "WrongTagType" to "type mismatch",
                 "OuterDslReceiver" to "implicit receiver",
                 "SuspendingTransaction" to "suspension functions",
+                "SuspendingSqlTransaction" to "suspension functions",
             )[name]
             if (expectedDiagnostic != null && !log.readText().contains(expectedDiagnostic)) {
                 throw GradleException("$name failed for an unexpected reason:\n${log.readText()}")

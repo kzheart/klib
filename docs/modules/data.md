@@ -1,6 +1,6 @@
 # klib-data
 
-面向字节的异步键值存储，带事务、结构迁移和玩家数据缓存。基础模块不选存储实现；阻塞的文件或 JDBC I/O 由你显式选择的提供器放到它自己的执行器里。
+异步键值存储、玩家缓存，以及可选 JDBC SQL 执行边界。KV 与关系型 SQL 分别使用自己的事务和迁移入口；阻塞 I/O 在明确的存储执行器上运行。
 
 | 模块名 | 制品 |
 | --- | --- |
@@ -28,7 +28,7 @@ klib {
 | --- | --- | --- |
 | `klib-data` | 契约、迁移、玩家数据缓存 | 无 |
 | `klib-data-json` | JSON 文件提供器 | 无；Gson 由宿主提供 |
-| `klib-data-jdbc` | JDBC 会话、事务与方言引擎 | 无 |
+| `klib-data-jdbc` | KV JDBC 会话、独立 SQL 执行器、显式行映射和外部迁移门禁 | 无 |
 | `klib-data-sqlite` | SQLite 提供器 | 无；SQLite JDBC 由宿主提供 |
 | `klib-data-mysql` | MySQL 提供器 | MySQL Connector/J 及其传递依赖 |
 | `klib-data-postgresql` | PostgreSQL 提供器 | pgJDBC 及其传递依赖 |
@@ -157,9 +157,123 @@ MySQL、PostgreSQL 提供器支持 `(DataSource, KLogger)` 构造。数据源由
 
 外置驱动的构建与启动依赖见 [构建与打包](https://github.com/kzheart/klib/wiki/Build)。经 PgBouncer 事务池访问时，不使用跨事务会话状态；`LISTEN` 应使用独立直连或会话池连接。
 
+## 关系型 SQL 与显式对象映射
+
+`JdbcExecutor` 独立于 `StorageSession`，适合保留现有业务表、JOIN、数据库约束与批量语句。选择任一 JDBC 后端会带上该模块；直接引用时使用 `klib-data-jdbc`。Klib 不创建连接池，也不自动推导实体、关系或 SQL 方言。
+
+```java
+import me.kzheart.klib.data.jdbc.JdbcExecutor;
+import java.util.Optional;
+import java.util.concurrent.CompletionStage;
+
+JdbcExecutor sql = scope.install(new JdbcExecutor(dataSource, 2, 128));
+CompletionStage<Integer> renamed = sql.transaction(client ->
+        client.update("UPDATE player_profile SET display_name = ? WHERE player_id = ?", statement -> {
+            statement.setString(1, newName);
+            statement.setString(2, playerId);
+        }));
+CompletionStage<Optional<String>> name = sql.work(client ->
+        client.queryOne("SELECT display_name FROM player_profile WHERE player_id = ?",
+                statement -> statement.setString(1, playerId),
+                row -> row.getString("display_name")));
+```
+
+| 入口 | 保证和边界 |
+| --- | --- |
+| `work(...)` | 每次借还一条自动提交连接；多条写入不组成事务 |
+| `transaction(...)` | 同一连接上执行回调、commit 或 rollback；不自动重试 |
+| `SqlClient.update(...)` | PreparedStatement 参数绑定，返回受影响行数 |
+| `query(...)` / `queryOne(...)` | 显式 `RowMapper<T>`，自动关闭语句与结果集；后者零行返回 empty，多于一行失败 |
+| `connection()` | 同一连接交给成熟 mapper 或 JDBC batch、generated keys、savepoint；自己关闭所建语句与结果集 |
+
+- SQL 参数使用 JDBC 一基索引绑定。动态表名、排序字段必须来自业务白名单，不能把用户输入拼进 SQL。
+- `RowMapper` 必须返回非 null 对象。字段的 SQL NULL 由业务显式处理，例如 `getString()` 的 null、`getInt()` 后的 `wasNull()`，不能把缺失字段默认为 0。
+- `query` 收集全部结果，请在 SQL 中分页或限量。大结果在回调内通过 `connection()` 流式消费；不返回裸 `Stream`、`ResultSet`、statement 或连接。
+- `SqlClient` 只在回调所在的线程、回调期间有效。原始 JDBC 对象也遵守该约定；不得关闭连接、改变 autoCommit、手动 commit 或保留到回调外。
+
+### SQL 事务结果与连接状态
+
+默认保留数据源的隔离级别和只读设置。需要时显式传入 `SqlTransactionOptions.defaults().withIsolation(Connection.TRANSACTION_REPEATABLE_READ)`；`withReadOnly(true)` 只是 JDBC 提示，驱动不支持时失败，不提供权限隔离。
+
+事务结束后复原 autoCommit、已修改的隔离级别和只读状态，再归还连接。数据源必须借出 autoCommit 为 true 的独占连接；已经在事务中的连接会被拒绝。
+
+`JdbcTransactionException.outcome()` 区分：
+
+| 结果 | 意义 |
+| --- | --- |
+| `NOT_STARTED` | 没有开始事务，例如借连接失败 |
+| `ROLLED_BACK` | 回调失败，rollback 已成功返回 |
+| `COMMITTED` | commit 已成功返回，之后连接复原或关闭失败 |
+| `UNKNOWN` | commit 抛错或 rollback 失败，不能确认业务写入结果 |
+
+原始错误保留为 cause，rollback、复原和关闭错误保留为 suppressed。rollback 失败后不会调用可能提交残留写入的 `setAutoCommit(true)`，而是尝试 abort 并关闭连接。`UNKNOWN` 与 `COMMITTED` 都不能当作「未写入」自动重放。
+
+这些保证依赖数据库支持事务。MySQL 等数据库的隐式 DDL 提交、非事务表、网络回包丢失和数据库外副作用不由 JDBC 包装层消除。
+
+SQL 与 KV 的事务彼此独立。把 `StorageSession` 的 future 放进 SQL 回调、拼接两个 future，或在回调中发奖励，都不产生跨存储原子性。业务关联写入放进同一 SQL 回调并复用其 `SqlClient`；禁止从回调嵌套提交同一个 `JdbcExecutor`。
+
+### SQL 启动迁移门禁
+
+有业务 schema 迁移时，用 `JdbcExecutor.open(dataSource, workers, queueCapacity, engine, targetVersion)`，只在返回成功后注册业务入口。已有迁移工具通过 `SqlMigrationEngine` 接入；版本为非负整数，未初始化为 0。
+
+```java
+import me.kzheart.klib.data.jdbc.SqlMigrationEngine;
+import javax.sql.DataSource;
+
+SqlMigrationEngine engine = new SqlMigrationEngine() {
+    public int currentVersion(DataSource source) throws Exception {
+        return existingMigrator.currentVersion(source);
+    }
+    public void migrate(DataSource source, int targetVersion) throws Exception {
+        existingMigrator.upgradeTo(source, targetVersion);
+    }
+};
+CompletionStage<JdbcExecutor> ready = JdbcExecutor.open(dataSource, 2, 128, engine, 3)
+        .thenApply(scope::install);
+```
+
+这里的 `existingMigrator` 是业务已有迁移工具的适配入口，不是 Klib 内置实现。Java 8 应选符合自身运行基线的工具版本；Klib 不传递引入 Flyway、Liquibase 或 ORM。
+
+| 责任 | 归属 |
+| --- | --- |
+| 启动前拒绝负版本、数据库版本高于目标 | Klib 门禁 |
+| 迁移返回后再次读取版本，必须精确等于目标才开放 executor | Klib 门禁 |
+| 版本历史、checksum、脚本解析、迁移锁、锁内再次核验、失败恢复 | 外部迁移引擎 |
+| 非整数版本映射、数据库 DDL 能力与较新 schema 兼容策略 | 业务适配器与所选引擎 |
+
+已有版本等于目标时不会再次调用 `migrate`。读取或迁移失败、结果版本不匹配时，Klib 关闭新建执行器并让打开结果失败；不会自动修复历史、重建表或宣称外部 DDL 已回滚。门禁外的版本检查不是跨实例锁，迁移引擎必须在锁内重新检查。
+
+先在旧数据副本验证迁移与失败重跑。迁移工具的 Java/数据库版本兼容性、跨进程锁和 DDL 恢复，需要适配器自己的测试验证。
+
+### SQL 排队、关闭与 Kotlin
+
+并行度和等待队列容量都必须为正数。队列满、关闭后提交通过失败的 `CompletionStage` 返回 `RejectedExecutionException`，不会同步漏出拒绝错误；SQLite 写入通常从单 worker 开始。
+
+`closeAsync()` 停止接收新工作，排空已接受的工作并归还连接后完成。`dispose()` / `close()` 最多阻塞等待 30 秒；安装进 `Scope` 后，Scope 关闭线程也可能因此阻塞。正常业务优先提前 `closeAsync()` 排空，插件停用主线程不能把它当作无阻塞关闭。超时不表示已取消 JDBC 工作；等排空完成再关闭调用方持有的数据源或池。
+
+取消尚未开始的 future 会跳过其回调；取消已开始的 future 只停止等待，不中断事务、不保证回滚。实际 JDBC 超时仍需配置驱动、数据源或 statement；队列有界不能解决数据库永不返回的问题。
+
+Kotlin 直接调用同一个 Java 核心，通过已有协程 `await()` 挂起等待：
+
+```kotlin
+import me.kzheart.klib.data.jdbc.JdbcExecutor
+import kotlinx.coroutines.future.await
+
+data class Profile(val id: Int, val note: String?)
+
+suspend fun load(sql: JdbcExecutor, id: Int): Profile? =
+    sql.work { client ->
+        client.queryOne("SELECT id, note FROM profile WHERE id = ?",
+            { statement -> statement.setInt(1, id) },
+            { row -> Profile(row.getInt("id"), row.getString("note")) })
+    }.await().orElse(null)
+```
+
+`work` / `transaction` 回调仍是不可挂起函数；不要在里面 `delay`、`await` 或 `join`。Java 与 Kotlin 的连接、事务、异常和关闭语义相同。
+
 ## 连接定位与超时
 
-JDBC 提供器是**单连接 + 单个串行执行线程**：
+KV 的 JDBC 提供器是**单连接 + 单个串行执行线程**；上面的 `JdbcExecutor` 则每次工作借还连接：
 
 - 一次 `StorageProvider.open()` 打开一条数据库连接，全部读写在同一条 `klib-storage` 线程上排队。
 - 好处是并发写入不会互相干扰；代价是存储吞吐等于单条连接的吞吐。
@@ -215,7 +329,7 @@ AsyncTasks.thenSync(claimed, scope,
 
 ## 管理结构版本
 
-`Schema` 和 `MigrationRunner` 用连续版本描述存储迁移。每一项迁移的「读取当前版本、执行迁移、更新版本」在同一事务中：
+`Schema` 和 `MigrationRunner` 用正整数版本描述 KV 存储迁移。版本可以不连续，执行时按版本升序排列。每一项迁移的「读取当前版本、执行迁移、更新版本」在同一事务中：
 
 ```java
 import me.kzheart.klib.data.Migration;
@@ -243,7 +357,9 @@ CompletionStage<Integer> version = sessionStage.thenCompose(opened ->
         MigrationRunner.apply(opened, schema));
 ```
 
-- 版本号必须唯一。
+- 版本号必须为正数且唯一，迁移动作不能为 null；`Schema.version()` 返回最新声明版本，空结构为 0。
+- 存储版本为负数或比当前声明的最新版本更高时拒绝迁移，不静默降级。每步失败回滚该步 KV 写入与版本，先前已成功的步骤保留。
+- 后端的锁定读与版本比较不等于通用分布式迁移锁，首次初始化尤其要避免多个实例同时迁移。关系型业务表使用上面的 SQL 迁移门禁与外部引擎。
 - 等迁移完成再开始业务读写，不要让新旧结构同时被业务代码访问。
 
 ## 玩家数据缓存
@@ -324,8 +440,8 @@ suspend fun save(session: StorageSession) {
 ## 线程与生命周期
 
 - 所有存储操作都是异步的，返回 JDK `CompletionStage`。
-- `thenApply`、`thenAccept`、`thenCompose` 等非 `Async` 回调，以及事务回调，都运行在存储线程，**不会自动切回主线程**，不能在里面直接调用要求主线程的 Bukkit API。
-- 向玩家反馈时，用 `Scope.sync(Runnable)`、`Scope.syncExecutor()` 或 `AsyncTasks.thenSync(stage, scope, action)` 显式切回主线程，详见 [Core 的桥接 CompletionStage](core.md#桥接-completionstage)。旧写法 `Scope.after(Ticks.of(0), ...)` 语义等价，新代码用 `sync`。
+- 事务回调运行在存储线程；`thenApply`、`thenAccept`、`thenCompose` 等非 `Async` 回调可能运行在完成线程，已完成的阶段也可能在注册回调的线程执行。它们**不会自动切回主线程**，不能据此调用要求主线程的 Bukkit API。
+- 向玩家反馈时，用 `Scope.sync(Runnable)`、`scope.submitSync(stage, mapper)` 或 `AsyncTasks.thenSync(stage, scope, action)` 显式切回主线程，详见 [Core 的桥接 CompletionStage](core.md#桥接-completionstage)。旧写法 `Scope.after(Ticks.of(0), ...)` 语义等价，新代码用 `sync`。
 - 把 provider、成功打开的 session 和 `PlayerDataCache` 安装进同一个业务 `Scope`。关闭作用域时，缓存先排空脏数据，随后会话和提供器按逆序释放。
 - `PlayerDataCache.dispose()` 最多阻塞等待 30 秒。超时或保存失败时，如果传了 `KLogger`，会记录仍未落盘的玩家数量。
 
@@ -335,7 +451,7 @@ suspend fun save(session: StorageSession) {
 - 停服阶段**不要**再提交新的写入，也不要用忽略返回阶段的「即发即忘」保存。
 - MySQL URL、用户名和密码来自配置或环境，**不要**写进源码或日志。
 - 多步异步调用拼起来的「检查后写入」不是原子的，用 `transaction(...)`。
-- JDBC 后端只有一条连接，吞吐有上限；没有连接池。
+- KV JDBC 会话只有一条连接，吞吐有上限；独立 SQL executor 按工作借还连接，但不内置池。
 - JSON 后端有固定预算（见上表），超出时整个事务失败。
 
 ## 相关页面

@@ -2,11 +2,10 @@
 
 ## 未发布
 
-- 新增按需制品 `klib-data-pool`，以 Java 8 兼容的 Apache Commons DBCP 2.14.0 薄适配提供有界连接池，不向现有 KV 后端传递池依赖。
-
-- JDBC 新增 `Databases.open` / `Database` 受管资源、Kotlin 薄挂起读写入口、集中参数绑定与生命周期受限的 `SqlRow`；复用有界 SQL 执行器、同连接事务及外部迁移门禁，关闭排空后才释放自有数据源，取消打开也回收晚到资源。
-
 - Data 新增基于现有 `StorageSession` / `DataCodec` 的类型化 KV 及受限事务视图，缺失值明确返回 empty/null，编码值不允许 null。
+- JDBC 新增 `Databases.open` / `Database` 受管资源、Kotlin 薄挂起读写入口、集中参数绑定与生命周期受限的 `SqlRow`；复用有界 SQL 执行器、同连接事务及外部迁移门禁，关闭排空后才释放自有数据源，取消打开也回收晚到资源。
+- 新增按需制品 `klib-data-pool`，以 Java 8 兼容的 Apache Commons DBCP 2.14.0 薄适配提供有界连接池，不向现有 KV 后端传递池依赖。
+- PostgreSQL 新增专用物理连接 LISTEN 会话、有界重连与串行通知队列；订阅和重订阅显式通知业务重读，关闭连接后排空已接受回调，溢出与关闭超时准确报告，不承诺断线消息重放。
 
 - UI 新增 `MenuLayout` 配置布局和完整功能字符绑定，加载／编译错误带精确路径，列表容量直接来自布局并复用现有分页与原子配置快照。
 - UI 新增 `MenuPage` 和物品栏父子页导航；状态驱动标题或尺寸变化经下一 tick 导航重建窗口，保留状态、归还投放物并重建窗口订阅。旧窗口读取、导航和关闭事件不会作用到新 holder，关闭前仍保护物品。

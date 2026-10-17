@@ -28,7 +28,7 @@ klib { modules { data { json() } } }
 | `klib-data-pool` | 可选 DBCP 连接池薄适配 | Apache Commons DBCP 及其传递依赖 |
 | `klib-data-sqlite` | SQLite 提供器 | 无；SQLite JDBC 由宿主提供 |
 | `klib-data-mysql` | MySQL 提供器 | MySQL Connector/J 及其传递依赖 |
-| `klib-data-postgresql` | PostgreSQL 提供器 | pgJDBC 及其传递依赖 |
+| `klib-data-postgresql` | PostgreSQL 提供器与专用 LISTEN 会话 | pgJDBC 及其传递依赖 |
 
 宿主依赖说明：
 
@@ -391,6 +391,51 @@ KV 的 JDBC 提供器是**单连接 + 单个串行执行线程**；上面的 `Jd
 
 - URL 里已显式写了 `connectTimeout` 时，保留调用方的设置。
 - 不使用 `DriverManager.setLoginTimeout(...)`：它是整个 JVM 的全局开关，会连带影响同一服务端里其他插件的 JDBC 连接。
+
+## PostgreSQL LISTEN 会话
+
+`PostgreSqlNotifications.listen(jdbcUrl, properties, channels, options, listener)` 使用独立物理连接，不借业务池；业务事务池与 LISTEN 直连地址分别配置。
+会话实现 `Disposable`，可以交给 Scope；不内置 Flow，也不执行领域写入。
+
+```java
+PostgreSqlListenSession notifications = scope.install(PostgreSqlNotifications.listen(
+        listenUrl, properties, Collections.singleton("profile_changes"),
+        PostgreSqlListenOptions.defaults(), new PostgreSqlNotificationListener() {
+            public void onNotification(PostgreSqlNotification event) {
+                catalogChanges.invalidate(event.payload());
+            }
+            public void onListening(long generation) {
+                catalogChanges.invalidateAll(); // 首次订阅及重订阅后重新读取数据库
+            }
+        }));
+CompletionStage<Void> ready = notifications.ready();
+```
+
+Kotlin 使用相同 SAM／object 回调；`notifications.ready().await()` 等待订阅，`notifications.closeAsync().await()` 等待排空。
+回调运行在专用串行线程，不能调用 Bukkit 或等待自己的关闭；回调只发布失效信号，外部协程和业务异步工作仍归业务 Scope。
+
+| 入口或选项 | 行为或默认值 |
+| --- | --- |
+| `ready()` | 全部 LISTEN 在自动提交连接上订阅成功后完成 |
+| `onListening(generation)` | 首次与每次重新订阅均调用，代际从 1 递增；在同代通知前串行分发 |
+| `completion()` | 会话自然失败或关闭、接收与回调线程退出后的终态 |
+| `closeAsync()` | 停止接收和重连、关闭连接、排空已接受回调后完成；多次观察共享终态 |
+| `connectTimeout` / `pollTimeout` | 10 秒／1 秒；连接选项同时限制登录和网络读取，覆盖 URL 中冲突的超时 |
+| `reconnectAttempts` / `backoff(initial, maximum)` | 最多 5 次连续重连，退避从 1 秒增加至 30 秒；成功轮询后重置连续失败计数 |
+| `queueCapacity` / `closeTimeout` | 256 个待分发事件（含订阅和故障事件）／30 秒同步关闭等待 |
+
+- `PostgreSqlListenOptions.builder()` 配置上述选项后 `build()`；超时、容量和退避校验有效范围，轮询时限须符合 pgJDBC 的 int 毫秒限制。
+- 频道名正确转义为 SQL 标识符，拒绝空值、NUL 或超过服务端标识符字节上限的名称，避免静默截断或 SQL 注入。
+- 先订阅并提交，再读业务快照，然后依靠通知失效。NOTIFY 不持久化，不保证断线重放或业务恰好一次；重连后必须重读。
+- 认证、数据库或配置错误立即终结；其他连接故障有界重试，`onFailure(error, false)` 报告重试，最终故障通过 `completion` 和终态回调报告。
+- 队列溢出明确失败，排空此前已接受事件，不静默丢弃。容量限制本库分发队列，不代表 pgJDBC 内部接收批次有相同上限。
+- 关闭不会打断已接受的回调，也不等待回调自行启动的外部异步工作。阻塞回调会延迟排空；`dispose` 超时明确失败，不能称资源已关闭。
+- 回调可以调用 `closeAsync()` 后返回，不能 `join/get/await` 自己的关闭或关闭其等待自己的 Scope；直接等待返回的关闭 future 会被拒绝，派生异步链也不得自行阻塞等待。
+
+连接失败抛出的 `StorageException` 消息带后端类型和实际耗时，用来区分：
+
+- 账号密码错误：毫秒级失败；
+- 地址或防火墙不通：数秒后超时。
 
 ## 在事务中组合读写
 

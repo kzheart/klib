@@ -532,7 +532,7 @@ project(":klib-data-mysql") {
 project(":klib-data-postgresql") {
     dependencies {
         add("api", project(":klib-data-jdbc"))
-        add("runtimeOnly", postgresqlDriver)
+        add("implementation", postgresqlDriver)
     }
 }
 

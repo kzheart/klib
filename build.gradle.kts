@@ -159,7 +159,7 @@ fun publicationDisplayName(projectName: String): String = when (projectName) {
 
 configure(javaProjects) {
     apply(plugin = "java-library")
-    if (name in setOf("klib-core", "klib-config", "klib-command", "klib-ui", "klib-item", "klib-data", "klib-script")) {
+    if (name != "klib-guard-api") {
         apply(plugin = "org.jetbrains.kotlin.jvm")
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
             compilerOptions {

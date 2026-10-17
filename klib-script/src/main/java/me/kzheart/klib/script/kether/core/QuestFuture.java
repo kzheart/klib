@@ -27,26 +27,8 @@ public final class QuestFuture<T> {
         future = null;
     }
 
-    @SuppressWarnings("unchecked")
     public static <T> Consumer<T> complete(CompletableFuture<T> future) {
-        return value -> {
-            if (value instanceof QuestFuture) {
-                CompletableFuture<T> deferred = ((QuestFuture<T>) value).getFuture();
-                if (deferred == null) {
-                    future.completeExceptionally(new IllegalStateException("Awaited action has no active future"));
-                    return;
-                }
-                future.whenComplete((ignored, failure) -> {
-                    if (future.isCancelled()) deferred.cancel(false);
-                });
-                deferred.whenComplete((result, failure) -> {
-                    if (failure == null) future.complete(result);
-                    else future.completeExceptionally(failure);
-                });
-            } else {
-                future.complete(value);
-            }
-        };
+        return ActionExecution.complete(future);
     }
 
     private static void checkState(boolean state, String message) {

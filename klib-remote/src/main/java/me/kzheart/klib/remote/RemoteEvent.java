@@ -1,11 +1,11 @@
 package me.kzheart.klib.remote;
 
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
 
-/** `/ingest/v1/batches` 中的一条不可变事件。 */
+/**
+ * `/ingest/v1/batches` 中的一条不可变事件。
+ * Java 边界保留非 final 静态方法及同包子类的静态隐藏契约。
+ */
 public class RemoteEvent {
     private final Map<String, Object> values;
 
@@ -13,15 +13,9 @@ public class RemoteEvent {
         this.values = immutableCopy(values);
     }
 
-    /** 创建事件并覆盖调用方提供的保留字段，生成稳定的 {@code event_id} 与时间。 */
+    /** 创建事件并覆盖调用方提供的保留字段。 */
     public static RemoteEvent of(String type, Map<String, ?> fields) {
-        Objects.requireNonNull(fields, "fields");
-        Map<String, Object> values = new LinkedHashMap<String, Object>();
-        values.putAll(immutableCopy(fields));
-        values.put("event_id", EventIds.next());
-        values.put("type", Texts.requireText(type, "type"));
-        values.put("occurred_at", Instant.now().toString());
-        return new RemoteEvent(values);
+        return RemoteEventFactory.create(type, fields);
     }
 
     /** 返回包括嵌套 JSON 值在内的不可变事件快照。 */
@@ -30,6 +24,6 @@ public class RemoteEvent {
     }
 
     static Map<String, Object> immutableCopy(Map<String, ?> source) {
-        return JsonValueSnapshot.copy(source);
+        return RemoteEventFactory.snapshot(source);
     }
 }

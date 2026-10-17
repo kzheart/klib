@@ -56,9 +56,7 @@ public abstract class AbstractStringReader {
             throw LoadError.EOF.create();
         }
         int begin = index;
-        while (index < content.length && !Character.isWhitespace(content[index])) {
-            index++;
-        }
+        index = TokenScanner.tokenEnd(content, index);
         return new String(content, begin, index - begin);
     }
 
@@ -67,17 +65,7 @@ public abstract class AbstractStringReader {
     }
 
     protected void skipBlank() {
-        while (index < content.length) {
-            if (Character.isWhitespace(content[index])) {
-                index++;
-            } else if (index + 1 < content.length && content[index] == '/' && content[index + 1] == '/') {
-                while (index < content.length && content[index] != '\n' && content[index] != '\r') {
-                    index++;
-                }
-            } else {
-                break;
-            }
-        }
+        index = TokenScanner.skipBlank(content, index);
     }
 
     protected void expect(String value) {

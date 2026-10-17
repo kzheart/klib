@@ -82,8 +82,14 @@ class RemoteDeliveryTest {
         AtomicInteger calls = new AtomicInteger();
         List<String> bodies = Collections.synchronizedList(new ArrayList<String>());
         CountDownLatch retried = new CountDownLatch(1);
+        CountDownLatch settingsRequested = new CountDownLatch(1);
+        CountDownLatch allowSettings = new CountDownLatch(1);
         RpkTransport transport = new RpkTransport() {
-            @Override public String settings() { return settingsResponse(); }
+            @Override public String settings() {
+                settingsRequested.countDown();
+                await(allowSettings);
+                return settingsResponse();
+            }
             @Override public String sendBatch(byte[] json) throws IOException {
                 bodies.add(new String(json, StandardCharsets.UTF_8));
                 if (calls.getAndIncrement() == 0) {
@@ -99,14 +105,20 @@ class RemoteDeliveryTest {
                 .maxBackoff(Duration.ofMillis(10))
                 .build();
         try {
+            // build() starts the worker immediately. Hold its initial settings request so the
+            // first batch contains all four events, rather than racing the caller's submissions.
+            assertTrue(settingsRequested.await(5, TimeUnit.SECONDS));
             delivery.accept(log("first"));
             delivery.accept(log("second"));
             delivery.accept(log("third"));
             delivery.accept(log("must survive partial receipt"));
+            allowSettings.countDown();
             assertTrue(retried.await(5, TimeUnit.SECONDS));
+            assertEquals(4, eventIds(bodies.get(0).getBytes(StandardCharsets.UTF_8)).size());
             assertEquals(bodies.get(0), bodies.get(1));
             assertTrue(bodies.get(1).contains("must survive partial receipt"));
         } finally {
+            allowSettings.countDown();
             delivery.dispose();
         }
     }

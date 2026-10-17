@@ -33,26 +33,11 @@ dependencyResolutionManagement {
 
 rootProject.name = "klib"
 
-include(
-    "klib-core",
-    "klib-command",
-    "klib-config",
-    "klib-lang",
-    "klib-item",
-    "klib-data",
-    "klib-data-json",
-    "klib-data-jdbc",
-    "klib-data-sqlite",
-    "klib-data-mysql",
-    "klib-data-postgresql",
-    "klib-ui",
-    "klib-script",
-    "klib-hook",
-    "klib-compat",
-    "klib-compat-v1_12",
-    "klib-compat-v1_20",
-    "klib-compat-v1_21",
-    "klib-compat-v26",
-    "klib-remote",
-    "klib-guard-api",
-)
+// Source groups are directories, not extra Gradle projects or publication coordinates.
+val moduleLayout = java.util.Properties().apply {
+    file("gradle/module-layout.properties").inputStream().use { load(it) }
+}
+moduleLayout.stringPropertyNames().sorted().forEach { moduleName ->
+    include(moduleName)
+    project(":$moduleName").projectDir = file(moduleLayout.getProperty(moduleName))
+}

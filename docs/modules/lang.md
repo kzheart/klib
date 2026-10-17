@@ -17,20 +17,10 @@
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        lang()
-    }
-}
+klib { modules { lang() } }
 ```
 
-依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。直接依赖 `me.kzheart.klib:klib-lang:<klib-version>` 时，**需自行打包和重定位 Klib、配置实现与 MiniMessage 运行时**。
-
-```kotlin
-dependencies {
-    implementation("me.kzheart.klib:klib-lang:<klib-version>")
-}
-```
+依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。手动打包时需包含 Klib、Kotlin/协程、配置与 MiniMessage 运行时，并按构建页处理重定位。
 
 在资源目录提供语言文件：
 
@@ -278,6 +268,14 @@ BukkitAdventure.book(player, "说明", "服务器", pages);
 - 反射同时处理泛型擦除后的序列化方法。
 
 </details>
+
+## Java 与 Kotlin 共用的消息管线
+
+语言目录、占位符、富文本解析和 Bukkit 路由由 Kotlin 实现。Java 与 Kotlin 都通过 `LangRuntime` / `MessagePipeline` 提交消息键，不必分别维护配置回退、颜色转换或每种发送通道的宿主检测。
+
+- 目录重载替换消息快照，已安装的管线继续使用新内容，不要求业务重建运行时。
+- Paper 原生组件与插件私有 Adventure 的转换留在 `BukkitAdventure` 边界，业务不直接交换不同加载器的组件对象。
+- 消息目录、路由和发送 SPI 保留 Java 平台类型；`RichTextSegment` 的薄 Java 外壳保留颜色、悬停和点击等可选值的平台返回契约。实现语言不改变消息转义和线程规则。
 
 ## 线程与生命周期
 

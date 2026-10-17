@@ -148,18 +148,22 @@ $skill-installer 安装 https://github.com/kzheart/klib/tree/main/skills/klib
 
 ## 开发与贡献
 
-从源码构建使用 JDK 21 toolchain，公共 Java 制品通过 `--release 8` 编译：
+源码按 `libraries/`、`storage/`、`platform/`、`runtime/` 归组，职责、依赖方向与源码位置见 [模块布局](docs/architecture/module-layout.md)。
+Gradle 项目名及 Maven 坐标保持 `klib-*`；例如 Core 位于 `libraries/core/`，测试仍运行 `:klib-core:test`。
+
+从源码构建使用 JDK 21 toolchain；Java 使用 `--release 8`，Kotlin 使用 JVM 1.8 与 `-Xjdk-release=8`：
 
 ```bash
 ./gradlew clean check --no-configuration-cache
+python3 -m unittest discover -s scripts/tests -v
 ```
 
 欢迎通过 [Issues](https://github.com/kzheart/klib/issues) 或 [Pull Requests](https://github.com/kzheart/klib/pulls) 反馈问题与提交改进。变更应保持公共 Java 8 边界，并同步相关模块文档；参与前请阅读 [仓库协作约定](AGENTS.md)。
 
-> 本仓库只包含公共 Java 模块和最小 `klib-guard-api` 编译契约；Gradle 插件另有仓库，Guard runtime 等私有组件不在此处。
+> 本仓库只包含公共 Java / Kotlin 模块和最小 `klib-guard-api` 编译契约；Gradle 插件另有仓库，Guard runtime 等私有组件不在此处。
 
 ## 许可证
 
-Klib 使用 [Apache License 2.0](LICENSE)。版权与第三方归属见 [NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+Klib 使用 [Apache License 2.0](LICENSE)。版权与第三方归属入口见 [NOTICE](NOTICE)；改编来源与许可全文保留在相关模块及其 JAR 的 `META-INF/LICENSE-*.txt` 中。
 
 JDBC 后端支持调用方持有的 `DataSource`，见 [Data](docs/modules/data.md)。驱动可由服务器库加载器提供，Klib 模块仍按插件隔离。

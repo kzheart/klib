@@ -19,3 +19,5 @@
 *.sqlite3
 
 .kotlin/
+__pycache__/
+*.pyc

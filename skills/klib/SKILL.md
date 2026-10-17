@@ -39,4 +39,5 @@ description: 按 kzheart/klib 官方 Wiki 为 Bukkit、Spigot 或 Paper 插件�
 - 使用当前环境可用的网页读取或 HTTP 工具。需要 Markdown 正文时，页面 `Core` 对应 `https://raw.githubusercontent.com/wiki/kzheart/klib/Core.md`；其他页面按相同规则替换页面名，首页为 `Home.md`。
 - 不依赖预先克隆的仓库、本机绝对路径或特定浏览器。Wiki 网页读取失败时尝试对应原始 Markdown；仍不可访问时说明无法核实的部分，不编造页面内容。
 - Wiki 的适用版本与目标项目不一致，或缺少精确签名时，通过 Wiki 中的源码链接查对应版本的源码和测试。库与构建插件是独立仓库，不用其中一个版本号推导另一个，也不默认升级项目。
+- 查询当前仓库源码位置时读取 `gradle/module-layout.properties` 或 [模块布局](https://github.com/kzheart/klib/blob/main/docs/architecture/module-layout.md)：源码按职责归组，Gradle 项目名与 Maven 坐标仍为 `klib-*`。
 - 回答中链接到实际使用的 Wiki 页面。资料不足或未运行验证时明确区分已确认事实与尚未验证的行为。

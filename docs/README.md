@@ -31,4 +31,9 @@
 - [Remote 安全边界](remote-security.md)
 - [故障排查](troubleshooting.md)
 
+## 维护者文档
+
+- [模块布局与依赖方向](architecture/module-layout.md)
+- [发布流程](releasing.md)
+
 Guard runtime、Native、Collector、Remote 服务端和生产部署文档属于私有仓库，不在本公共源码仓库中。

@@ -5,8 +5,12 @@ Captures generic Signature, checked Exceptions, class hierarchy and JVM access
 flags without loading classes or relying on a third-party bytecode library.
 Additional members are allowed; removed descriptors and narrowed contracts fail.
 """
-import argparse, json, struct
+import argparse, json, struct, sys
 from pathlib import Path
+
+# This tool is also loaded by path from external, reproducible QA scripts.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from klib_layout import production_class_directories
 
 class Reader:
     def __init__(self, data): self.data, self.pos = data, 0
@@ -53,10 +57,10 @@ def read_class(path):
 
 def snapshot(root):
     result = {}
-    for p in sorted(Path(root).glob('klib-*/build/classes/**/**/*.class')):
-        if '/test/' in str(p) or '/testFixtures/' in str(p): continue
-        name, data = read_class(p)
-        if data['flags'] & 1: result[name] = data
+    for directory in production_class_directories(root):
+        for p in sorted(directory.rglob('*.class')):
+            name, data = read_class(p)
+            if data['flags'] & 1: result[name] = data
     return result
 
 def compare(old, new):
@@ -83,7 +87,13 @@ def compare(old, new):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('root'); parser.add_argument('--save'); parser.add_argument('--baseline')
-    args = parser.parse_args(); current = snapshot(args.root)
+    args = parser.parse_args()
+    try:
+        current = snapshot(args.root)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    if not current:
+        parser.error('No exported production classes found; build the main modules first')
     if args.save: Path(args.save).write_text(json.dumps(current, indent=2, sort_keys=True) + '\n')
     if args.baseline:
         errors = compare(json.loads(Path(args.baseline).read_text()), current)

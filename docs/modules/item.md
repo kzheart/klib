@@ -9,28 +9,12 @@ Java 8 可用的物品构建、类型化标签、背包扣除/发放和物品编
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        item()
-    }
-}
+klib { modules { item() } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
 
-**额外依赖 Item-NBT-API**：
-
-- 旧版服务端读写标签时需要它，默认构建会把它一并放入最终产物。
-- 该制品只在 CodeMC 仓库发布，构建脚本**必须**声明该仓库，配置见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
-- 不用 Klib Gradle 插件时，自己把 `klib-item` 和 Item-NBT-API 打入插件，或在运行环境提供：
-
-```kotlin
-dependencies {
-    implementation("me.kzheart.klib:klib-item:<klib-version>")
-    compileOnly("org.spigotmc:spigot-api:1.12.2-R0.1-20180712.012057-156")
-    runtimeOnly("de.tr7zw:item-nbt-api:2.12.4")
-}
-```
+标签由模块内的原生实现读写，不需要 Item-NBT-API、额外 NBT 插件或 TabooLib 运行时，也无需为标签功能添加 CodeMC 仓库。
 
 最小示例：
 
@@ -126,10 +110,68 @@ TOOL_TYPE.find(item).ifPresent(type -> player.sendMessage("工具类型：" + ty
 存储位置：
 
 - 支持 Persistent Data Container 的服务端：写入 PDC。
-- 1.12 等旧版服务端：通过 Item-NBT-API 写入根 NBT。
-- 只有内嵌 Item-NBT-API 能识别当前服务端并提供物品写回接口时，才回退读取旧标签并尝试迁移到 PDC。
-- NBT API 不支持当前平台时，PDC 的读取、存在检查和删除不会调用旧 NBT；旧标签暂不可读，需要先在受支持的平台上迁移。
-- 在支持的平台上，显式读取或删除遇到的 NBT 操作、类型错误仍会抛出；迁移写回继续尽力而为，不会把读取损坏数据伪装成标签缺失。
+- 没有 PDC 的旧版服务端：通过模块内的原生桥写入根 NBT。
+- PDC 缺失且原生桥支持当前布局时，读取旧标签并尝试迁移；确认 PDC 写回成功后才删除旧键。迁移写回失败仍返回本次已读到的旧值。
+- 原生桥不支持当前布局时，已有 PDC 标签仍可正常读写、检查和删除；不会为了回退而加载第三方 NBT 库。
+- 在支持的平台上，显式读取或删除的 NBT 操作、类型错误继续抛出，不把损坏数据伪装成标签缺失。
+
+`TagKey` 适合插件自己的少量业务标记，业务代码不需要选择桥接实现。需要嵌套、列表或全部 NBT 数值类型时，使用下面的原生标签入口。
+
+## 原生 NBT 标签
+
+`me.kzheart.klib.item.tag` 提供服务端无关的标签树与 `NativeItemTags`。物品入口负责平台探测和写回；业务只编辑独立快照，不接触 NMS 类名或反射句柄。
+
+```java
+import me.kzheart.klib.item.tag.NativeItemTags;
+import me.kzheart.klib.item.tag.NbtCompound;
+import me.kzheart.klib.item.tag.NbtList;
+import me.kzheart.klib.item.tag.NbtTag;
+
+// 在 Bukkit 主线程执行；item 是已有的非空气物品
+NbtCompound tags = NativeItemTags.read(item);
+tags.put("myplugin:level", NbtTag.intValue(5));
+tags.put("myplugin:runes", NbtList.of(NbtTag.string("fire"), NbtTag.string("ice")));
+NativeItemTags.write(item, tags);
+```
+
+Kotlin 使用相同入口和类型，也可用下标编辑：
+
+```kotlin
+import me.kzheart.klib.item.tag.NativeItemTags
+import me.kzheart.klib.item.tag.NbtTag
+
+val tags = NativeItemTags.read(item)
+tags["myplugin:level"] = NbtTag.intValue(5)
+NativeItemTags.write(item, tags)
+```
+
+### 标签类型与复制
+
+| NBT 类型 | 构造方式 |
+| --- | --- |
+| Byte / Short / Int / Long / Float / Double | `NbtTag.byteValue(...)`、`shortValue(...)`、`intValue(...)`、`longValue(...)`、`floatValue(...)`、`doubleValue(...)` |
+| String | `NbtTag.string(...)` |
+| ByteArray / IntArray / LongArray | `NbtTag.bytes(...)`、`ints(...)`、`longs(...)` |
+| List | `NbtList.of(...)`；元素必须同型，空列表没有元素类型 |
+| Compound | `new NbtCompound()`；用 `put` / `get` / `remove` 编辑 |
+
+- 这 12 种是可存储的数据类型；END 只用作二进制结束标记。布尔值应明确编码为 Byte，不存在独立的 Boolean NBT 类型。
+- `NbtTag.from(value)` 接受精确的标量、数组或已有 `NbtTag`；不自动缩窄数字，不把 `null` 当作删除，也不自动转换任意 Map/List。
+- 数组输入、取出和 `copy()` 都复制。复合值写入时深复制，`copy()` 可取得独立树；从已有树取得的嵌套复合值仍属于该树。
+- `entries()`、`keys()`、`values()` 不允许修改集合结构；需要独立的嵌套值时仍应调用 `copy()`。
+
+### 根标签与现代 custom_data
+
+| `NativeItemTags.storage()` | 读取和替换的范围 |
+| --- | --- |
+| `ItemTagStorage.LEGACY_ROOT` | 旧物品的根 NBT，可能包含显示、附魔及插件数据 |
+| `ItemTagStorage.CUSTOM_DATA` | 现代物品的 `minecraft:custom_data`，其他 data components 保持原样 |
+
+`write(item, tags)` **完整替换当前槽位**。通常使用 `read → edit → write` 保留已有内容及其中的 PDC；直接写入新的空 compound 会清空该槽位，现代服务端同时移除空 custom_data 组件。
+
+- `supports()` 只确认当前服务端布局与原生编解码能力，不保证任意输入都能写入；不支持时 `storage()` 和非空物品读写明确失败。
+- 读取空气物品返回空 compound，向空气物品写入会失败。读写受 16 MiB 二进制大小与 512 层嵌套深度限制。
+- 本入口不编辑全部 data components，不序列化完整物品，也不提供 DataFixer 或跨 Minecraft 数据版本升级。持久化完整物品仍见下方 `ItemCodec`，并遵守其迁移限制。
 
 ## 背包中的扣除与发放
 
@@ -290,9 +332,11 @@ val current: Int? = tagged[level]
 
 `item` 与 `editItem` 共用 `ItemBuilder` 的校验与版本处理。编辑不会更改原物品，返回值也不共享 builder 的可变物品。
 
+构建器、类型化标签、原生标签和外部物品适配由同一套 Kotlin 实现承担，Java 继续使用静态工厂、构造器和 Builder。`ItemTagBridge`、`ExternalItemSource` 等 Java SPI 保留，便于现有自定义实现继续使用 Java lambda 与平台类型契约。
+
 ## 线程与生命周期
 
-- `ItemBuilder` 和标签操作处理 `ItemStack`；涉及在线玩家背包或世界掉落时，在 Bukkit 主线程执行。
+- `ItemBuilder`、标签与 `NativeItemTags` 的物品读写在 Bukkit 主线程执行。独立的 `NbtCompound` / `NbtList` 值树不访问 Bukkit，但不要跨线程并发修改同一树。
 - `Items.edit(...)`、`build()`、标签桥接和编码接口会克隆或创建值，但仍不要在其他线程同时修改同一个原始 `ItemStack`。
 - `InventoryItems.give(...)` 背包溢出时会访问玩家世界并生成掉落物，只能用于在线玩家的同步流程。
 - 外部物品的生成、预览与识别会调用外部插件，遵守这些插件自身的线程要求，通常在主线程调用。预览入口不会自动切换线程。
@@ -303,7 +347,7 @@ val current: Int? = tagged[level]
 - 不要直接依赖标签的具体桥接实现（PDC / NBT）。
 - 不要把同一个标签名称同时定义成不同 Java 类型。
 - `InventoryItems` 用 `isSimilar` 匹配，名称、lore、附魔或标签不同的物品不会被算作同一种。
-- 构建脚本漏声明 CodeMC 仓库时，Item-NBT-API 无法解析。
+- 不要把 `CUSTOM_DATA` 当作完整物品的根 NBT；直接用空树写回会删除该槽位中的现有数据。
 - `ItemCodec` 编码值不适合作为跨版本的长期存储格式。
 - 展示物品不能用于发货；安全预览不支持时应使用业务选择的占位图标，不能悄悄改为真实生成。
 

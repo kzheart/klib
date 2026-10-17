@@ -1,5 +1,19 @@
 Klib
 Copyright 2026 kzheart
 
-This product includes software developed by third parties. See
-THIRD_PARTY_NOTICES.md for attribution and license details.
+This product includes software developed by third parties. Attribution,
+source revisions, modification records and applicable MIT license terms
+are included in the affected modules' src/main/resources/META-INF/ files
+and packaged in their JARs:
+
+- klib-script: LICENSE-TabooLib-Kether.txt and LICENSE-Sponge-Coerce.txt
+- klib-compat and klib-compat-v*: LICENSE-TabooLib-Scoreboard.txt
+
+Third-party runtime libraries remain subject to their upstream copyright
+and license terms:
+
+- Kotlin standard library and reflection: Apache License 2.0
+- kotlinx.coroutines: Apache License 2.0
+- Apache Commons JEXL and Commons Logging: Apache License 2.0
+- SnakeYAML: Apache License 2.0
+- Kyori Adventure API and MiniMessage: MIT License

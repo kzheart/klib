@@ -1,6 +1,6 @@
 # Script 模块
 
-一个 Java 8 Kether 运行时：把条件、奖励和流程编排放进配置，再通过受控的宿主服务连接消息、命令、权限和占位符。
+一个保持 Java 8 字节码边界、由 Kotlin 实现的 Kether 运行时：把条件、奖励和流程编排放进配置，再通过受控的宿主服务连接消息、命令、权限和占位符。
 
 | 模块名 | 制品 | 自动带入 |
 | --- | --- | --- |
@@ -33,9 +33,9 @@ klib {
 
 打包要点：
 
-- Kether 解析核心已经包含在 `klib-script` 中。
+- Kether 解析核心已经包含在 `klib-script` 中，普通执行不依赖 TabooLib 运行时。
 - `calc` / `invoke` 通过传递运行时依赖使用 Apache Commons JEXL 与 Commons Logging。构建插件会打包它们，**请用上面的显式重定位**避免与同服插件冲突。
-- 手动打包也必须包含并重定位这两个依赖。移植来源和许可证见仓库的 `THIRD_PARTY_NOTICES.md`。
+- 手动打包也必须包含并重定位这两个依赖。移植来源与许可全文见 [Kether 归属](../../runtime/script/src/main/resources/META-INF/LICENSE-TabooLib-Kether.txt) 和 [Sponge Coerce 归属](../../runtime/script/src/main/resources/META-INF/LICENSE-Sponge-Coerce.txt)，对应资源随 JAR 分发。
 
 最小示例：先创建注册表和引擎，再为每次执行建立隔离的 `ScriptContext`。
 
@@ -660,6 +660,8 @@ ScopedScriptRuntime engine = new ScopedScriptRuntime(
 
 ## Kotlin 挂起执行
 
+挂起入口与 Java 的 `CompletionStage` 调用同一引擎。编译缓存、解析器、帧/变量生命周期、异步续接和容器互操作由模块内的 Kotlin 实现承担；宿主只提供注册表、上下文与明确的服务能力。
+
 ```kotlin
 import me.kzheart.klib.script.*
 
@@ -692,6 +694,12 @@ suspend fun evaluateOnHost(
 - 执行器必须把已接收的任务真正执行完，且在原生清理结束前保持可用。取消请求实际执行前，原生脚本仍可能继续；协程完成取消也不表示排队的清理已完成。
 - 投递被拒绝时，通过 `CoroutineExceptionHandler` 报告取消处理失败，**不会改在错误线程清理**。此时须由 `ScopedScriptRuntime` 的拥有者在宿主线程调用 `cancelPending()` 或 `close()` 完成收尾。
 - `Scope.syncExecutor()` 在作用域关闭后拒绝新任务，已排队任务也可能被关闭取消，不能单独承担可靠清理。关闭流程应在主线程先关闭 `ScopedScriptRuntime`，再关闭调度器；不要把清理投到已经关闭的作用域。
+
+### 扩展契约与隔离边界
+
+- Java 的宿主 SPI、解析器 SAM 与开放的 Kether 扩展类型保留，兼容既有平台类型、checked exception、protected 字段和 getter/属性双写法；它们把实际执行委托给共享实现。
+- Java 调用方继续使用静态工厂、Builder 和阶段结果，无需传 `Continuation`；Kotlin 挂起与取消仍服从上面的执行器约定。
+- Guard 商品内的私有运行时与父加载器 Core 不是可任意交换的 Kotlin 类型空间。构建插件会拒绝不安全的跨边界类型，reflect/协程组合还受商品条目与 multi-release 限制；普通 Bukkit JAR 可运行不等于该组合已获 Guard 支持。
 
 ## 线程与生命周期
 

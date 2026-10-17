@@ -156,7 +156,9 @@ config.onChange(gameplay::rebuild);
 
 ## Kotlin 原生入口
 
-Core 在现有制品中提供 Kotlin API，不需要单独的扩展模块。`setup()` 仍是普通同步方法，下面的初始化块也同步完成。
+Core 的生命周期、作用域、事件与调度由 Kotlin 实现，Kotlin API、标准库和协程是同一制品依赖图的内置能力，不需要单独的扩展模块。Java 仍直接使用 `KPlugin`、静态工厂、SAM 回调与 `CompletionStage`，不需要处理 `Continuation`。
+
+`setup()` 仍是普通同步方法，下面的初始化块也同步完成。
 
 ```kotlin
 import me.kzheart.klib.KLogger
@@ -182,6 +184,18 @@ class MyPlugin : KPlugin() {
 - `requireCapability<T>()` 返回类型化能力，`findCapability<T>()` 未找到时返回 `null`，`registerCapability<T>(value)` 注册能力。
 - `Scope.on<E>(priority = ..., ignoreCancelled = ...) { event -> ... }` 和 `events().on<E> { ... }` 支持 reified 类型与命名参数。
 - 事件块是普通函数，不是挂起函数；事件优先级、取消和 Bukkit 事件线程语义保持不变。
+
+### 同一套生命周期与运行时
+
+| 调用方使用 | 模块内部负责 |
+| --- | --- |
+| `Scope.install`、`childScope`、`rebuild` | 资源归属、逆序释放、失败聚合与新旧构建代隔离 |
+| `tasks()`、`submitSync`、`scope.coroutines` | 任务附着/取消竞态、关闭门禁与结果终态 |
+| `events()`、`components()` | 声明检查、监听注册与组件启动失败回滚 |
+
+Java 的 `Scope`、调度 SPI、注解和 `KPlugin` 入口保留原契约；保留它们是为了外部实现、继承和 Java 平台类型，不要求调用方切换语言，也没有第二套 Java 执行引擎。
+
+使用 Klib Gradle 插件时，Kotlin/JVM 与私有运行时随选定模块自动接入。手动打包不能只复制 Klib 类而漏掉标准库或协程；依赖选择、重定位和隔离加载限制统一见[构建与打包](../../README.md)。
 
 ## 事件
 

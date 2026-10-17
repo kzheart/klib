@@ -158,7 +158,7 @@ fun publicationDisplayName(projectName: String): String = when (projectName) {
 
 configure(javaProjects) {
     apply(plugin = "java-library")
-    if (name != "klib-guard-api") {
+    run {
         apply(plugin = "org.jetbrains.kotlin.jvm")
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
             compilerOptions {
@@ -194,8 +194,21 @@ configure(javaProjects) {
         options.encoding = "UTF-8"
         (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
         onlyIf("contains documentable Java types") {
-            source.files.any { it.name !in setOf("package-info.java", "BuildMarker.java") }
+            source.files.any { file ->
+                file.extension == "java" && Regex("(?m)^public\\s+(?:(?:abstract|final|strictfp)\\s+)*(?:class|interface|enum|@interface)\\b")
+                    .containsMatchIn(file.readText())
+            }
         }
+    }
+
+    // Kotlin-only modules still publish useful module documentation beside any generated Java API.
+    tasks.named<Jar>("javadocJar") {
+        val docName = when {
+            project.name.startsWith("klib-data") -> "data"
+            project.name.startsWith("klib-compat") -> "compat"
+            else -> project.name.removePrefix("klib-")
+        }
+        from(rootProject.file("docs/modules/$docName.md")) { into("guide") }
     }
 
     dependencies {
@@ -235,6 +248,8 @@ configure(publishableProjects) {
     val moduleName = name
 
     tasks.withType<Jar>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
         from(rootProject.file("LICENSE")) {
             into("META-INF")
         }
@@ -534,13 +549,57 @@ tasks.named("clean") {
 
 tasks.named("check") {
     dependsOn(javaProjects.map { it.tasks.named("check") })
-    dependsOn("checkJava8Compatibility", "checkLicenses", "checkPublicBoundary")
+    dependsOn("checkJava8Compatibility", "checkLicenses", "checkPublicBoundary", "checkModuleLayout")
+}
+
+tasks.register("checkModuleLayout") {
+    group = "verification"
+    description = "Checks grouped source directories without changing Gradle or Maven identities."
+    inputs.file("gradle/module-layout.properties")
+    doLast {
+        val actualProjects = rootProject.subprojects.map { it.path }.toSet()
+        if (actualProjects != javaProjectPaths.toSet()) {
+            throw GradleException("Module layout changed the published project identities: $actualProjects")
+        }
+        val groups = setOf("libraries", "storage", "platform", "runtime")
+        javaProjects.forEach { module ->
+            val relative = module.projectDir.relativeTo(rootDir).invariantSeparatorsPath
+            if (relative.substringBefore('/') !in groups || !module.file("src/main").isDirectory) {
+                throw GradleException("Missing or ungrouped production module: ${module.path} -> $relative")
+            }
+            if (rootProject.file(module.name).exists()) {
+                throw GradleException("Obsolete flat module directory remains: ${module.name}")
+            }
+        }
+    }
 }
 
 tasks.register("checkLicenses") {
     group = "verification"
     description = "Verifies the Apache license and bundled third-party attribution."
-    inputs.files("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
+    val bundledLicenses = mapOf(
+        project(":klib-script").file("src/main/resources/META-INF/LICENSE-TabooLib-Kether.txt") to listOf(
+            "Copyright (c) 2018 Bkm016",
+            "c27e822fb34eebd7433a94efbfac0a26943cccd6",
+            "0e3a911fc55624075b5c9abd4368cb5b063b022b",
+            "34732f0a17aa3d739c8c7c1a3b3ff44c948f84f5",
+        ),
+        project(":klib-script").file("src/main/resources/META-INF/LICENSE-Sponge-Coerce.txt") to listOf(
+            "Copyright (c) SpongePowered",
+            "Copyright (c) contributors",
+            "common-legacy-api/src/main/java/taboolib/common5/Coerce.java",
+        ),
+    ) + listOf(
+        ":klib-compat", ":klib-compat-v1_12", ":klib-compat-v1_20",
+        ":klib-compat-v1_21", ":klib-compat-v26",
+    ).associate { path ->
+        project(path).file("src/main/resources/META-INF/LICENSE-TabooLib-Scoreboard.txt") to listOf(
+            "Copyright (c) 2018 Bkm016",
+            "0e3a911fc55624075b5c9abd4368cb5b063b022b",
+        )
+    }
+    inputs.files("LICENSE", "NOTICE")
+    inputs.files(bundledLicenses.keys)
     doLast {
         val license = rootProject.file("LICENSE").readText()
         if (!license.contains("Apache License") ||
@@ -549,17 +608,26 @@ tasks.register("checkLicenses") {
         }
         val notice = rootProject.file("NOTICE").readText()
         if (!notice.contains("Copyright 2026 kzheart") ||
-            !notice.contains("THIRD_PARTY_NOTICES.md")) {
+            !notice.contains("src/main/resources/META-INF/")) {
             throw GradleException("NOTICE is missing required attribution")
         }
-        val thirdParty = rootProject.file("THIRD_PARTY_NOTICES.md").readText()
-        listOf(
-            "c27e822fb34eebd7433a94efbfac0a26943cccd6",
-            "Copyright (c) 2018 Bkm016",
+        val mitTerms = listOf(
             "Permission is hereby granted, free of charge",
-        ).forEach { required ->
-            if (!thirdParty.contains(required)) {
-                throw GradleException("THIRD_PARTY_NOTICES.md is missing $required")
+            "The above copyright notice and this permission notice shall be included in",
+            "THE SOFTWARE IS PROVIDED \"AS IS\"",
+            "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN",
+            "Source attribution and modifications",
+        )
+        bundledLicenses.forEach { (file, attribution) ->
+            val path = file.relativeTo(rootDir)
+            if (!file.isFile) {
+                throw GradleException("Missing bundled license: $path")
+            }
+            val content = file.readText().replace(Regex("\\s+"), " ")
+            (attribution + mitTerms).forEach { required ->
+                if (!content.contains(required)) {
+                    throw GradleException("$path is missing $required")
+                }
             }
         }
     }
@@ -735,8 +803,7 @@ tasks.register("verifyMavenStaging") {
                     "$baseName.pom must not publish the host-provided Spigot API")
             }
             expectedPublicationDependencies[module.name]?.let { javaExpected ->
-                val expected = if (module.name != "klib-guard-api")
-                    javaExpected + "org.jetbrains.kotlin:kotlin-stdlib:compile" else javaExpected
+                val expected = javaExpected + "org.jetbrains.kotlin:kotlin-stdlib:compile"
                 val actual = pomDependencies(pom)
                 if (actual != expected) {
                     throw GradleException(

@@ -200,7 +200,7 @@ for (CompatCapabilityMatrix.Row row : matrix.rows()) {
 - 标题和行只以数据包形式发给目标玩家的客户端。
 - **不读取、不替换、不修改**玩家的 Bukkit `Scoreboard`，原有队伍、计分项和其他插件的记分板保持不变。
 - 更新时只发送与上一次不同的标题和行。
-- 实现改写自 TabooLib 的 `NMSScoreboard`，归属见 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)。
+- 实现改写自 TabooLib 的 `NMSScoreboard`，来源与许可全文见 [侧边栏归属](../../platform/compat/src/main/resources/META-INF/LICENSE-TabooLib-Scoreboard.txt)，对应资源随 Compat 与版本适配 JAR 分发。
 
 需要 `core()`，以及覆盖目标服务端版本的 `compat-v*`（Gradle 插件自动补入 `compat`）：
 
@@ -318,13 +318,17 @@ public final class CustomCompat extends AbstractCompatProvider {
 
 ## 现代数据包实现共享
 
+解析、能力发现与侧边栏实现使用 Kotlin，Java 仍通过 `CompatProviders`、`Capabilities` 与 `Sidebars` 静态入口调用。业务查询能力并提交标题/行，不需要维护 NMS 名称、包映射或数据包构造器。
+
 现代侧边栏公共逻辑集中在 Compat 内部实现，版本模块只保留版本选择入口。相同 packet shape 不复制整套反射、差异更新或文本逻辑；旧版文本拆分仍由旧版适配器处理。
+
+`CompatProvider`、`SidebarBridge` 保留 Java 平台类型契约；仅返回 primitive boolean 的四个能力 SPI 使用等价 Kotlin fun interface，继续支持 Java/Kotlin lambda。`NbtBridge` 只描述 PDC 能力，实际原生标签读写使用 [Item 的 `NativeItemTags`](item.md#原生-nbt-标签)，不把版本解析当作 NBT 布局探测。
 
 版本解析成功只代表选择到适配器，不等于每个服务端补丁版本均经过实服验证。验证范围以 [验证记录](../validation/native-kotlin-test-plan.md) 为准。
 
 ## 线程与生命周期
 
-- 解析器、版本对象、提供者和能力矩阵都是纯 Java 对象，不创建线程，也不需要释放。
+- 解析器、版本对象、提供者和能力矩阵是普通 JVM 对象，不创建线程，也不需要释放。
 - 除 `SidebarBridge` 外，桥接能力只是能力描述，不替调用方执行 Bukkit/NMS 操作；业务模块仍需遵守相关 API 的线程约束。
 - `Sidebars` 由作用域管理释放：
   - `install` 把实例安装到作用域，并通过作用域事件能力监听 `PlayerQuitEvent`。玩家退出时直接丢弃其状态，不发送数据包；同一 UUID 重新登录后的首次 `show` 会重新创建侧边栏。

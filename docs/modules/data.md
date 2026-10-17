@@ -9,13 +9,7 @@
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        data {
-            json()
-        }
-    }
-}
+klib { modules { data { json() } } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
@@ -24,7 +18,9 @@ klib {
 - 生产存储必须在 `data { }` 中显式选择 `json()`、`sqlite()`、`mysql()` 或 `postgresql()`，可以同时选多个。
 - 直接依赖制品时，只依赖实际使用的那个实现即可。每个实现会传递带上公共模块和自身需要的运行时。
 
-| 模块 | 内容 | 第三方运行时 |
+各模块均使用内置 Kotlin 运行时，`data` 还通过 Core 提供协程；下表只列额外的存储后端依赖。
+
+| 模块 | 内容 | 额外后端运行时 |
 | --- | --- | --- |
 | `klib-data` | 契约、迁移、玩家数据缓存 | 无 |
 | `klib-data-json` | JSON 文件提供器 | 无；Gson 由宿主提供 |
@@ -253,7 +249,7 @@ CompletionStage<JdbcExecutor> ready = JdbcExecutor.open(dataSource, 2, 128, engi
 
 取消尚未开始的 future 会跳过其回调；取消已开始的 future 只停止等待，不中断事务、不保证回滚。实际 JDBC 超时仍需配置驱动、数据源或 statement；队列有界不能解决数据库永不返回的问题。
 
-Kotlin 直接调用同一个 Java 核心，通过已有协程 `await()` 挂起等待：
+Kotlin 直接调用与 Java 共用的 SQL 执行器，通过内置协程的 `await()` 挂起等待：
 
 ```kotlin
 import me.kzheart.klib.data.jdbc.JdbcExecutor
@@ -421,6 +417,8 @@ CompletionStage<PlayerDataCache<PlayerProfile>> cacheStage =
 
 ## Kotlin 挂起调用
 
+存储会话、迁移、缓存以及 JSON/JDBC 提供器由 Kotlin 实现；Java 继续得到原有 `CompletionStage`，Kotlin 挂起入口等待相同操作，不创建第二套存储引擎。
+
 ```kotlin
 import me.kzheart.klib.data.*
 
@@ -436,6 +434,14 @@ suspend fun save(session: StorageSession) {
 `openAwait`、`getAwait`、`putAwait`、`deleteAwait`、`entriesAwait` 等待现有 provider 的异步操作；不会在调用线程另起一个阻塞引擎。已取消的打开操作若后来返回会话，会在 IO 线程自动释放该会话，不阻塞取消或完成线程；这类失去调用方的清理异常交给原协程上下文的异常处理器（未配置时使用协程默认处理）。
 
 `transactionAwait { ... }` 的事务块刻意保持普通、不可挂起函数，仍由 provider 的事务执行器管理。取消等待不代表底层已开始的 JDBC 写入被回滚；需要原子性时把关联写入放入同一事务。
+
+| 调用方选择 | 提供器内部负责 |
+| --- | --- |
+| 后端与会话 | 执行队列、资源归属、失败与关闭 |
+| `transaction` / SQL `work` | 连接借还、提交/回滚及连接状态恢复 |
+| `Schema` / `MigrationRunner` | 版本门禁与顺序执行；数据库升级策略仍由业务决定 |
+
+`StorageProvider`、`StorageSession`、事务/行映射 SAM 与 `Migration.MigrationAction` 保留 Java 契约，兼容既有可空实现、泛型与异常声明。各驱动仍是按需选择的独立制品，不因实现语言变化一起打包。
 
 ## 线程与生命周期
 

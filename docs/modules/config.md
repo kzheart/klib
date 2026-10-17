@@ -17,11 +17,7 @@
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        config()
-    }
-}
+klib { modules { config() } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
@@ -94,6 +90,8 @@ protected void setup() {
 ### Kotlin 配置模型
 
 原生 Kotlin API 随 `config` 模块提供，无需额外模块；配置对象仍由同一文档与作用域管理。
+
+`kotlin-reflect` 是构造器映射所需的运行时依赖；Klib Gradle 插件随模块依赖闭包打包并处理其元数据。反射重定位仅支持构建插件声明的固定官方版本，不要自行替换任意 reflect JAR；完整打包规则见[构建与打包](../../README.md)。
 
 ```kotlin
 import me.kzheart.klib.config.ConfigModule
@@ -539,6 +537,16 @@ String text = settings.sectionText();
 - 原有 `YamlDocument` 的解析、raw 转换、注释、默认值合并和 migration 行为保持原契约；新增后端不会把第三方格式的字符串或类型规范化规则强加给默认 YAML 文档。
 
 </details>
+
+## Java 与 Kotlin 共用的配置流程
+
+| 业务入口 | 内部统一处理 |
+| --- | --- |
+| Java POJO / Kotlin 主构造器模型 | 缓存字段与构造计划、转换值、递归可空性和校验 |
+| `ConfigNode` | 隐藏 YAML AST 与原值树差异，保留路径、节点身份与来源诊断 |
+| `ConfigDocument` / `Registry` 重载 | 候选准备、有效值发布、作用域监听与失败聚合 |
+
+这些实现均在 Kotlin 中；Java 模型与静态入口照常使用。Java 转换器、配置源、迁移 SAM 和注解保留平台类型、默认方法和反射目标，自定义实现无需改写成 Kotlin。
 
 ## 线程与生命周期
 

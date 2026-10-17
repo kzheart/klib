@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `remote` | `me.kzheart.klib:klib-remote` | `core` |
 
-- Java 8 模块。
+- Kotlin 实现，Java 与 Kotlin 直接使用同一客户端；产物保持 Java 8 字节码边界。
 - 和 Guard 的授权、实例绑定、风控、制品签名及其身份数据**完全独立**：两者不调用彼此、不共享 Key，也不把 Remote 安装标识当作授权证明。
 - 不采集心跳、`latest.log`、根 Logger、其他插件 Logger 或平台级日志。
 - 没有版本查询，也没有 `Redactor` 或平台自动脱敏。**事件正文是否包含敏感内容由插件开发者负责**，详见 [Remote 安全边界](../remote-security.md)。
@@ -278,6 +278,19 @@ Contributor 不得在采集时读文件、访问网络或等待外部服务。
 - 重复字段、未知字段、类型错误、尾随内容、索引、计数或 `event_id` 不一致，都视为协议失败并保留队列。
 - `accepted` / `duplicate` 不得携带 `error`；`rejected` 必须携带非空 `error`。
 
+## Java 与 Kotlin 共用的交付流程
+
+| 调用方使用 | 客户端内部负责 |
+| --- | --- |
+| `RemoteEvent` / `Incident` 工厂 | 字段检查与事件深快照 |
+| `RemoteDelivery.submit` / `accept` | 有界内存邮箱、单工作线程、磁盘队列与重试时钟 |
+| `RemoteOperation` / `RemoteLogger` | 上下文恢复、采集预算、Contributor 隔离与超时 |
+| `RemoteClient` | 请求编码、严格收据校验与策略状态 |
+
+这些处理由 Kotlin 实现，Java 继续使用静态工厂、Builder 和普通回调。`RpkTransport`、`DiagnosticContributor` 保留 Java 平台类型、默认方法与异常声明；`RemoteEvent` 的薄 Java 外壳保留既有子类和静态工厂契约。
+
+实现语言不会自动打开采集、增加敏感字段或扩大远端权限；是否构造并提交事件仍由业务显式决定。
+
 ## 线程与生命周期
 
 - 把 `RemoteLogger`、桥接返回的 `Disposable` 和 `RemoteDelivery` 纳入插件生命周期，停服时调用 `dispose()`。
@@ -293,7 +306,7 @@ Contributor 不得在采集时读文件、访问网络或等待外部服务。
 - 本模块没有旧诊断协议的兼容路由、兼容 shim 或导入器。
 - 旧版未校验诊断数据不会导入，也不得在 Remote 中视为可信数据。
 - 协议细节见 [Remote 协议 v1](../remote-protocol.md)。
-- Remote 服务端实现和部署配置不属于本公共 Java 客户端仓库。
+- Remote 服务端实现和部署配置不属于本公共 JVM 客户端仓库。
 
 ### 服务端控制面
 

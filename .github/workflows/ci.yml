@@ -50,5 +50,7 @@ jobs:
             -Djava.io.tmpdir="$secure_tmp" \
             --no-daemon --no-configuration-cache
 
-      - name: Check shell scripts
-        run: bash -n scripts/*.sh
+      - name: Check layout and verification scripts
+        run: |
+          bash -n scripts/*.sh
+          python3 -m unittest discover -s scripts/tests -v

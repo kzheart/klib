@@ -13,16 +13,16 @@ if rg -n --glob '*.java' "$forbidden_api" .; then
   exit 1
 fi
 
-publishable_projects=(
-  klib-core klib-command klib-config klib-lang klib-item klib-data klib-data-json
-  klib-data-jdbc klib-data-sqlite klib-data-mysql klib-data-postgresql klib-ui klib-script
-  klib-hook klib-compat klib-compat-v1_12 klib-compat-v1_20 klib-compat-v1_21
-  klib-compat-v26 klib-remote klib-guard-api
-)
-
 class_count=0
-for module in "${publishable_projects[@]}"; do
-  artifact="$(find "$module/build/libs" -maxdepth 1 -type f -name '*.jar' \
+module_count=0
+while IFS='=' read -r module module_directory || [[ -n "$module" ]]; do
+  [[ -z "$module" || "$module" == \#* ]] && continue
+  module_count=$((module_count + 1))
+  if [[ -z "$module_directory" || ! -d "$module_directory/build/libs" ]]; then
+    echo "No build output found for publishable module: ${module} (${module_directory})" >&2
+    exit 1
+  fi
+  artifact="$(find "$module_directory/build/libs" -maxdepth 1 -type f -name '*.jar' \
     ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
   if [[ -z "$artifact" ]]; then
     echo "No main JAR found for publishable module: ${module}" >&2
@@ -44,7 +44,12 @@ for module in "${publishable_projects[@]}"; do
     echo "No class files found in publishable module JAR: ${artifact}" >&2
     exit 1
   fi
-done
+done < gradle/module-layout.properties
+
+if [[ "$module_count" -eq 0 ]]; then
+  echo 'No publishable modules found in gradle/module-layout.properties.' >&2
+  exit 1
+fi
 
 probe_dir="$(mktemp -d)"
 trap 'rm -rf "$probe_dir"' EXIT

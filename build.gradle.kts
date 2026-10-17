@@ -1176,6 +1176,25 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
                     sql.transaction { client -> delay(1) }
                 }
             """.trimIndent()),
+            "ValidDatabase" to (true to """
+                import me.kzheart.klib.data.jdbc.*
+                import java.util.UUID
+                import java.time.Instant
+                data class Profile(val id: UUID, val joined: Instant, val note: String?)
+                suspend fun load(db: Database, id: UUID): Profile? = db.read {
+                    queryOne("SELECT id, joined, note FROM profile WHERE id = ?", id) {
+                        Profile(it.uuid("id"), it.instant("joined"), it.stringOrNull("note"))
+                    }
+                }
+                suspend fun save(db: Database, id: UUID) = db.transaction {
+                    execute("DELETE FROM profile WHERE id = ?", id)
+                }
+            """.trimIndent()),
+            "SuspendingDatabaseTransaction" to (false to """
+                import me.kzheart.klib.data.jdbc.*
+                import kotlinx.coroutines.delay
+                suspend fun wrong(db: Database) { db.transaction { delay(1) } }
+            """.trimIndent()),
             "WrongTagType" to (false to """
                 import me.kzheart.klib.item.*
                 import org.bukkit.Material

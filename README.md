@@ -115,7 +115,7 @@ klib {
 | 模块 | 存储与运行时依赖 |
 | :--- | :--- |
 | `klib-data-json` | JSON 文件；使用宿主提供的 Gson |
-| `klib-data-jdbc` | JDBC KV 引擎、轻量 SQL/显式映射、事务与外部迁移门禁；不包含数据库驱动 |
+| `klib-data-jdbc` | JDBC KV 引擎、受管数据库、挂起 SQL/显式映射、事务与外部迁移门禁；不包含数据库驱动 |
 | `klib-data-sqlite` | SQLite；使用宿主提供的 SQLite JDBC |
 | `klib-data-mysql` | MySQL；包含 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL；包含 pgJDBC，支持事务迁移 |

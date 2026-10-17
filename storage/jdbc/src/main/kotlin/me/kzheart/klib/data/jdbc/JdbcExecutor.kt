@@ -18,7 +18,8 @@ import javax.sql.DataSource
  * 有界 SQL 执行器；每项工作借还一个连接，数据源仍归调用方所有。
  * 关闭会排空已接纳工作；不自动重试写入，不中断事务，取消 Future 不等于回滚。
  */
-class JdbcExecutor(private val dataSource: DataSource, parallelism: Int, queueCapacity: Int) : Disposable, AutoCloseable {
+class JdbcExecutor @JvmOverloads constructor(private val dataSource: DataSource, parallelism: Int, queueCapacity: Int,
+                                            private val statementTimeoutSeconds: Int = 0) : Disposable, AutoCloseable {
     private val terminated = CompletableFuture<Void>()
     private val inCallback = ThreadLocal<Boolean>()
     private val workerThread = ThreadLocal<Boolean>()
@@ -26,6 +27,7 @@ class JdbcExecutor(private val dataSource: DataSource, parallelism: Int, queueCa
 
     init {
         require(parallelism > 0 && queueCapacity > 0) { "parallelism and queueCapacity must be positive" }
+        require(statementTimeoutSeconds >= 0) { "statementTimeoutSeconds must not be negative" }
         val sequence = AtomicInteger()
         executor = object : ThreadPoolExecutor(parallelism, parallelism, 0L, TimeUnit.MILLISECONDS,
             ArrayBlockingQueue(queueCapacity), { task ->
@@ -59,6 +61,18 @@ class JdbcExecutor(private val dataSource: DataSource, parallelism: Int, queueCa
         }
     }
     override fun close() = dispose()
+    internal fun isWorkerThread(): Boolean = workerThread.get() == true
+
+    internal fun initialize(migrations: SqlMigrationEngine, targetVersion: Int): CompletionStage<Unit> = submit {
+        val current = migrations.currentVersion(dataSource)
+        if (current < 0 || current > targetVersion) {
+            throw StorageException("Unsupported SQL schema version $current; expected at most $targetVersion")
+        }
+        if (current < targetVersion) migrations.migrate(dataSource, targetVersion)
+        val actual = migrations.currentVersion(dataSource)
+        if (actual != targetVersion) throw StorageException("SQL migration ended at version $actual; expected $targetVersion")
+        return@submit Unit
+    }
 
     private fun <T> submit(operation: () -> T): CompletionStage<T> {
         val result = CompletableFuture<T>()
@@ -86,7 +100,7 @@ class JdbcExecutor(private val dataSource: DataSource, parallelism: Int, queueCa
             state.connection = connection
             check(connection.autoCommit) { "DataSource must supply an auto-commit connection" }
             state.begin()
-            val scopedClient = SqlClient(connection)
+            val scopedClient = SqlClient(connection, statementTimeoutSeconds)
             client = scopedClient
             inCallback.set(true)
             try { result = work.execute(scopedClient) }
@@ -178,18 +192,9 @@ class JdbcExecutor(private val dataSource: DataSource, parallelism: Int, queueCa
             require(targetVersion >= 0) { "targetVersion must not be negative" }
             val created = JdbcExecutor(source, parallelism, queueCapacity)
             val result = CompletableFuture<JdbcExecutor>()
-            created.submit {
-                val current = migrations.currentVersion(source)
-                if (current < 0 || current > targetVersion) {
-                    throw StorageException("Unsupported SQL schema version $current; expected at most $targetVersion")
-                }
-                if (current < targetVersion) migrations.migrate(source, targetVersion)
-                val actual = migrations.currentVersion(source)
-                if (actual != targetVersion) throw StorageException("SQL migration ended at version $actual; expected $targetVersion")
-                created
-            }.whenComplete { ready, failure ->
+            created.initialize(migrations, targetVersion).whenComplete { _, failure ->
                 if (failure != null) created.closeAsync().whenComplete { _, _ -> result.completeExceptionally(failure) }
-                else if (!result.complete(ready)) created.closeAsync()
+                else if (!result.complete(created)) created.closeAsync()
             }
             return result
         }

@@ -174,7 +174,73 @@ MySQL、PostgreSQL 提供器支持 `(DataSource, KLogger)` 构造。数据源由
 
 ## 关系型 SQL 与显式对象映射
 
-`JdbcExecutor` 独立于 `StorageSession`，适合保留现有业务表、JOIN、数据库约束与批量语句。选择任一 JDBC 后端会带上该模块；直接引用时使用 `klib-data-jdbc`。Klib 不创建连接池，也不自动推导实体、关系或 SQL 方言。
+`JdbcExecutor` 独立于 `StorageSession`，适合保留现有业务表、JOIN、数据库约束与批量语句。选择任一 JDBC 后端会带上该模块；直接引用时使用 `klib-data-jdbc`。基础模块不创建池，也不自动推导实体、关系或 SQL 方言。
+
+### 受管数据库与薄挂起入口
+
+`Databases.open(scope, config)` 在现有有界 JDBC 执行器上完成打开、迁移门禁和连接探测，成功后才交付 `Database`。
+Java 得到 `CompletionStage<Database>`；Kotlin 使用 `Databases.openAwait`，不另起一套 SQL 执行引擎。
+
+```kotlin
+import me.kzheart.klib.data.jdbc.*
+
+val config = DatabaseConfig.driver(driverClass, pluginClassLoader, jdbcUrl, properties)
+    .workers(2).queueCapacity(128)
+    .statementTimeout(Duration.ofSeconds(30))
+    .closeTimeout(Duration.ofSeconds(30))
+    .build()
+val db = Databases.openAwait(scope, config)
+val profile = db.read {
+    queryOne("SELECT name, joined_at, note FROM player_profile WHERE player_id = ?", playerId) {
+        Profile(it.string("name"), it.instant("joined_at"), it.stringOrNull("note"))
+    }
+}
+db.transaction {
+    execute("UPDATE player_profile SET note = ? WHERE player_id = ?", note, playerId)
+    execute("INSERT INTO profile_audit(player_id) VALUES (?)", playerId)
+}
+```
+
+`Duration` 是 `java.time.Duration`，其余连接设置、`Profile` 和业务变量由调用方提供。`db.read` 只是自动提交工作块的便利名称，仍可执行写入，**不提供权限隔离或多语句事务**。
+需要同一连接原子提交时使用 `db.transaction`；其块是普通不可挂起函数，外层挂起等待结果。
+
+```java
+CompletionStage<Optional<Profile>> profile = db.readAsync(sql ->
+        sql.queryOne("SELECT name, joined_at FROM player_profile WHERE player_id = ?",
+                SqlArguments.of(playerId), SqlRows.mapper(row ->
+                        new Profile(row.string("name"), row.instant("joined_at")))));
+CompletionStage<Integer> changed = db.transactionAsync(sql ->
+        sql.update("UPDATE player_profile SET note = ? WHERE player_id = ?",
+                SqlArguments.of(note, playerId)));
+```
+
+| 入口 | 行为 |
+| --- | --- |
+| Kotlin `query` / `queryOne` / `execute` | 显式行映射返回列表／零行 null 多行失败／受影响行数 |
+| `SqlRows.mapper(SqlRowMapper)` | Java 的类型化行映射适配，继续调用现有 `SqlClient` |
+| `SqlRow.string/int/long/boolean/decimal/bytes/uuid/instant` | 必填读取，SQL NULL 报错；对应 `*OrNull` 显式返回可空值 |
+| Java `SqlRow.intValue/longValue/booleanValue` | 避免 Java 关键字的方法名；Kotlin 仍用 `int/long/boolean` |
+| `SqlArguments.of(...)` | 集中绑定标量、UUID、Instant、BigDecimal、ByteArray、null |
+| `SqlValue.nullOf(sqlType)` / `typed(value, sqlType)` | NULL 无法推导或需要显式 JDBC 类型时使用 |
+
+- `SqlRow` 只在当前 mapper 回调及线程内有效，不能保存它、ResultSet 或连接到外部。结果对象由业务显式构造，不做 ORM 或实体反射。
+- Instant 按 UTC 与 JDBC Timestamp 转换；无时区列也按 UTC 解释。UUID 在 PostgreSQL 绑定原生类型，在文本存储后端绑定标准字符串。
+- 不支持的参数类型直接拒绝，使用 `SqlValue.typed` 或已有 `SqlParameters` 明确绑定。SQL 只使用 PreparedStatement；表名和排序等标识符仍来自业务白名单。
+- 沿用 `JdbcTransactionException` 四态、拒绝同一执行器嵌套提交、不自动重试写入。取消等待不等于已开始的事务回滚；事务只读提示使用 `SqlTransactionOptions.withReadOnly(true)`。
+
+### 配置、池与资源归属
+
+`DatabaseConfig` 的默认值为 2 个 worker、128 个排队工作、30 秒语句超时和30秒同步关闭等待；Builder 校验正数，均可由业务配置传入。
+`driver` 提供可选连接超时参数，默认 10 秒，对 PostgreSQL/MySQL URL 应用已有驱动适配；URL 中显式超时优先。未知驱动和外部数据源的连接／网络超时仍由对应驱动或池配置。
+
+- `DatabaseConfig.external(dataSource)` 只归还自己借到的连接，**不关闭调用方的池**。
+- `DatabaseConfig.builder(JdbcSourceFactory)` 在执行器线程创建源；用 `JdbcSource.owned(source, cleanup)` 交付关闭权，或者 `JdbcSource.external(source)` 保留调用方所有权。工厂失败前应自行清理尚未交付的资源。
+- `Databases.open` 在启动工作前把资源登记到 Scope，打开失败、取消及晚到成功都进入同一关闭流程；不在完成线程重新安装 Scope，避免与关闭排空互等。
+- `Database.closeAsync()` 停止接收、排空已接受工作后关闭自有源。重复关闭共享终态，取消返回的关闭观察不会取消真实排空。
+- `dispose/close` 最多等待配置时限。超时明确失败，Scope 标记关闭也不代表数据库已经排空；应继续观察 `closeAsync()`，不能提前关闭外部池。SQL 回调内不能阻塞等待自身关闭。
+- `statementTimeout` 只设置 `SqlClient` 创建的语句；原始 JDBC、外部迁移引擎和驱动连接超时仍由各自配置。日志只报告生命周期与失败状态，原始错误通过阶段传播，不把 URL、凭据或 SQL 参数写入日志。
+
+### 直接使用 JDBC 执行器
 
 ```java
 import me.kzheart.klib.data.jdbc.JdbcExecutor;
@@ -257,6 +323,9 @@ CompletionStage<JdbcExecutor> ready = JdbcExecutor.open(dataSource, 2, 128, engi
 | 非整数版本映射、数据库 DDL 能力与较新 schema 兼容策略 | 业务适配器与所选引擎 |
 
 已有版本等于目标时不会再次调用 `migrate`。读取或迁移失败、结果版本不匹配时，Klib 关闭新建执行器并让打开结果失败；不会自动修复历史、重建表或宣称外部 DDL 已回滚。门禁外的版本检查不是跨实例锁，迁移引擎必须在锁内重新检查。
+
+受管入口在 `DatabaseConfig.Builder.migrations(engine, targetVersion)` 中指定同一个 `SqlMigrationEngine`；与 `JdbcExecutor.open` 共用门禁实现。
+成熟引擎适配器仍自行负责历史、checksum、锁、目标版本映射和超时，Klib 不复制迁移引擎。
 
 先在旧数据副本验证迁移与失败重跑。迁移工具的 Java/数据库版本兼容性、跨进程锁和 DDL 恢复，需要适配器自己的测试验证。
 
@@ -464,7 +533,7 @@ suspend fun save(session: StorageSession) {
 
 ## 线程与生命周期
 
-- 所有存储操作都是异步的，返回 JDK `CompletionStage`。
+- Java 存储操作返回 JDK `CompletionStage`；Kotlin 薄入口挂起等待同一个异步操作。
 - 事务回调运行在存储线程；`thenApply`、`thenAccept`、`thenCompose` 等非 `Async` 回调可能运行在完成线程，已完成的阶段也可能在注册回调的线程执行。它们**不会自动切回主线程**，不能据此调用要求主线程的 Bukkit API。
 - 向玩家反馈时，用 `Scope.sync(Runnable)`、`scope.submitSync(stage, mapper)` 或 `AsyncTasks.thenSync(stage, scope, action)` 显式切回主线程，详见 [Core 的桥接 CompletionStage](core.md#桥接-completionstage)。旧写法 `Scope.after(Ticks.of(0), ...)` 语义等价，新代码用 `sync`。
 - 把 provider、成功打开的 session 和 `PlayerDataCache` 安装进同一个业务 `Scope`。关闭作用域时，缓存先排空脏数据，随后会话和提供器按逆序释放。

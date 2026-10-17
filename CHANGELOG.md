@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- JDBC 新增 `Databases.open` / `Database` 受管资源、Kotlin 薄挂起读写入口、集中参数绑定与生命周期受限的 `SqlRow`；复用有界 SQL 执行器、同连接事务及外部迁移门禁，关闭排空后才释放自有数据源，取消打开也回收晚到资源。
+
 - Data 新增基于现有 `StorageSession` / `DataCodec` 的类型化 KV 及受限事务视图，缺失值明确返回 empty/null，编码值不允许 null。
 
 - UI 新增 `MenuLayout` 配置布局和完整功能字符绑定，加载／编译错误带精确路径，列表容量直接来自布局并复用现有分页与原子配置快照。

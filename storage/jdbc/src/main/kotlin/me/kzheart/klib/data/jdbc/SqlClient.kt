@@ -1,12 +1,13 @@
 package me.kzheart.klib.data.jdbc
 
 import java.sql.Connection
+import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.util.Collections
 import java.util.Optional
 
 /** 工作回调内的线程受限 JDBC 入口，资源作用域由 use 明确关闭。 */
-class SqlClient(private val connection: Connection) {
+class SqlClient @JvmOverloads constructor(private val connection: Connection, private val statementTimeoutSeconds: Int = 0) {
     private val owner = Thread.currentThread()
     @Volatile private var active = true
 
@@ -16,7 +17,7 @@ class SqlClient(private val connection: Connection) {
     @Throws(SQLException::class)
     fun update(sql: String?, parameters: SqlParameters): Int {
         requireActive()
-        return connection.prepareStatement(requireSql(sql)).use { statement ->
+        return prepare(sql).use { statement ->
             parameters.bind(statement)
             statement.executeUpdate()
         }
@@ -26,7 +27,7 @@ class SqlClient(private val connection: Connection) {
     @Throws(SQLException::class)
     fun <T> query(sql: String?, parameters: SqlParameters, mapper: RowMapper<T>): List<T> {
         requireActive()
-        return connection.prepareStatement(requireSql(sql)).use { statement ->
+        return prepare(sql).use { statement ->
             parameters.bind(statement)
             statement.executeQuery().use { rows ->
                 val result = ArrayList<T>()
@@ -40,7 +41,7 @@ class SqlClient(private val connection: Connection) {
     @Throws(SQLException::class)
     fun <T : Any> queryOne(sql: String?, parameters: SqlParameters, mapper: RowMapper<T>): Optional<T> {
         requireActive()
-        return connection.prepareStatement(requireSql(sql)).use { statement ->
+        return prepare(sql).use { statement ->
             parameters.bind(statement)
             statement.executeQuery().use { rows ->
                 if (!rows.next()) Optional.empty() else {
@@ -53,6 +54,16 @@ class SqlClient(private val connection: Connection) {
     }
 
     fun finish() { active = false }
+    private fun prepare(sql: String?): PreparedStatement {
+        val statement = connection.prepareStatement(requireSql(sql))
+        try {
+            if (statementTimeoutSeconds > 0) statement.queryTimeout = statementTimeoutSeconds
+            return statement
+        } catch (failure: Throwable) {
+            try { statement.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+            throw failure
+        }
+    }
     private fun requireActive() {
         check(active && owner === Thread.currentThread()) { "SQL client is only valid on its callback thread" }
     }

@@ -16,6 +16,7 @@ libraries/
 storage/
   data/                 存储契约、迁移与玩家数据缓存
   jdbc/                 共享 JDBC 会话、SQL 执行器与事务
+  pool/                 可选连接池薄适配，不由 JDBC/KV 后端自动引入
   json/                 JSON 文件后端
   sqlite/               SQLite 后端
   mysql/                MySQL 后端与驱动依赖
@@ -38,7 +39,7 @@ runtime/
 
 ## 项目身份与构建入口
 
-[gradle/module-layout.properties](../../gradle/module-layout.properties) 是完整的 21 项映射来源。
+[gradle/module-layout.properties](../../gradle/module-layout.properties) 是完整的 22 项映射来源。
 [settings.gradle.kts](../../settings.gradle.kts) 读取它并设置 `ProjectDescriptor.projectDir`，发布逻辑继续按原项目名设置 `artifactId`。
 
 | 源码目录 | Gradle 项目 | Maven artifactId |
@@ -68,6 +69,7 @@ group 仍为 `me.kzheart.klib`，各制品的版本规则不变。消费方的 `
 | `data` | `core` | 统一契约与生命周期 |
 | `json`、`jdbc` | `data` | 文件后端与 JDBC 引擎各自实现契约 |
 | `sqlite`、`mysql`、`postgresql` | `jdbc` | 方言与驱动差异留在具体后端 |
+| `pool` | `jdbc` | 可选 DBCP 适配，仅显式选择时引入连接池；不反向依赖具体驱动 |
 | `compat` | `core` 仅编译期 | 侧边栏入口使用 Scope，不发布为传递依赖 |
 | `compat-v*` | `compat` | 薄版本入口使用公共兼容层 |
 | `script` | `core`；`guard-api` 仅编译期 | 引擎消费核心，隔离互操作由宿主提供契约 |

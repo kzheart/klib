@@ -84,7 +84,7 @@ class ModuleLayoutTest(unittest.TestCase):
                for name in ('core', 'command', 'config', 'lang', 'item', 'ui', 'hook')},
             'klib-data': 'storage/data',
             **{f'klib-data-{name}': f'storage/{name}'
-               for name in ('jdbc', 'json', 'sqlite', 'mysql', 'postgresql')},
+               for name in ('jdbc', 'pool', 'json', 'sqlite', 'mysql', 'postgresql')},
             'klib-compat': 'platform/compat',
             **{f'klib-compat-{name}': f'platform/versions/{name}'
                for name in ('v1_12', 'v1_20', 'v1_21', 'v26')},

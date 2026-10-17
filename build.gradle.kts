@@ -96,6 +96,7 @@ val klibLibraryProjectPaths = listOf(
     ":klib-data",
     ":klib-data-json",
     ":klib-data-jdbc",
+    ":klib-data-pool",
     ":klib-data-sqlite",
     ":klib-data-mysql",
     ":klib-data-postgresql",
@@ -125,6 +126,7 @@ val placeholderApi = libs.placeholderapi
 val sqliteJdbc = libs.sqlite.jdbc
 val mysqlConnector = libs.mysql.connector
 val postgresqlDriver = libs.postgresql
+val dbcp = libs.dbcp
 val h2 = libs.h2
 val gson = libs.gson
 val jexl = libs.jexl
@@ -504,6 +506,14 @@ project(":klib-data-jdbc") {
     }
 }
 
+project(":klib-data-pool") {
+    dependencies {
+        add("api", project(":klib-data-jdbc"))
+        add("implementation", dbcp)
+        add("testRuntimeOnly", postgresqlDriver)
+    }
+}
+
 project(":klib-data-sqlite") {
     dependencies {
         add("api", project(":klib-data-jdbc"))
@@ -524,7 +534,10 @@ project(":klib-data-postgresql") {
         add("api", project(":klib-data-jdbc"))
         add("runtimeOnly", postgresqlDriver)
     }
-    tasks.withType<Test>().configureEach {
+}
+
+listOf(":klib-data-postgresql", ":klib-data-pool").forEach { path ->
+    project(path).tasks.withType<Test>().configureEach {
         // A fresh database must be exercised, not replaced by a cached skipped test report.
         outputs.upToDateWhen { false }
         outputs.cacheIf("PostgreSQL integration tests depend on a live database") { false }
@@ -728,6 +741,7 @@ val expectedPublicationDependencies = mapOf(
         "me.kzheart.klib:klib-data:compile",
     ),
     "klib-data-jdbc" to setOf("me.kzheart.klib:klib-data:compile"),
+    "klib-data-pool" to setOf("me.kzheart.klib:klib-data-jdbc:compile", "org.apache.commons:commons-dbcp2:runtime"),
     "klib-data-sqlite" to setOf(
         "me.kzheart.klib:klib-data-jdbc:compile",
     ),

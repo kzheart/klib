@@ -3,7 +3,7 @@
 ## 沟通与边界
 
 - 始终使用简体中文沟通；代码标识、命令和配置键保留原文。
-- 本仓库只维护 Apache-2.0 公共 Java 模块和 `klib-guard-api`。
+- 本仓库只维护 Apache-2.0 公共 Java / Kotlin 模块和 `klib-guard-api`。
 - 禁止加入 Guard runtime、Native、Collector、部署配置、生产密钥或授权内部文档。
 - Gradle 插件在 `kzheart/klib-gradle-plugin` 独立维护，不在这里复制源码。
 
@@ -16,6 +16,14 @@
 - 不新增未要求的旧 API 别名、降级路径或兼容层。
 - Java 类型优先显式 import 后使用简单类名；嵌套类型使用 Outer.Inner。仅真实同名冲突时保留必要限定名，不为省 import 在正文重复书写完整包名。
 
+## 模块布局
+
+- 源码按 `libraries/`、`storage/`、`platform/`、`runtime/` 归组，完整职责和依赖方向见 [模块布局](docs/architecture/module-layout.md)。
+- `gradle/module-layout.properties` 是项目身份到物理目录的唯一映射；`settings.gradle.kts` 通过 `projectDir` 加载，目录组不新增 Gradle 项目。
+- Gradle 任务仍使用 `:klib-core:test` 等既有项目路径，Maven 坐标仍为 `me.kzheart.klib:klib-*`。不要将源码目录名当成项目名或制品名。
+- 扫描源码、产物或测试报告时读取该映射，不使用顶层 `klib-*` glob；ABI 历史基线的旧布局读取是有意保留的验证能力。
+- 版本入口放在 `platform/versions/`，公共实现下沉 `platform/compat/`；驱动与后端下沉 `storage/` 内共享层。不要为减少目录数量捆绑不相关运行依赖。
+
 ## 聊天面板
 
 - 管理页优先复用 `ChatCommandMenu`，参数按字段选择与填写；不复制整页命令按钮模板，不要求输入整串参数。
@@ -26,6 +34,7 @@
 ```bash
 ./gradlew clean check publishToMavenLocal --no-configuration-cache
 ./gradlew centralDryRunBundle --no-configuration-cache
+python3 -m unittest discover -s scripts/tests -v
 ```
 
 修改文档后检查相对链接。

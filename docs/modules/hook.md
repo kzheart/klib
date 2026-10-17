@@ -274,6 +274,23 @@ if (!granted.success()) {
 - 检查中抛出的异常视为「不满足」，异常信息在 `CostLine.error()` 和 `CostResult.message()` 中。
 - `RewardPlan.grant` 某项失败后继续发放其余奖励。控制台命令未被处理（`dispatchCommand` 返回 `false`）视为失败。
 
+## Java 与 Kotlin 共用的集成入口
+
+Kotlin 可直接使用上面的工厂和作用域：
+
+```kotlin
+val economy = context().scope().install(CurrencyHooks.vault(server))
+if (economy.available()) {
+    logger().info("经济服务已连接")
+}
+```
+
+- 插件发现、反射调用与失败分类集中在适配器中，业务读取 `Hook` 状态并使用稳定接口。
+- `CompositeCurrency`、`Costs` 和 `Rewards` 统一维护执行顺序、失败和补偿明细，业务不必重复拆解配置或追踪已扣项目。
+- PAPI 注册绑定作用域，停用/重建时由同一生命周期清理；这些实现均使用 Kotlin。
+
+`Currency`、`Hook`、消耗/奖励与 PAPI 注册 SPI 保留 Java 契约，保持现有实现者的平台类型和自然 lambda 调用。共享实现不会扩大第三方插件的线程安全保证或把多插件扣款变成数据库事务。
+
 ## 线程与生命周期
 
 - `Hook` 和 `PapiRegistration` 都是幂等的 `Disposable`。安装进负责它们的 `Scope`，不要长期保留已关闭作用域产生的句柄。

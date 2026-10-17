@@ -2,6 +2,17 @@
 
 ## 未发布
 
+- 修复完整物品模式中宿主组件 codec 将 custom_data 的同型数字列表转为数组；导出和重建均保留原始 NBT 类型，其他组件继续由宿主校验。
+
+- 第三方改编来源与归属集中到相关模块的许可证资源，随 JAR 保留完整 MIT 条款；移除顶层重复声明并同步许可检查和文档入口。
+
+- 将 Core、Command、Config、Lang、Item、UI、Hook、存储、Compat、Script 与 Remote 的执行实现迁入 Kotlin，共用生命周期、任务、解析和资源处理；保留必要的 Java SPI、注解、开放继承及薄二进制边界，Java 仍使用原有工厂、Builder、SAM 与 `CompletionStage`。
+- Kotlin 标准库、核心协程和配置反射纳入现有模块依赖；Gradle 插件默认接入 Kotlin/JVM 与私有运行时，不要求额外 Kotlin 扩展模块。反射重定位限官方 kotlin-reflect 2.4.21；Guard 的跨加载器类型、条目和 multi-release 限制保持不变。
+- Item 移除 Item-NBT-API 依赖，提供 `NbtTag`、`NbtCompound`、`NbtList` 和 `NativeItemTags` 原生读写，覆盖全部 12 种 NBT 数据类型；旧根标签与现代 `minecraft:custom_data` 分别处理，写入完整替换当前槽位，其他现代组件保持不变。
+- 类型化标签继续优先 PDC；只有原生布局可用时回读旧标签，PDC 写回成功后才删除旧键。原生 NBT 内置实现；默认入口保持标签槽位语义，独立 `readItem` / `createItem` 提供当前服务端完整物品与持久化 components 快照，不执行跨数据版本 DataFixer。
+- NBT 模型新增精确类型读取、缺失默认值、显式数值转换、Boolean/UUID、同型列表编辑与带转义/索引的原子路径修改；严格递归 Map/List 转换保留原 `from` 合同。
+- 新增独立 `NbtCodec`，复用标准二进制核心并提供 SNBT 与类型后缀 JSON 文本格式；明确深度、大小和元素预算，拒绝混型、重复键、溢出及尾随输入。
+- 公共模块物理目录归组为 `libraries`、`storage`、`platform`、`runtime`，Gradle 逻辑项目名、Maven 坐标与按需模块选择保持不变；目录映射由单一清单维护。
 - 修复旧服务端为同一菜单生成不同 Inventory 包装时误判会话过期：通过每次打开唯一的 holder 身份校验，保留玩家、关闭和替换门禁。
 
 - 配置新增可选择的未知键拒绝策略与精确路径诊断；聚合候选快照以基线身份原子提交，拒绝过期、重复及跨实例候选。
@@ -15,7 +26,7 @@
 - 旧 `syncExecutor` 关闭后明确拒绝新任务；已排队的不透明 JDK 组合任务仍需迁到 `submitSync` 或 `AsyncTasks`，聊天与告示牌输入已迁移。
 - 原生 Kotlin API 直接内置现有模块，提供层级命令/菜单、物品属性与 typed 标签操作符、构造器配置和异步存储/脚本挂起调用；withSession 自动管理异步会话释放。
 - 配置映射支持 Kotlin 主构造器、默认参数与递归 nullability，共享 Java 字段元数据并保留原子重载。
-- 旧版 NBT 回退按依赖实际平台能力启用，避免新版 PDC 标签删除/缺失读取触发不支持的 NBT 调用。
+- 旧版 NBT 回退按原生桥实际平台能力启用，避免新版 PDC 标签删除/缺失读取触发不支持的 NBT 调用。
 - 会话取消清理转入后台 IO，避免阻塞主线程；KClass 标量映射使用装箱类型，脚本提供显式取消执行器。
 - Scope 协程按构建代际隔离，关闭时取消旧代并拒绝失效资源访问。
 - 共享现代侧边栏数据包实现，保留实际版本选择与旧版文本规则；Java 8 检查改为编译/API/产物边界而非禁止 Kotlin。
@@ -130,20 +141,20 @@
 
 ## 0.9.2 - 2026-10-03
 
-- 修复 Bukkit Kether 容器发现扫描无关插件公开方法、因其可选依赖（如 WorldGuard）未安装而触发 `NoClassDefFoundError`；现在先按插件入口类名筛选 TabooLib 容器。
+- 修复 Bukkit Kether 容器发现扫描无关插件公开方法、因其可选依赖（如 WorldGuard）未安装而触发 `NoClassDefFoundError`；现在先按插件入口类名筛选 兼容脚本容器。
 
 ## 0.9.1 - 2026-10-03
 
-- 修复安装 `TabooLibKetherInterop` 时，引号中的空白文本（如 `" "`）被交给远端解析而报 `action must not be blank`。
+- 修复安装 脚本互操作适配器 时，引号中的空白文本（如 `" "`）被交给远端解析而报 `action must not be blank`。
 - 容错模式下引号括起的文本总是字面量，不再被同名语句解析（例如列表中的 `"or"` 不会成为 Klib 的 `or` 语句）。
 
 ## 0.9.0 - 2026-10-03
 
-- `klib-script` 补齐原框架（TabooLib 6.3.0）内置 Kether 语句：`wait`/`sleep`、`exit`/`stop`/`terminate`、`pause`、`for`、`while`、`map`、`repeat`、`break`、`seq`、`call`、`goto`、`async`/`await`/`await_all`/`await_any`、`import`/`release`、`optional`、`pass`、`vars`、`log`/`warn`/`error`、`array` 与 `arr-*` 系列、`size`/`length`、`split`、`range`、`shuffle`/`reverse`/`mutable`、`join [ ... ] by`、`uncolored`、`scale`、`format`、`printed`、`match`、`time`/`date`、`day of`、`year`/`month`/`hour`/`minute`/`second`、`actionbar`、`broadcast`/`bc`、`players`、`switch`、`title`/`subtitle`、`location`/`loc`、`sound`/`stopsound`、`itemstack`、`material`、`scoreboard`、`js`/`javascript`/`$`；`tell` 增加 `send`/`message` 别名与 `@sender` 替换。
+- `klib-script` 补齐内置 Kether 语句：`wait`/`sleep`、`exit`/`stop`/`terminate`、`pause`、`for`、`while`、`map`、`repeat`、`break`、`seq`、`call`、`goto`、`async`/`await`/`await_all`/`await_any`、`import`/`release`、`optional`、`pass`、`vars`、`log`/`warn`/`error`、`array` 与 `arr-*` 系列、`size`/`length`、`split`、`range`、`shuffle`/`reverse`/`mutable`、`join [ ... ] by`、`uncolored`、`scale`、`format`、`printed`、`match`、`time`/`date`、`day of`、`year`/`month`/`hour`/`minute`/`second`、`actionbar`、`broadcast`/`bc`、`players`、`switch`、`title`/`subtitle`、`location`/`loc`、`sound`/`stopsound`、`itemstack`、`material`、`scoreboard`、`js`/`javascript`/`$`；`tell` 增加 `send`/`message` 别名与 `@sender` 替换。
 - 新增 `&变量[键]`、`动作[键]` 属性读取与 `get property 键 from 动作`，内置 String、Map、List、数组与正则 Matcher 属性，宿主 `ScriptPropertyAccess` 优先；`set &对象[键]` 同样支持这些内置类型。
 - `player` 按原框架操作名表匹配多词属性（如 `block x`、`on ground`），支持 `to`/`add`/`sub` 写入；`command` 支持 `as|by|with player/op/console` 与 `@sender`。
 - 新增宿主服务 `ScriptPlatform`、`ScriptLogger`、`JavaScriptEvaluator`，以及 `PlayerQuery.write`、`CommandSink.dispatchAsOperator`、`ScriptSenderQuery.isOnline` 默认方法；`BukkitScriptServices.apply(builder, plugin)` 一次安装全部 Bukkit 默认实现。
-- `KetherScriptEngine` 新增四参数构造器，`toleranceParser` 为 true 时与原框架默认行为一致，未注册词元按字面量处理；默认仍为严格解析。安装 `TabooLibKetherInterop` 时，同服容器都不认领的词元同样按字面量处理。
+- `KetherScriptEngine` 新增四参数构造器，`toleranceParser` 为 true 时与原框架默认行为一致，未注册词元按字面量处理；默认仍为严格解析。安装 脚本互操作适配器 时，同服容器都不认领的词元同样按字面量处理。
 - 行为变化：`element`、`elem`、`async` 等成为内置语句，原先依赖它们作为字面量或远端语句名的脚本需改用 `*element` 等写法。
 
 ## 0.8.11 - 2026-10-02
@@ -160,7 +171,7 @@
 
 ## 0.8.8 - 2026-10-02
 
-- `klib-compat` 新增 `Capabilities.SIDEBAR` 与 `me.kzheart.klib.compat.sidebar.Sidebars`：按玩家发送数据包侧边栏，不替换玩家的 Bukkit 记分板，更新只发送差异，玩家退出时丢弃状态、作用域关闭时移除；四个 `compat-v*` 实现均公开该能力。改写自 TabooLib `NMSScoreboard`（MIT），不引入 TabooLib 或 Kotlin 运行时。
+- `klib-compat` 新增 `Capabilities.SIDEBAR` 与 `me.kzheart.klib.compat.sidebar.Sidebars`：按玩家发送数据包侧边栏，不替换玩家的 Bukkit 记分板，更新只发送差异，玩家退出时丢弃状态、作用域关闭时移除；四个 `compat-v*` 实现均公开该能力。所需许可声明随实现资源分发。
 - 侧边栏在 Paper 1.12.2、1.16.5、1.18.2、1.20.4、1.21.1、1.21.4、1.21.11、26.1.2 与 26.2 上用真实客户端验证；`klib-compat` 只在编译期使用 Spigot API 与 `klib-core`，发布依赖不变。
 
 ## 0.8.7 - 2026-10-02
@@ -252,7 +263,7 @@
 
 - 新增 `GuardKetherInterop`，支持云端商品与门户插件双向共享 Kether Action。
 - 为跨 ClassLoader 调用增加值边界、句柄生命周期与作用域自动清理。
-- 扩展 TabooLib Kether OpenContainer 的 owner-aware Action 移除能力。
+- 扩展 Kether OpenContainer 的 owner-aware Action 移除能力。
 
 ### Guard API 0.2.0
 

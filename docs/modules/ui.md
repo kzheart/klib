@@ -9,24 +9,12 @@
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        ui()
-    }
-}
+klib { modules { ui() } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
 
-- **需要 CodeMC 仓库**：`ui` 带入 `item`，要解析 Item-NBT-API，配置见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
-- 直接依赖 `klib-ui` 时，还需保证 `klib-core`、`klib-item`、`klib-command`、`klib-lang` 及其运行时依赖可用：
-
-```kotlin
-dependencies {
-    implementation("me.kzheart.klib:klib-ui:<klib-version>")
-    compileOnly("org.spigotmc:spigot-api:1.12.2-R0.1-20180712.012057-156")
-}
-```
+`ui` 通过 `item` 使用原生标签，无需 Item-NBT-API 或为其添加 CodeMC 仓库。手动打包时包含表中的模块及其 Kotlin、协程、配置和文本运行时依赖，具体规则见构建页。
 
 最简单的用法是注解菜单：
 
@@ -487,6 +475,14 @@ val model = menu("工具", 1) {
 ```
 
 `slot(index) { ... }` 也接受同样的条目块。编译仍走 `MenuTemplate` 与 `MenuCompiler`，保留重复槽位、行数与布局校验；传入与读出的物品均为防御性副本。
+
+## Java 与 Kotlin 共用的会话处理
+
+- 注解菜单、Java Builder 与 Kotlin DSL 生成相同模型，统一编译、渲染与点击分发。
+- `ReactiveMenuSession` 把订阅、状态代际、过期异步结果与合并刷新收在会话中；业务只声明状态与动作。
+- 聊天面板、投放区和输入流程分别管理自己的身份校验、取消与关闭归还，不由业务重复安装全局监听器。
+
+这些流程由 Kotlin 实现。Java 菜单注解、动作/错误/输入 SAM 和外部工厂保留原契约，Java 调用方无需使用 DSL 或挂起函数。
 
 ## 线程与生命周期
 

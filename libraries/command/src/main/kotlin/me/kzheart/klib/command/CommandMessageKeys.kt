@@ -1,0 +1,31 @@
+package me.kzheart.klib.command
+class CommandMessageKeys private constructor() {
+    companion object {
+        const val NO_PERMISSION = "command.no-permission"
+        const val PLAYER_ONLY = "command.player-only"
+        const val UNKNOWN_ARGUMENT = "command.unknown-argument"
+        const val INCOMPLETE = "command.incomplete"
+        const val USAGE = "command.usage"
+        const val INTERNAL_ERROR = "command.internal-error"
+        const val SUGGESTION = "command.suggestion"
+        const val HELP_HEADER = "command.help.header"
+        const val HELP_PREVIOUS = "command.help.previous"
+        const val HELP_NEXT = "command.help.next"
+        const val HELP_OPEN_PAGE = "command.help.open-page"
+        const val ARG_INTEGER = "command.argument.integer"
+        const val ARG_INTEGER_RANGE = "command.argument.integer-range"
+        const val ARG_DECIMAL = "command.argument.decimal"
+        const val ARG_DECIMAL_RANGE = "command.argument.decimal-range"
+        const val ARG_BOOLEAN = "command.argument.boolean"
+        const val ARG_CHOICE = "command.argument.choice"
+        const val ARG_PLAYER_OFFLINE = "command.argument.player-offline"
+        const val ARG_CONTENT_EMPTY = "command.argument.content-empty"
+        const val BUILTIN_HELP_DESCRIPTION = "command.builtin.help.description"
+        const val BUILTIN_RELOAD_DESCRIPTION = "command.builtin.reload.description"
+        const val BUILTIN_RELOAD_SUCCESS = "command.builtin.reload.success"
+        const val BUILTIN_RELOAD_FAILURE = "command.builtin.reload.failure"
+        const val BUILTIN_DEBUG_DESCRIPTION = "command.builtin.debug.description"
+        const val BUILTIN_DEBUG_ENABLED = "command.builtin.debug.enabled"
+        const val BUILTIN_DEBUG_DISABLED = "command.builtin.debug.disabled"
+    }
+}

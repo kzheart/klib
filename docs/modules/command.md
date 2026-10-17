@@ -9,11 +9,7 @@
 ## 快速开始
 
 ```kotlin
-klib {
-    modules {
-        command()
-    }
-}
+klib { modules { command() } }
 ```
 
 依赖、直接引用制品和打包方式见 [构建与打包](../../README.md)。
@@ -497,7 +493,7 @@ CommandModule.install(context().scope(), BukkitCommandRegistrar.discover(
 
 ## Kotlin 层级 DSL
 
-原生声明直接生成同一棵 Java 命令树；`argument` 的执行块根据参数句柄推断类型，读取其他参数仍用 `get(handle)`。
+原生声明直接生成 Java 与 Kotlin 共用的命令树；`argument` 的执行块根据参数句柄推断类型，读取其他参数仍用 `get(handle)`。
 
 ```kotlin
 import me.kzheart.klib.command.*
@@ -513,7 +509,15 @@ commands().command("coins") {
 }
 ```
 
-DSL 接收者有 `@DslMarker` 边界，嵌套配置不会意外修改外层节点。注册、权限、补全、解析和异常反馈复用 Java 引擎；执行块不允许挂起。
+DSL 接收者有 `@DslMarker` 边界，嵌套配置不会意外修改外层节点。注册、权限、补全、解析和异常反馈复用同一套 Kotlin 实现；执行块不允许挂起。
+
+### 声明背后的共享处理
+
+- `Arguments` 统一处理范围、解析失败与补全，调用方只保留类型化参数句柄；节点入口检查重复路由与 greedy 位置。
+- 注解处理器一次分析处理方法、校验和建议提供器；Java 注解与 Kotlin DSL 都进入同一条分发路径。
+- Bukkit/Paper 注册、客户端树投影与富文本适配集中在模块内部，不要求业务代码检查映射名或宿主方法。
+
+`Arg`、解析/补全 SAM 和 Java 注解保留既有扩展契约，包括包可见边界、异常声明与平台类型。实现改用 Kotlin 后，Java 仍可按上面的注解和 Builder 写法自然调用。
 
 ## 线程与生命周期
 

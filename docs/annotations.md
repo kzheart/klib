@@ -302,7 +302,7 @@ public final class DungeonMenu {
 
 ## 验证
 
-注解路由注册、权限与别名、自动帮助、根处理器及自定义帮助的测试见 [AnnotatedCommandsTest.java](../klib-command/src/test/java/me/kzheart/klib/command/AnnotatedCommandsTest.java)。
+注解路由注册、权限与别名、自动帮助、根处理器及自定义帮助的测试见 [AnnotatedCommandsTest.java](../libraries/command/src/test/java/me/kzheart/klib/command/AnnotatedCommandsTest.java)。
 
 ## 范围
 

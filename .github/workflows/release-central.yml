@@ -133,6 +133,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      - name: Check layout and verification scripts
+        run: |
+          bash -n scripts/*.sh
+          python3 -m unittest discover -s scripts/tests -v
+
       - name: Run full verification and build selected signed bundle
         env:
           MAVEN_SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}

@@ -55,8 +55,14 @@ class RemoteDeliveryTest {
         String callerThread = Thread.currentThread().getName();
         AtomicReference<String> transportThread = new AtomicReference<String>();
         CountDownLatch attempted = new CountDownLatch(1);
+        CountDownLatch settingsRequested = new CountDownLatch(1);
+        CountDownLatch allowSettings = new CountDownLatch(1);
         RpkTransport transport = new RpkTransport() {
-            @Override public String settings() { return settingsResponse(); }
+            @Override public String settings() {
+                settingsRequested.countDown();
+                await(allowSettings);
+                return settingsResponse();
+            }
             @Override public String sendBatch(byte[] json) throws IOException {
                 transportThread.set(Thread.currentThread().getName());
                 attempted.countDown();
@@ -68,11 +74,17 @@ class RemoteDeliveryTest {
                 .maxBackoff(Duration.ofMillis(20))
                 .build();
         try {
+            // accept is best-effort: hold the worker outside its mailbox lock before submission.
+            assertTrue(settingsRequested.await(5, TimeUnit.SECONDS));
             delivery.accept(log("caller continues"));
+            assertEquals(0L, delivery.droppedEvents());
+            assertEquals(1L, delivery.queuedEvents());
+            allowSettings.countDown();
             assertTrue(attempted.await(5, TimeUnit.SECONDS));
             assertNotEquals(callerThread, transportThread.get());
             assertTrue(delivery.queuedEvents() >= 1);
         } finally {
+            allowSettings.countDown();
             delivery.dispose();
         }
     }
@@ -225,8 +237,14 @@ class RemoteDeliveryTest {
     @Test
     void invalidKeyStopsDeliveryAndRetainsDurableQueue() throws Exception {
         CountDownLatch attempted = new CountDownLatch(1);
+        CountDownLatch settingsRequested = new CountDownLatch(1);
+        CountDownLatch allowSettings = new CountDownLatch(1);
         RpkTransport transport = new RpkTransport() {
-            @Override public String settings() { return settingsResponse(); }
+            @Override public String settings() {
+                settingsRequested.countDown();
+                await(allowSettings);
+                return settingsResponse();
+            }
             @Override public String sendBatch(byte[] json) throws IOException {
                 attempted.countDown();
                 throw new RemoteHttpException(401, -1L);
@@ -234,13 +252,19 @@ class RemoteDeliveryTest {
         };
         RemoteDelivery delivery = delivery(transport, temporaryDirectory).build();
         try {
+            // accept is best-effort: hold the worker outside its mailbox lock before submission.
+            assertTrue(settingsRequested.await(5, TimeUnit.SECONDS));
             delivery.accept(log("retain me"));
+            assertEquals(0L, delivery.droppedEvents());
+            assertEquals(1L, delivery.queuedEvents());
+            allowSettings.countDown();
             assertTrue(attempted.await(5, TimeUnit.SECONDS));
             await(() -> !delivery.isActive(), 5000L);
             assertFalse(delivery.submit(log("must be refused"))
                     .toCompletableFuture().get(1, TimeUnit.SECONDS));
             assertEquals(1L, delivery.queuedEvents());
         } finally {
+            allowSettings.countDown();
             delivery.dispose();
         }
     }

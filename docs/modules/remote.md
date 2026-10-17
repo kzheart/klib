@@ -226,7 +226,7 @@ Contributor 不得在采集时读文件、访问网络或等待外部服务。
 `RemoteDelivery` 的 `submit`/`accept` 只进入内存邮箱：
 
 - 调用线程不做磁盘或网络 I/O，也不会把交付、序列化或队列故障抛回业务。
-- `submit` 返回的 `CompletionStage<Boolean>`：事件原子写入本地队列后为 `true`；关闭、容量淘汰、无效事件或本地写入失败为 `false`，**不会以异常完成**。
+- `submit` 返回的 `CompletionStage<Boolean>`：事件原子写入本地队列后为 `true`；关闭、邮箱锁争用、容量淘汰、无效事件或本地写入失败为 `false`，**不会以异常完成**。
 
 **默认值：**
 

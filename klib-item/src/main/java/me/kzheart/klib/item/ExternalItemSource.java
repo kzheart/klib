@@ -18,6 +18,15 @@ public interface ExternalItemSource {
     /** 按 ID 生成新物品；ID 不存在时返回 {@code null}。 */
     ItemStack create(String id);
 
+    /**
+     * 无交付副作用的展示样本。默认明确不支持，绝不回退到 create。
+     * 适配器负责区分未就绪、未知 ID 和构建失败；不得为预览分配业务唯一实例。
+     */
+    default ItemPreview preview(String id, Player player) {
+        return ItemPreview.unavailable(ItemPreview.Status.UNSUPPORTED,
+                plugin() + " does not expose a safe preview API");
+    }
+
     /** 在实际使用者上下文生成一件物品；不需要上下文的提供者沿用基础生成。 */
     default ItemStack create(String id, Player player) {
         return create(id);

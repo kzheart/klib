@@ -10,6 +10,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 
 /**
  * 内置外部物品系统适配器。全部通过反射调用，业务插件无需在编译期依赖这些插件。
@@ -26,12 +28,103 @@ public final class ExternalItemSources {
         return new ZaphkielSource(plugin);
     }
 
+    /**
+     * CraftEngine，前缀 {@code ce}，ID 必须为 {@code namespace:id}。
+     *
+     * <p>内容是否完成加载由调用方显式提供；空物品表也可能是合法配置，不能当作未就绪。
+     * 不自动加入 {@link ExternalItems#detect()}，请在获得可靠加载状态后通过 {@code with} 注册。
+     * 真实生成调用公开定义的 {@code buildBukkitItem}；它会执行构建处理器，不能用来模拟安全预览。
+     */
+    public static ExternalItemSource craftEngine(Plugin plugin, BooleanSupplier contentReady) {
+        return new CraftEngineSource(plugin, contentReady);
+    }
+
+    private static final class CraftEngineSource implements ExternalItemSource {
+        private static final Pattern ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
+
+        private final Plugin owner;
+        private final BooleanSupplier contentReady;
+        private final Method byId;
+        private final Method identify;
+        private final Method build;
+        private final Method buildForPlayer;
+
+        CraftEngineSource(Plugin plugin, BooleanSupplier contentReady) {
+            this.owner = Objects.requireNonNull(plugin, "plugin");
+            this.contentReady = Objects.requireNonNull(contentReady, "contentReady");
+            Class<?> api = type(plugin.getClass().getClassLoader(),
+                    "net.momirealms.craftengine.bukkit.api.CraftEngineItems");
+            byId = method(api, "byId", String.class);
+            identify = method(api, "getCustomItemId", ItemStack.class);
+            if (!Modifier.isStatic(byId.getModifiers()) || !Modifier.isStatic(identify.getModifiers())) {
+                throw new IllegalStateException("CraftEngineItems entry points must be static");
+            }
+            Class<?> definition = byId.getReturnType();
+            build = method(definition, "buildBukkitItem");
+            buildForPlayer = method(definition, "buildBukkitItem", Player.class);
+            if (!ItemStack.class.isAssignableFrom(build.getReturnType())
+                    || !ItemStack.class.isAssignableFrom(buildForPlayer.getReturnType())) {
+                throw new IllegalStateException("CraftEngine buildBukkitItem must return ItemStack");
+            }
+        }
+
+        @Override public String prefix() { return "ce"; }
+        @Override public String plugin() { return "CraftEngine"; }
+        @Override public ItemStack create(String id) { return create(id, null); }
+
+        @Override public ItemStack create(String id, Player player) {
+            requireId(id);
+            if (!ready()) return null;
+            Object definition = invoke(byId, null, id);
+            if (definition == null) return null;
+            return (ItemStack) (player == null
+                    ? invoke(build, definition)
+                    : invoke(buildForPlayer, definition, player));
+        }
+
+        @Override public ItemPreview preview(String id, Player player) {
+            requireId(id);
+            try {
+                if (!ready()) {
+                    return ItemPreview.unavailable(ItemPreview.Status.NOT_READY,
+                            "CraftEngine content is not ready or the plugin is disabled");
+                }
+                if (invoke(byId, null, id) == null) {
+                    return ItemPreview.unavailable(ItemPreview.Status.UNKNOWN_ID, id);
+                }
+                return ItemPreview.unavailable(ItemPreview.Status.UNSUPPORTED,
+                        "CraftEngine has no safe preview API; buildBukkitItem runs item processors");
+            } catch (RuntimeException | LinkageError failure) {
+                return ItemPreview.failed(failure);
+            }
+        }
+
+        @Override public String identify(ItemStack item) {
+            if (InventoryItems.isAir(item)) return null;
+            // Retain read-only identity even before content load or after disable. Do not silently
+            // turn tagged external items into vanilla ingredients when a definition is unavailable.
+            Object id = invoke(identify, null, item);
+            return id == null ? null : id.toString();
+        }
+
+        private boolean ready() {
+            return owner.isEnabled() && contentReady.getAsBoolean();
+        }
+
+        private static void requireId(String id) {
+            if (id == null || !ID.matcher(id).matches()) {
+                throw new IllegalArgumentException("CraftEngine id must be namespace:id, got '" + id + "'");
+            }
+        }
+    }
+
     private static final class ZaphkielSource implements ExternalItemSource {
         private final Plugin owner;
         private final Method items;
         private final Method registry;
         private final Method find;
         private final Method generate;
+        private final Method preview;
         private final Method identify;
 
         ZaphkielSource(Plugin plugin) {
@@ -39,6 +132,7 @@ public final class ExternalItemSources {
             items = method(plugin.getClass(), "items");
             Object service = requireValue(invoke(items, owner), "ZaphkielPlus item service");
             generate = method(service.getClass(), "generateItemStack", String.class, Player.class);
+            preview = optionalMethod(service.getClass(), "preview", String.class, Player.class);
             identify = method(service.getClass(), "id", ItemStack.class);
             registry = method(service.getClass(), "registry");
             Object definitions = requireValue(invoke(registry, service), "ZaphkielPlus definition registry");
@@ -57,6 +151,36 @@ public final class ExternalItemSources {
             if (!(found instanceof Optional<?>)) throw new IllegalStateException("ZaphkielPlus find must return Optional");
             if (!((Optional<?>) found).isPresent()) return null;
             return (ItemStack) invoke(generate, service, id, player);
+        }
+
+        @Override public ItemPreview preview(String id, Player player) {
+            if (!owner.isEnabled()) {
+                return ItemPreview.unavailable(ItemPreview.Status.NOT_READY, "ZaphkielPlus is disabled");
+            }
+            if (preview == null) {
+                return ItemPreview.unavailable(ItemPreview.Status.UNSUPPORTED,
+                        "ZaphkielPlus does not expose preview(String, Player)");
+            }
+            try {
+                Object service = invoke(items, owner);
+                if (service == null) {
+                    return ItemPreview.unavailable(ItemPreview.Status.NOT_READY,
+                            "ZaphkielPlus item service is not initialized");
+                }
+                Object definitions = invoke(registry, service);
+                if (definitions == null) {
+                    return ItemPreview.unavailable(ItemPreview.Status.NOT_READY,
+                            "ZaphkielPlus definition registry is not initialized");
+                }
+                Object found = invoke(find, definitions, id);
+                if (!(found instanceof Optional<?>)) throw new IllegalStateException("ZaphkielPlus find must return Optional");
+                if (!((Optional<?>) found).isPresent()) {
+                    return ItemPreview.unavailable(ItemPreview.Status.UNKNOWN_ID, id);
+                }
+                return ItemPreview.ready((ItemStack) invoke(preview, service, id, player));
+            } catch (RuntimeException | LinkageError failure) {
+                return ItemPreview.failed(failure);
+            }
         }
 
         @Override public ItemStack createStack(String id, int amount, Player player) {

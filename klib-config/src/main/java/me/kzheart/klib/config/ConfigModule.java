@@ -12,14 +12,19 @@ import me.kzheart.klib.scope.capability.ConfigCapability;
  * Config 模块入口：把类路径中的默认 YAML 提取到插件数据目录，
  * 并以可重新加载的 {@link ConfigCapability} 形式注册到作用域。
  *
- * <p>典型用法是在插件 {@code setup} 中调用
- * {@code ConfigModule.install(root, getDataFolder().toPath(), getClassLoader(), "defaults")}，
- * 之后通过 {@code root.config(Settings.class, "config.yml")} 取得类型化文档。
+ * <p>典型用法是在插件 {@code setup()} 中调用 {@code ConfigModule.install(this)}，
+ * 之后通过 {@code configs().load(Settings.class, "config.yml")} 取得类型化文档。
  */
 public final class ConfigModule {
     public static ConfigCapability install(KPlugin plugin) {
+        return install(plugin, new YamlConfigMapper());
+    }
+
+    /** 使用显式配置的映射器；策略及转换器由调用者在安装前配置。 */
+    public static ConfigCapability install(KPlugin plugin, YamlConfigMapper mapper) {
+        Objects.requireNonNull(plugin, "plugin");
         return install(plugin.context().scope(), plugin.getDataFolder().toPath(),
-                plugin.getClass().getClassLoader(), "defaults");
+                plugin.getClass().getClassLoader(), "defaults", mapper);
     }
 
     private ConfigModule() {
@@ -31,7 +36,18 @@ public final class ConfigModule {
             ClassLoader classLoader,
             String defaultsRoot
     ) {
-        return install(scope, dataDirectory, classLoader, defaultsRoot, path -> new MigrationRunner());
+        return install(scope, dataDirectory, classLoader, defaultsRoot, new YamlConfigMapper());
+    }
+
+    /** 自定义目录与映射器，不安装迁移步骤。 */
+    public static ConfigCapability install(
+            Scope scope,
+            Path dataDirectory,
+            ClassLoader classLoader,
+            String defaultsRoot,
+            YamlConfigMapper mapper
+    ) {
+        return install(scope, dataDirectory, classLoader, defaultsRoot, path -> new MigrationRunner(), mapper);
     }
 
     public static ConfigCapability install(
@@ -41,6 +57,18 @@ public final class ConfigModule {
             String defaultsRoot,
             Function<String, MigrationRunner> migrations
     ) {
+        return install(scope, dataDirectory, classLoader, defaultsRoot, migrations, new YamlConfigMapper());
+    }
+
+    /** 完整安装入口，所有文档共享此映射器及其未知键策略。 */
+    public static ConfigCapability install(
+            Scope scope,
+            Path dataDirectory,
+            ClassLoader classLoader,
+            String defaultsRoot,
+            Function<String, MigrationRunner> migrations,
+            YamlConfigMapper mapper
+    ) {
         Objects.requireNonNull(scope, "scope");
         final Path root = Objects.requireNonNull(dataDirectory, "dataDirectory")
                 .toAbsolutePath().normalize();
@@ -48,6 +76,7 @@ public final class ConfigModule {
         final String resourceRoot = normalizeRoot(defaultsRoot);
         final Function<String, MigrationRunner> migrationProvider =
                 Objects.requireNonNull(migrations, "migrations");
+        final YamlConfigMapper configuredMapper = Objects.requireNonNull(mapper, "mapper");
 
         YamlConfigCapability capability = new YamlConfigCapability((owner, requestedPath) -> {
             String path = normalizePath(requestedPath);
@@ -60,7 +89,7 @@ public final class ConfigModule {
                 throw new ConfigException(path + ":<root>: migration provider returned null");
             }
             return FileConfigSource.fromClasspath(file, loader, resourceRoot + path, runner);
-        }, new YamlConfigMapper());
+        }, configuredMapper);
         return scope.registerCapability(ConfigCapability.class, capability);
     }
 

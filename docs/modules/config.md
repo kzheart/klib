@@ -83,8 +83,9 @@ protected void setup() {
 
 | 调用 | 说明 |
 | --- | --- |
-| `ConfigModule.install(this)` | 简化默认安装：插件数据目录、插件类加载器、资源目录 `defaults` |
-| 接收 `Scope` 的 `ConfigModule.install` 重载 | 需要其他目录或迁移提供器时使用；根作用域通过 `context().scope()` 取得 |
+| `ConfigModule.install(this)` | 简化默认安装：插件数据目录、插件类加载器、资源目录 `defaults`；未知键默认 `WARN` |
+| `ConfigModule.install(this, mapper)` | 同一默认安装路径，使用显式未知键策略和自定义转换器 |
+| 接收 `Scope` 的 `ConfigModule.install` 重载 | 需要其他目录、迁移提供器或映射器时使用；根作用域通过 `context().scope()` 取得 |
 | `configs().load(Settings.class)` | 从 `@ConfigFile` 取得文件路径 |
 | `configs().load(Settings.class, "config.yml")` | 没有 `@ConfigFile` 时使用 |
 
@@ -200,26 +201,40 @@ config.yml:12:5 (database.port): expected a number, got String
 
 ### 未知键提示
 
-YAML 中某个键在目标类型里找不到匹配字段或 Kotlin 构造器参数时，Klib 以 `WARNING` 记录一次：
+默认使用 `UnknownKeyPolicy.WARN`。YAML 中某个键在目标类型里找不到匹配字段或 Kotlin 构造器参数时，Klib 以 `WARNING` 记录一次：
 
 ```text
 config.yml:4:3 (database.prot): unknown configuration key is ignored; com.example.Settings$Database has no matching field
 ```
 
+需要拒绝拼写错误时，在安装前显式选择 `REJECT`：
+
+```java
+YamlConfigMapper mapper = new YamlConfigMapper(UnknownKeyPolicy.REJECT);
+ConfigModule.install(this, mapper);
+```
+
+```kotlin
+ConfigModule.install(this, YamlConfigMapper(UnknownKeyPolicy.REJECT))
+```
+
+- `WARN` 忽略未知键并保留字段默认值；同一映射器对同一来源、同一路径只告警一次。
+- `REJECT` 抛出 `ConfigMappingException`，包含来源、未知键路径及可用的 YAML 键行列；每次失败都会拒绝，不受告警去重影响。
+- Java 和 Kotlin 的嵌套类型都遵循所选策略。重载失败保留旧对象，不发布半成品，也不执行变更监听器；首次加载失败则不会产生文档。
+
 <details>
 <summary>展开：未知键的判定边界</summary>
 
-- 只提示，不抛异常，也没有严格模式开关；该键的值被忽略，字段保留默认值。
-- 判定只发生在 POJO 层级。`Map<String, T>` 字段与集合元素的键由用户定义，不会被判为未知；嵌套 POJO（包括 `Map` 的 POJO 值）在各自层级单独检查。
-- 与 `static`、`transient` 或编译器生成字段同名的键视为有意忽略，不提示。
-- 迁移系统写入的根键 `_schema-version` 不提示。
-- 同一来源的同一键只提示一次，重复 `reload()` 不会刷屏。
+- 判定发生在类型化的 Java POJO / Kotlin 模型层级。`Map<String, T>` 的自由键不会被判为未知，但它的模型值、集合元素和数组元素会在各自层级检查。
+- `@Key` 的别名按原样匹配；与 `static`、`transient` 或编译器生成字段同名的键仍视为有意忽略。
+- 迁移系统写入的根键 `_schema-version` 被忽略；同名键出现在嵌套模型中仍需有对应字段。
+- `Object`、自由键容器及自定义转换器负责解析的内容不做模型字段检查；转换器应自行校验其领域格式。
 
 </details>
 
 ### 自定义转换器
 
-需要领域类型时，用独立的 `YamlConfigMapper` 注册转换器。`ConfigModule.install` 使用自己的默认 mapper，自定义转换通常用于直接构造配置源或 `Registry`：
+需要领域类型时，在安装前向 `YamlConfigMapper` 注册转换器，再把它传给 `ConfigModule.install`、配置文档或 `Registry`：
 
 ```java
 YamlConfigMapper mapper = new YamlConfigMapper()
@@ -227,7 +242,10 @@ YamlConfigMapper mapper = new YamlConfigMapper()
             String[] parts = String.valueOf(node.raw()).split(":", 2);
             return new Endpoint(parts[0], Integer.parseInt(parts[1]));
         });
+ConfigModule.install(this, mapper);
 ```
+
+同一能力加载的文档共享该映射器。先完成策略选择和转换器注册，再开始并发加载或重载；转换器本身需要适应调用线程。
 
 转换器要报错时，用公开方法 `ConfigNode.mappingError(detail)` 或 `mappingError(detail, cause)` 抛出。异常自动带上来源文件、行列号和当前路径，与内置错误格式一致。
 
@@ -300,6 +318,70 @@ ConfigErrors.onReloadFailure(config, error ->
         logger().error("配置重载失败，继续使用旧值", error));
 ```
 
+### 多文件候选与单次发布
+
+多个文件共同决定一组运行态数据时，用 `ConfigSnapshot<T>` 发布一个业务聚合对象。它只提供 `prepare` / `commit` 的内存边界，不接管文件读取、迁移、监听或业务校验。
+
+<details>
+<summary>展开：双文件聚合、不可变复制与失败边界</summary>
+
+下面假设 `pricesSource` 和 `selectionSource` 是已配置好的 `ConfigSource`，默认初始聚合为 `initialCatalog`。`Prices` 的 `prices` 为 `Map<String, Integer>`，`Selection` 的 `featured` 为物品 ID：
+
+```java
+YamlConfigMapper mapper = new YamlConfigMapper(UnknownKeyPolicy.REJECT);
+ConfigSnapshot<Catalog> snapshot = new ConfigSnapshot<Catalog>(initialCatalog);
+
+ConfigSnapshot.Candidate<Catalog> candidate = snapshot.prepare(() -> {
+    Prices prices = mapper.read(pricesSource.prepare().document().root(), Prices.class);
+    Selection selection = mapper.read(selectionSource.prepare().document().root(), Selection.class);
+    return new Catalog(prices.prices, selection.featured);
+});
+snapshot.commit(candidate);
+
+// 每次业务操作只读取一次，之后复用同一个版本
+Catalog current = snapshot.value();
+int price = current.prices.get(current.featured);
+```
+
+业务聚合负责跨文件引用检查和不可变复制；仅写 `final` 或 Kotlin `val` 不会冻结容器：
+
+```java
+final class Catalog {
+    final Map<String, Integer> prices;
+    final String featured;
+
+    Catalog(Map<String, Integer> prices, String featured) {
+        Map<String, Integer> copy = new LinkedHashMap<String, Integer>(prices);
+        if (!copy.containsKey(featured)) {
+            throw new ConfigException("Featured item is missing: " + featured);
+        }
+        this.prices = Collections.unmodifiableMap(copy);
+        this.featured = featured;
+    }
+}
+```
+
+| 阶段 | 契约 |
+| --- | --- |
+| `prepare(builder)` | 在调用线程执行；只读、解析、校验并复制候选。失败原样抛出，已发布引用不变 |
+| `candidate.value()` | 查看尚未发布的候选；业务必须保证发布前后都不再修改它 |
+| `commit(candidate)` | 一次原子引用交换；只接受此实例创建、且基线仍有效的候选 |
+| 过期或重复提交 | 抛出 `ConfigException`，不覆盖新值；必须重新准备，框架不会自动重跑构建器 |
+| `revision()` | 成功提交后递增，供诊断使用；与分开调用的 `value()` 不构成原子读取对 |
+
+- 上例只调用 `ConfigSource.prepare()`，不调用其 `PreparedConfig.commit()`；不会保存默认合并或迁移结果。不要在聚合构建器里用会提交源变更的 `load()`、`reload()`，或修改已发布对象。
+- 多次文件读取不是磁盘上的事务快照。若要求所有输入来自同一次部署，业务还须校验共同版本或在读取期间协调文件更新。
+- 发布顺序以成功提交为准。准备期间若其他候选已提交，旧候选返回后也会被拒绝；即使新旧值相等，也不能绕过基线检查。
+- 已持有旧聚合的读者可完成当前操作；下一次操作重新取 `value()`，避免多次读取跨版本混用。
+
+严格全批与显式部分成功由业务选择：
+
+- 严格全批：任一文件解析、字段检查或跨文件引用校验失败，就让 `prepare` 失败，完整保留旧聚合；`Registry` 也保持现有的全批失败策略。
+- 显式部分成功：业务在构建器内逐文件捕获预期的配置异常，按来源收集 diagnostics，再对剩余集合重新验证 ID 唯一性、必需项和所有引用，最后复制为不可变聚合。剩余引用仍失效时必须拒绝整次发布。
+- 不提供自动跳过错误文件、磁盘事务或副作用回滚。构造器、转换器、校验器和构建器应避免修改已发布对象或产生业务副作用；提交后的监听、资源重建与其他业务副作用由业务单独处理失败。
+
+</details>
+
 ### 文件编码与写回
 
 <details>
@@ -314,13 +396,13 @@ ConfigErrors.onReloadFailure(config, error ->
 
 ## 配置迁移
 
-通过 `ConfigModule.install` 的迁移提供器，为不同文档建立连续迁移链：
+通过 `ConfigModule.install` 的迁移提供器，为不同文档建立连续迁移链；需要严格策略或自定义转换器时，把 `mapper` 作为最后一个参数：
 
 ```java
 ConfigModule.install(
-        root,
+        context().scope(),
         getDataFolder().toPath(),
-        getClassLoader(),
+        getClass().getClassLoader(),
         "defaults",
         path -> {
             MigrationRunner migrations = new MigrationRunner();
@@ -332,9 +414,11 @@ ConfigModule.install(
                                 "limits.max"));
             }
             return migrations;
-        });
+        },
+        new YamlConfigMapper(UnknownKeyPolicy.REJECT));
 ```
 
+- 省略最后的 `mapper` 参数时仍使用默认 `WARN`；只需要映射器、不需要迁移时，使用 `install(scope, directory, loader, "defaults", mapper)`。
 - 配置中的 `_schema-version` 记录当前版本。
 - 迁移版本必须从当前版本开始逐级连续。缺少中间版本，或用户文件版本高于程序支持版本时，**拒绝加载**。
 - 迁移应设计为幂等操作。
@@ -450,7 +534,7 @@ String text = settings.sectionText();
 
 **映射：** `YamlConfigMapper.read(document.root(), Settings.class)` 可映射两种文档的 POJO、列表、Map、数组及自定义 converter。
 
-- 未知键告警仍按来源和路径去重。
+- 默认未知键告警仍按来源和路径去重；显式 `REJECT` 策略同样拒绝原值文档中的未知模型字段。
 - 原值文档没有 YAML 行列标记，错误包含来源与节点路径；YAML 文档继续提供原行列信息。
 - 原有 `YamlDocument` 的解析、raw 转换、注释、默认值合并和 migration 行为保持原契约；新增后端不会把第三方格式的字符串或类型规范化规则强加给默认 YAML 文档。
 
@@ -463,7 +547,8 @@ String text = settings.sectionText();
   - `value()` 返回活对象，不是防御性拷贝，把它当只读快照用；
   - 修改字段不会写回 YAML，下一次 reload 后随实例被替换而丢失；
   - 多线程访问以 reload 发布的新实例为准；需要长期持有时每次都重新调用 `value()`，不要缓存旧实例。
-- 重载流程串行化，较早开始的候选不会覆盖较晚完成的新值。
+- `ConfigDocument` 和 `Registry` 的重载流程串行化；`ConfigSnapshot` 允许并发准备，以候选基线和原子交换拒绝过期提交。
+- `ConfigSnapshot` 不绑定 `Scope`，也不持有监听器或后台任务。业务负责其生命周期，把提交和关闭放在同一个串行生命周期边界，避免作用域关闭后异步任务仍发布新值。
 - 在 `KPlugin` 中，变更监听器通常在 Bukkit 主线程执行，**不要在监听器里做阻塞 I/O**。
 - 文件监听可能由后台线程触发。没有 Core 调度能力的测试或独立环境，必须自行提供合适的监听器执行器。
 

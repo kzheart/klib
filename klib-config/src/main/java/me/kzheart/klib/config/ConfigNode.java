@@ -249,6 +249,12 @@ public final class ConfigNode {
                 detail);
     }
 
+    ConfigMappingException keyMappingError(String detail) {
+        Mark mark = keyMark == null ? ConfigLocations.startMark(node) : keyMark;
+        return new ConfigMappingException(sourceName(), path,
+                ConfigLocations.line(mark), ConfigLocations.column(mark), detail);
+    }
+
     /** 同 {@link #mappingError(String)}，并附带底层原因。 */
     public ConfigMappingException mappingError(String detail, Throwable cause) {
         Mark mark = ConfigLocations.startMark(node);

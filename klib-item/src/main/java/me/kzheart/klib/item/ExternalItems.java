@@ -143,6 +143,25 @@ public final class ExternalItems implements ExternalItemProvider {
         return create(parse(reference));
     }
 
+    /** 仅用于展示，不可把预览物品当作交易或交付结果。 */
+    public ItemPreview preview(String reference, Player player) {
+        ItemRef ref = parse(reference);
+        try {
+            if (ref.vanilla()) return ItemPreview.ready(new ItemStack(Items.resolveMaterial(ref.id())));
+            ExternalItemSource source = sources.get(ref.prefix());
+            if (source == null) {
+                SourceState state = states.get(ref.prefix());
+                if (state != null && state.status() == Status.FAILED) {
+                    return ItemPreview.failed(new IllegalStateException(state.detail()));
+                }
+                return ItemPreview.unavailable(ItemPreview.Status.NOT_READY, ref.prefix() + " is unavailable");
+            }
+            return Objects.requireNonNull(source.preview(ref.id(), player), "source preview result");
+        } catch (RuntimeException | LinkageError failure) {
+            return ItemPreview.failed(failure);
+        }
+    }
+
     public Optional<ItemStack> create(String reference, int amount) {
         return create(reference, amount, null);
     }

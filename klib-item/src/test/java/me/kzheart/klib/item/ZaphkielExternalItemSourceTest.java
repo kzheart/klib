@@ -15,19 +15,37 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ZaphkielExternalItemSourceTest {
     public interface PluginApi extends Plugin { Service items(); }
+    public interface LegacyPluginApi extends Plugin { LegacyService items(); }
+    public static final class LegacyService {
+        private int generated;
+        public Definitions registry() { return new Definitions(); }
+        public ItemStack generateItemStack(String id, Player player) {
+            generated++;
+            return new ItemStack(Material.EMERALD);
+        }
+        public String id(ItemStack item) { return null; }
+    }
     public static final class Definitions {
         public Optional<String> find(String id) { return "gem".equals(id) || "broken".equals(id) ? Optional.of(id) : Optional.empty(); }
     }
     public static final class Service {
         private int generated;
+        private int previewed;
         private Player player;
-        public Definitions registry() { return new Definitions(); }
+        private Definitions definitions = new Definitions();
+        public Definitions registry() { return definitions; }
         public ItemStack generateItemStack(String id, Player player) {
             if ("broken".equals(id)) throw new IllegalStateException("invalid definition");
             this.player = player;
             return new ItemStack(Material.EMERALD, 1, (short) ++generated);
         }
         public String id(ItemStack item) { return item.getType() == Material.EMERALD && item.getDurability() > 0 ? "gem" : null; }
+        public ItemStack preview(String id, Player player) {
+            if ("broken".equals(id)) throw new IllegalStateException("invalid preview");
+            previewed++;
+            this.player = player;
+            return new ItemStack(Material.EMERALD);
+        }
     }
 
     private static PluginApi plugin(AtomicBoolean enabled, AtomicReference<Service> service) {
@@ -47,6 +65,61 @@ class ZaphkielExternalItemSourceTest {
         assertEquals("zap", source.prefix()); assertEquals("gem", source.identify(item)); assertSame(player, service.player);
         assertNull(source.create("missing")); assertEquals(1, service.generated);
         assertThrows(IllegalStateException.class, () -> source.create("broken"));
+    }
+
+    @Test void previewDoesNotGenerateInstancesAndReportsFailureStates() {
+        FakeItemServer.install(false);
+        Service service = new Service();
+        AtomicBoolean enabled = new AtomicBoolean(true);
+        ExternalItems items = ExternalItems.of(ExternalItemSources.zaphkiel(
+                plugin(enabled, new AtomicReference<Service>(service))));
+        Player player = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(),
+                new Class<?>[]{Player.class}, (p, m, a) -> null);
+        ItemPreview preview = items.preview("zap:gem", player);
+        assertEquals(ItemPreview.Status.READY, preview.status());
+        assertEquals(0, service.generated);
+        assertEquals(1, service.previewed);
+        assertSame(player, service.player);
+        ItemStack copy = preview.item().get();
+        copy.setAmount(12);
+        assertEquals(1, preview.item().get().getAmount());
+        assertEquals(ItemPreview.Status.UNKNOWN_ID, items.preview("zap:missing", null).status());
+        ItemPreview failed = items.preview("zap:broken", null);
+        assertEquals(ItemPreview.Status.FAILED, failed.status());
+        assertTrue(failed.failure().isPresent());
+        enabled.set(false);
+        assertEquals(ItemPreview.Status.NOT_READY, items.preview("zap:gem", null).status());
+        assertEquals(0, service.generated);
+    }
+
+    @Test void missingPreviewApiNeverFallsBackToGeneration() {
+        LegacyService service = new LegacyService();
+        Plugin plugin = (Plugin) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{LegacyPluginApi.class}, (p, m, a) -> {
+                    if ("items".equals(m.getName())) return service;
+                    if ("isEnabled".equals(m.getName())) return true;
+                    return null;
+                });
+        ItemPreview preview = ExternalItems.of(ExternalItemSources.zaphkiel(plugin)).preview("zap:gem", null);
+        assertEquals(ItemPreview.Status.UNSUPPORTED, preview.status());
+        assertEquals(0, service.generated);
+    }
+
+    @Test void unavailableServicesAndReloadedDefinitionsDoNotUseStalePreviewState() {
+        AtomicReference<Service> services = new AtomicReference<>(new Service());
+        ExternalItems items = ExternalItems.of(ExternalItemSources.zaphkiel(plugin(new AtomicBoolean(true), services)));
+        Service original = services.get();
+        services.set(null);
+        assertEquals(ItemPreview.Status.NOT_READY, items.preview("zap:gem", null).status());
+        Service replacement = new Service();
+        replacement.definitions = null;
+        services.set(replacement);
+        assertEquals(ItemPreview.Status.NOT_READY, items.preview("zap:gem", null).status());
+        replacement.definitions = new Definitions();
+        assertEquals(ItemPreview.Status.READY, items.preview("zap:gem", null).status());
+        assertEquals(1, replacement.previewed);
+        assertEquals(0, replacement.generated);
+        assertEquals(0, original.previewed);
     }
 
     @Test void refreshedServicesAndDisabledOwnerDoNotUseStaleState() {

@@ -96,10 +96,10 @@ klib {
 | 模块 | 主要能力 | 文档 |
 | :--- | :--- | :---: |
 | `klib-core` | 插件与作用域、代际受管异步结果、组件、事件、调度、冷却与加权随机 | [Core](docs/modules/core.md) |
-| `klib-config` | YAML 映射、原值树、迁移与原子重载 | [Config](docs/modules/config.md) |
+| `klib-config` | YAML 严格映射、迁移、原子重载与聚合候选快照 | [Config](docs/modules/config.md) |
 | `klib-lang` | 多语言、占位符、富文本与宿主 Adventure 适配 | [Lang](docs/modules/lang.md) |
 | `klib-command` | 命令树、注解、权限、建议、帮助样式与业务异常策略 | [Command](docs/modules/command.md) |
-| `klib-item` | 物品构建、标签、编解码与外部物品适配 | [Item](docs/modules/item.md) |
+| `klib-item` | 物品构建、标签、编解码与安全预览适配 | [Item](docs/modules/item.md) |
 | `klib-data` | 存储契约、迁移与玩家缓存 | [Data](docs/modules/data.md) |
 | `klib-ui` | 状态会话与差量菜单、分页、投放区、字段与命令管理面板 | [UI](docs/modules/ui.md) |
 | `klib-script` | Kether 动作、编译检查、作用域执行与可选宿主互操作 | [Script](docs/modules/script.md) |

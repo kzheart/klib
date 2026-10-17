@@ -29,7 +29,10 @@ import me.kzheart.klib.random.DoubleRange;
 import me.kzheart.klib.random.IntRange;
 import me.kzheart.klib.reflect.Declarations;
 
-/** 将能感知路径的配置节点映射为 Java POJO 或 Kotlin 主构造器模型。 */
+/**
+ * 将能感知路径的配置节点映射为 Java POJO 或 Kotlin 主构造器模型。
+ * 默认未知键策略为 WARN；共享映射器时应先注册完转换器，再开始加载或重载。
+ */
 public final class YamlConfigMapper {
     private static final Logger LOGGER =
             Logger.getLogger(YamlConfigMapper.class.getName());
@@ -37,6 +40,16 @@ public final class YamlConfigMapper {
             Pattern.compile("([0-9]+)(ms|[smhd])");
     /** 迁移系统写入的保留根键，不参与未知键判定。 */
     private static final String SCHEMA_VERSION_KEY = "_schema-version";
+
+    private final UnknownKeyPolicy unknownKeyPolicy;
+
+    public YamlConfigMapper() {
+        this(UnknownKeyPolicy.WARN);
+    }
+
+    public YamlConfigMapper(UnknownKeyPolicy unknownKeyPolicy) {
+        this.unknownKeyPolicy = Objects.requireNonNull(unknownKeyPolicy, "unknownKeyPolicy");
+    }
 
     private final Map<Class<?>, ConfigConverter<?>> converters =
             new LinkedHashMap<Class<?>, ConfigConverter<?>>();
@@ -178,6 +191,9 @@ public final class YamlConfigMapper {
         } catch (ConfigException failure) {
             throw node.mappingError(failure.getMessage(), failure);
         }
+        if (unknownKeyPolicy == UnknownKeyPolicy.REJECT) {
+            checkUnknownKeys(node, type, plan.declaredNames);
+        }
         final Object instance;
         if (plan.kotlin != null) {
             instance = plan.kotlin.construct(this, node);
@@ -225,7 +241,9 @@ public final class YamlConfigMapper {
                 throw node.mappingError("validation failed at " + method.getName() + ": " + failure.getMessage(), failure);
             }
         }
-        warnUnknownKeys(node, type, plan.declaredNames);
+        if (unknownKeyPolicy == UnknownKeyPolicy.WARN) {
+            checkUnknownKeys(node, type, plan.declaredNames);
+        }
         return instance;
     }
 
@@ -254,7 +272,7 @@ public final class YamlConfigMapper {
      * {@link #convertMap} 和 {@link #convertCollection} 处理，键完全由用户定义，
      * 因此不会在那里产生误报；嵌套 POJO 会在各自的递归调用中单独检查。
      */
-    private void warnUnknownKeys(ConfigNode node, Class<?> type, Set<String> declaredNames) {
+    private void checkUnknownKeys(ConfigNode node, Class<?> type, Set<String> declaredNames) {
         String basePath = node.path();
         for (ConfigNode child : node.mappingChildren()) {
             String key = child.name();
@@ -263,6 +281,10 @@ public final class YamlConfigMapper {
             }
             if (basePath.isEmpty() && SCHEMA_VERSION_KEY.equals(key)) {
                 continue;
+            }
+            if (unknownKeyPolicy == UnknownKeyPolicy.REJECT) {
+                throw child.keyMappingError("unknown configuration key; " + type.getName()
+                        + " has no matching field");
             }
             String keyPath = basePath.isEmpty() ? key : basePath + "." + key;
             if (!warnedUnknownKeys.add(node.sourceName() + '\0' + keyPath)) {

@@ -168,7 +168,7 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 
 ## 外部物品系统
 
-`ExternalItems` 用统一的 `prefix:id` 引用生成和识别外部物品。内置五个反射适配器，业务插件不需要在编译期依赖这些插件：
+`ExternalItems` 用统一的 `prefix:id` 引用生成、预览和识别外部物品。五个来源支持自动探测，CraftEngine 需显式注册就绪判据；业务插件不需要在编译期依赖这些插件：
 
 | 前缀 | 插件 | ID 形式 | 识别已有物品 |
 | --- | --- | --- | --- |
@@ -177,6 +177,7 @@ ItemStack restored = ItemCodec.decodeItem(encoded);
 | `ni` | NeigeItems | 物品 ID，例如 `ni:heal_potion` | 支持 |
 | `ia` | ItemsAdder | `namespace:id`，例如 `ia:ruby:gem` | 支持 |
 | `mm` | MythicMobs 4.x / 5.x | 物品 ID | 仅 5.x 支持 |
+| `ce` | CraftEngine，显式注册 | `namespace:id`，例如 `ce:ruby:gem` | 支持 |
 
 没有前缀或前缀为 `minecraft` 的引用视为原版材质，例如 `DIAMOND`、`minecraft:diamond`。
 
@@ -210,6 +211,55 @@ ItemSpec spec = items.spec("ia:ruby:gem");                             // 与 It
 - 批量发放时，调用方先验证容量再统一发放，并自行限定批量上限。
 - **Zap 的 `create` 只接受数量 1**，多件必须用 `createBatch`，避免复制实例 UUID 和随机属性。
 - 识别按 Zap 优先。Zap 插件停用后，现有适配器仍可只读识别身份，但停止生成。
+
+### 安全预览
+
+```java
+ItemPreview preview = items.preview("zap:heal_potion", player);
+if (preview.status() == ItemPreview.Status.READY) {
+    ItemStack icon = preview.item().get();
+    // 只放入展示槽；不能把 icon 当作发货结果
+} else {
+    logger().info("无法预览：" + preview.status() + "，" + preview.detail());
+}
+```
+
+`player` 可以为 `null`。Java 和 Kotlin 共用同一个入口与 `ItemPreview`；成功结果在存入和取出时都克隆物品。
+
+| `ItemPreview.Status` | 含义 |
+| --- | --- |
+| `READY` | 有可展示样本，`item()` 包含独立副本 |
+| `UNSUPPORTED` | 来源未提供安全预览能力；不会改调真实生成 |
+| `NOT_READY` | 来源未挂钩、停用，或显式加载状态尚未就绪 |
+| `UNKNOWN_ID` | 来源已就绪，但没有该定义 |
+| `FAILED` | 预览调用或挂钩失败；`detail()` 与 `failure()` 保留诊断信息 |
+
+- 原版材质直接构建展示样本；Zap 只调用其真实 `preview(String, Player)` API，不分配实例身份，也不调用真实生成。
+- 不支持专用预览的其他来源返回 `UNSUPPORTED`。自定义 `ExternalItemSource` 的默认实现同样不会回退到 `create`。
+- 未知前缀或非法材质仍在解析时抛异常；已解析引用的提供者调用异常转换为 `FAILED`。非 `READY` 结果没有物品。
+- `report()` 的 `AVAILABLE` 表示适配器已挂钩，不承诺内容已加载或支持安全预览。
+
+### CraftEngine 薄适配
+
+CraftEngine 的公开加载表在首次加载前可能为空，合法空配置也可能为空。Klib 不以表是否为空猜测就绪，也不自行注册加载事件或维护第二套状态机。
+
+```java
+AtomicBoolean contentLoaded = new AtomicBoolean(false);
+ExternalItems items = ExternalItems.detect().with(
+        ExternalItemSources.craftEngine(craftEnginePlugin, contentLoaded::get));
+// 由业务已确认的加载完成信号更新 contentLoaded；初次加载、重载及停用时保持准确
+```
+
+- 以官方 `CraftEngineReloadEvent` 等可靠信号确认内容完成加载；注册较晚时也需确认当前状态，不能因为插件已启用就置为就绪。
+- `create` 在插件停用或判据为 `false` 时返回空；就绪后找不到定义也返回空。`preview` 分别报告 `NOT_READY` 与 `UNKNOWN_ID`。
+- 已存在定义的 `preview` 返回 `UNSUPPORTED`。无玩家 `buildBukkitItem()` 也会执行物品处理器，不能视为无副作用的预览；这条路径不会调用任何构建重载。
+- 真实 `create` 使用官方 `CraftEngineItems.byId(String)` 返回的公开定义，按玩家是否存在选择 `buildBukkitItem(Player)` 或无参重载；每次重新查询定义，避免重载后保留旧定义。
+- `identify` 通过官方 `getCustomItemId(ItemStack)` 读取身份，不读私有标签或生成样本。停用或定义暂不可用时仍保留只读识别；若上游读取失败则传播异常，不把故障物品当作原版材料。
+- 适配器构造时校验所需公开方法形状。定义构建方法位于官方稳定 `api` 包之外，集中在这一个适配器内反射；API 变化时明确失败，不承诺所有 CraftEngine 版本通用。
+
+所适配的[官方物品入口](https://github.com/Xiao-MoMi/craft-engine/blob/b3079c5ac170fff2cb2a4c4dad184771a236cd1b/bukkit/src/main/java/net/momirealms/craftengine/bukkit/api/CraftEngineItems.java)与[公开定义构建路径](https://github.com/Xiao-MoMi/craft-engine/blob/b3079c5ac170fff2cb2a4c4dad184771a236cd1b/bukkit/src/main/java/net/momirealms/craftengine/bukkit/item/BukkitItemDefinition.java)是该边界的依据。
+
+物品身份匹配不等于交易验证。唯一实例、绑定、交付快照、库存同步 token、支付与补偿继续由业务及对应平台处理，预览不会获得这些权限。
 
 ### 接入其他物品系统
 
@@ -245,7 +295,8 @@ val current: Int? = tagged[level]
 - `ItemBuilder` 和标签操作处理 `ItemStack`；涉及在线玩家背包或世界掉落时，在 Bukkit 主线程执行。
 - `Items.edit(...)`、`build()`、标签桥接和编码接口会克隆或创建值，但仍不要在其他线程同时修改同一个原始 `ItemStack`。
 - `InventoryItems.give(...)` 背包溢出时会访问玩家世界并生成掉落物，只能用于在线玩家的同步流程。
-- 外部物品的生成与识别会调用外部插件，遵守这些插件自身的线程要求，通常在主线程调用。
+- 外部物品的生成、预览与识别会调用外部插件，遵守这些插件自身的线程要求，通常在主线程调用。预览入口不会自动切换线程。
+- CraftEngine 的 `contentReady` 判据由调用方拥有，并在同一线程读取或提供线程安全可见性。更换插件实例或类加载器后，重新创建适配器与 `ExternalItems`；内容重载无需缓存旧定义。
 
 ## 常见坑
 
@@ -254,6 +305,7 @@ val current: Int? = tagged[level]
 - `InventoryItems` 用 `isSimilar` 匹配，名称、lore、附魔或标签不同的物品不会被算作同一种。
 - 构建脚本漏声明 CodeMC 仓库时，Item-NBT-API 无法解析。
 - `ItemCodec` 编码值不适合作为跨版本的长期存储格式。
+- 展示物品不能用于发货；安全预览不支持时应使用业务选择的占位图标，不能悄悄改为真实生成。
 
 ## 相关页面
 

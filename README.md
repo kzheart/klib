@@ -87,6 +87,8 @@ klib {
 - [命令模块](docs/modules/command.md)：命令声明、帮助样式、异常策略与启动注册契约。
 - [UI 模块](docs/modules/ui.md)：菜单、字段编辑、分组管理面板、业务输出返回、告示牌与聊天输入。
 
+Paper 项目可用 `packaging { paper() }` 检查宿主边界，以 `api { archive(provider); packages("com.example.api") }` 声明共享 API；`check`、正式包和 Maven 发布均经过验证。用法见[构建与打包](https://github.com/kzheart/klib/wiki/Build)。
+
 不用 Gradle 插件时，直接依赖 `me.kzheart.klib:klib-<module>:<klib-version>`，自己完成打包和重定位。
 
 ## 模块索引
@@ -116,7 +118,7 @@ klib {
 | :--- | :--- |
 | `klib-data-json` | JSON 文件；使用宿主提供的 Gson |
 | `klib-data-jdbc` | JDBC KV 引擎、受管数据库、挂起 SQL/显式映射、事务与外部迁移门禁；不包含数据库驱动 |
-| `klib-data-pool` | 可选 Apache Commons DBCP 连接池适配；不由其他存储后端自动引入 |
+| `klib-data-pool` | `data { pool() }` 可选 Apache Commons DBCP 池；依赖隔离，不由其他存储后端自动引入 |
 | `klib-data-sqlite` | SQLite；使用宿主提供的 SQLite JDBC |
 | `klib-data-mysql` | MySQL；包含 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL；包含 pgJDBC、专用 LISTEN 会话（接收/回调线程防关闭自等待）与事务迁移 |

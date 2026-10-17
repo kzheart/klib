@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 同步独立构建插件的 `data { pool() }` 选择、Paper 宿主/API 发布门禁与消费者 JVM 目标文档；连接池 runtime 闭包仅显式选择时引入并隔离。
+
 - 修复 LISTEN 的 `ready()` 同步 continuation 等待自身关闭时 receiver/reaper 互等；与通知回调统一拒绝关闭自等待，仍允许异步发起关闭。
 
 - Data 新增基于现有 `StorageSession` / `DataCodec` 的类型化 KV 及受限事务视图，缺失值明确返回 empty/null，编码值不允许 null。

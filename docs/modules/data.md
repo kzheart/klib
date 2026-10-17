@@ -241,7 +241,7 @@ CompletionStage<Integer> changed = db.transactionAsync(sql ->
 - `dispose/close` 最多等待配置时限。超时明确失败，Scope 标记关闭也不代表数据库已经排空；应继续观察 `closeAsync()`，不能提前关闭外部池。SQL 回调内不能阻塞等待自身关闭。
 - `statementTimeout` 只设置 `SqlClient` 创建的语句；原始 JDBC、外部迁移引擎和驱动连接超时仍由各自配置。日志只报告生命周期与失败状态，原始错误通过阶段传播，不把 URL、凭据或 SQL 参数写入日志。
 
-可选池制品是 `me.kzheart.klib:klib-data-pool:<klib-version>`，需要时作为额外内嵌根声明；当前模块 DSL 没有 `data.pool()`，不虚构该入口。
+可选池制品是 `me.kzheart.klib:klib-data-pool:<klib-version>`，也可直接作为额外内嵌根声明；Gradle 插件可通过 `modules { data { pool() } }` 选择并隔离它及 DBCP2、commons-pool2、commons-logging。
 该制品仅薄适配 Apache Commons DBCP，不由其他 KV 后端自动引入：
 
 ```kotlin
@@ -379,7 +379,7 @@ KV 的 JDBC 提供器是**单连接 + 单个串行执行线程**；上面的 `Jd
 - 一次 `StorageProvider.open()` 打开一条数据库连接，全部读写在同一条 `klib-storage` 线程上排队。
 - 好处是并发写入不会互相干扰；代价是存储吞吐等于单条连接的吞吐。
 - 适合单服插件的玩家数据、商店、任务等常规规模。高并发批量分析、跨插件共享的数据库压力，要在业务侧控制写入频率，或改用外部连接池方案。
-- 模块目前**不内置连接池**。
+- KV 后端不自动引入池；需要池的独立 SQL 工作显式选择 `klib-data-pool`，见上面的受管数据库入口。
 
 连接超时：
 

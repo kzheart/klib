@@ -1133,6 +1133,12 @@ val checkKotlinConsumerContracts = tasks.register("checkKotlinConsumerContracts"
         val compilerClasspath = kotlinConsumerCompiler.files.joinToString(File.pathSeparator) { it.absolutePath }
         val javaExecutable = File(System.getProperty("java.home"), "bin/java").absolutePath
         val fixtures = mapOf(
+            "ValidOncePanel" to (true to """
+                import me.kzheart.klib.lang.RichText
+                import me.kzheart.klib.ui.chat.ChatPanel
+                fun confirmation(): ChatPanel =
+                    ChatPanel.builder("confirm", RichText.plain("Confirm")).once().build()
+            """.trimIndent()),
             "Valid" to (true to """
                 import me.kzheart.klib.command.*
                 import me.kzheart.klib.command.api.Commands

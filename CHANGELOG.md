@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.19.3（2026-10-18）
+
+- UI 修正 `ChatPanel.Builder.once()` 的 Kotlin 可见性，Java 与 Kotlin 消费者均可使用现有一次性确认机制；JVM 方法签名及一次性动作行为不变。
+
 ## 0.19.2（2026-10-18）
 
 - Script 为自定义读取器提供 `QuestAction.unquotedLiteral` 公共工厂，复用内部词元动作并保留容错块的孤立字面量校验，避免宿主依赖内部解析器类型。

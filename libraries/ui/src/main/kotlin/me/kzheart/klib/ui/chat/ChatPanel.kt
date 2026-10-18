@@ -42,7 +42,7 @@ class ChatPanel private constructor(builder: Builder) {
         fun permission(value: String): Builder = apply { permission = value }
         fun guard(value: Predicate<Player>): Builder = apply { guard = value }
         fun perLine(value: Int): Builder = apply { require(value in 1..12) { "perLine must be 1..12" }; perLine = value }
-        @JvmName("once") internal fun once(): Builder = apply { once = true }
+        fun once(): Builder = apply { once = true }
         fun hotkeys(onSave: Consumer<ChatPanelSession>, onCancel: Consumer<ChatPanelSession>): Builder = apply { save = onSave; cancel = onCancel }
         fun errorHandler(handler: BiConsumer<ChatPanelSession, Throwable>): Builder = apply { errors = handler }
         fun build(): ChatPanel = ChatPanel(this)

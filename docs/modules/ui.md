@@ -424,7 +424,7 @@ commands().register("flight", root -> root.playerOnly()
 | 会话已关闭或空闲过期 | 聊天提示重新打开 |
 
 - 每次点击都重新检查页面权限、guard 与按钮权限；无权限按钮不显示。所有丢弃都会提示玩家，并在 `chat-panel` 调试模块记录。
-- 确认框使用 `ChatPanel.Builder.once()`：每次打开都是新地址，首个动作执行后整页失效；动作未跳转时自动返回上一页。
+- Java 与 Kotlin 的确认框均使用 `ChatPanel.Builder.once()`：每次打开都是新地址，首个动作执行后整页失效；动作未跳转时自动返回上一页。
 
 ### 状态行、会话与返回
 

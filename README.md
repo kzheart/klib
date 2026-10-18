@@ -85,7 +85,7 @@ klib {
 - [开始使用](https://github.com/kzheart/klib/wiki/Getting-Started)：项目配置、插件入口与模块安装。
 - [构建与打包](https://github.com/kzheart/klib/wiki/Build)：仓库、依赖闭包、重定位与手工接入。
 - [命令模块](docs/modules/command.md)：命令声明、帮助样式、异常策略与启动注册契约。
-- [UI 模块](docs/modules/ui.md)：菜单、字段编辑、分组管理面板、业务输出返回、告示牌与聊天输入。
+- [UI 模块](docs/modules/ui.md)：菜单、一次性确认、字段编辑、分组管理面板、业务输出返回、告示牌与聊天输入。
 
 Paper 项目可用 `packaging { paper() }` 检查宿主边界，以 `api { archive(provider); packages("com.example.api") }` 声明共享 API；`check`、正式包和 Maven 发布均经过验证。用法见[构建与打包](https://github.com/kzheart/klib/wiki/Build)。
 

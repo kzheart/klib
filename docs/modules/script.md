@@ -150,6 +150,7 @@ statements.registerKether(scope, "myplugin", "twice", QuestActionParser.of(reade
 - `kether.core` 包里只有 `QuestActionParser`、`QuestReader`、`ParsedAction`、`QuestAction`、`QuestContext` 属于对外使用面。其余是解析器内部实现，**不要依赖**，也不要假定结构稳定。
 - 这是需要完整 Kether 语法时的低层入口；普通固定参数业务语句仍优先用 `Statements.combine()`。
 - `QuestReader.nextValue()` 接受动作或字面量参数；`nextParsedAction()` 保持严格动作解析。二者都不会吞掉已识别动作内部的错误。
+- 自定义读取器需要返回未加引号的词元时，用 `QuestAction.unquotedLiteral(token)`；容错块内仍检查后续独立动作导致的孤立字面量错误，无需引用内部字面量实现。
 
 ## 嵌套动作、分支与表达式
 

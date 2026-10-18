@@ -589,6 +589,10 @@ suspend fun evaluateOnHost(
 - Java 调用方继续使用静态工厂、Builder 和阶段结果，无需传 `Continuation`；Kotlin 挂起与取消仍服从上面的执行器约定。
 - Guard 商品内的私有运行时与父加载器 Core 不是可任意交换的 Kotlin 类型空间。构建插件会拒绝不安全的跨边界类型，reflect/协程组合还受商品条目与 multi-release 限制；普通 Bukkit JAR 可运行不等于该组合已获 Guard 支持。
 
+### 跨加载器协议
+
+`TabooLibKetherInterop` 的容器出口同时保留 `successful` / `value` 字段与 Java getter；旧容器按字段读取结果，可空值和失败结果保持原语义。
+
 ## 线程与生命周期
 
 - 注册语句的 `Scope` 关闭后，该注册立即失效。引擎和注册表可由较长生命周期持有，业务语句应安装在可重建子作用域中。

@@ -170,3 +170,5 @@ python3 -m unittest discover -s scripts/tests -v
 Klib 使用 [Apache License 2.0](LICENSE)。版权与第三方归属入口见 [NOTICE](NOTICE)；改编来源与许可全文保留在相关模块及其 JAR 的 `META-INF/LICENSE-*.txt` 中。
 
 JDBC 后端支持调用方持有的 `DataSource`，见 [Data](docs/modules/data.md)。驱动可由服务器库加载器提供，Klib 模块仍按插件隔离。
+
+脚本跨加载器互调保留旧容器实际读取的字段 ABI，详见 [Script](docs/modules/script.md)。

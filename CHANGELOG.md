@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.19.4（2026-10-19）
+
+- Script 修复跨加载器 OpenResult 的字段 ABI：保留旧 TabooLib 容器实际读取的 `successful` / `value` 字段及现有可空 getter，避免 Adyeshach 注册解析器时因缺字段失败。
+
 ## 0.19.3（2026-10-18）
 
 - UI 修正 `ChatPanel.Builder.once()` 的 Kotlin 可见性，Java 与 Kotlin 消费者均可使用现有一次性确认机制；JVM 方法签名及一次性动作行为不变。

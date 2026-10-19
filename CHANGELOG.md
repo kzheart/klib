@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.19.5 — 2026-10-19
+
+- Core 提供已受理操作观察入口，区分源取消与观察协程取消。
+- UI 提供标准命令面板安装器，集中帮助样式与常用字段。
+- Pool 提供 PostgreSQL 业务库预设，统一事务超时与 schema 锁。
+
 ## 0.19.4（2026-10-19）
 
 - Script 修复跨加载器 OpenResult 的字段 ABI：保留旧 TabooLib 容器实际读取的 `successful` / `value` 字段及现有可空 getter，避免 Adyeshach 注册解析器时因缺字段失败。

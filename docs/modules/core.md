@@ -338,6 +338,16 @@ public void loadAndApply(final Player player) {
 
 Bukkit 后端保持原有的同步调度器排队顺序，不额外增加一轮延迟。
 
+### 观察已受理操作
+
+`CompletionStage<T>.observeOperation()` 挂起观察外部已受理操作；观察者取消不取消源操作，调用协程仍会及时结束。
+源操作取消会抛 `SourceOperationCancelledException`，表示结果未知；它不是支付拒绝，也不取消仍活跃的调用协程。
+
+```kotlin
+import me.kzheart.klib.scope.observeOperation
+val result = acceptedPayment.observeOperation()
+```
+
 ### Kotlin 协程
 
 `scope.coroutines` 返回当前构建代的协程入口；同一代重复读取返回同一实例，重建后使用全新的实例和 `SupervisorJob`。

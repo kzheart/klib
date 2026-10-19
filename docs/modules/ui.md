@@ -587,6 +587,21 @@ val model = menu("工具", 1) {
 - 点击动作抛出普通异常时，渲染器会记录错误并调用 `MenuErrorHandler`。可以在安装时提供统一的玩家提示，但错误处理器本身也应保持轻量。
 - 普通聊天提示回调仍需检查玩家/导航流程是否有效；状态菜单的 `readLatest` 已检查原 Player 和本次 Inventory 身份。不要仅凭相同 UUID 或 `isOnline()` 恢复一个旧流程。
 
+## 标准命令面板安装
+
+`CommandPanels(plugin, scope)` 在启动时安装命令模块、聊天输入与字段面板，统一读取业务插件自带的 `command-help.yml`。
+帮助样式随文件修改重新读取；解析失败保留原样式并记录告警。业务命令仍负责权限与校验。
+
+```kotlin
+val panels = CommandPanels(this, context().scope())
+panels.open(player, "管理", "example.admin", listOf(
+    CommandPanels.Control("管理", "查询玩家", "example inspect", "example.admin", false,
+        CommandPanels.player(false))))
+```
+
+`prompts()`、`panels()` 供业务复用输入入口；`player`、`world`、`options` 提供常用字段。
+实例必须在声明业务命令之前创建，同一作用域不再重复安装命令模块或聊天面板。
+
 ## 相关页面
 
 - [组件与注解](../annotations.md)：`@Menu` 等注解的完整规则

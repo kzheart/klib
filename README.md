@@ -172,3 +172,5 @@ Klib 使用 [Apache License 2.0](LICENSE)。版权与第三方归属入口见 [N
 JDBC 后端支持调用方持有的 `DataSource`，见 [Data](docs/modules/data.md)。驱动可由服务器库加载器提供，Klib 模块仍按插件隔离。
 
 脚本跨加载器互调保留旧容器实际读取的字段 ABI，详见 [Script](docs/modules/script.md)。
+
+已受理操作的取消隔离见 [Core](docs/modules/core.md#观察已受理操作)，标准命令面板见 [UI](docs/modules/ui.md#标准命令面板安装)，共享 PostgreSQL 业务库预设见 [Data](docs/modules/data.md#postgresql-业务库预设)。

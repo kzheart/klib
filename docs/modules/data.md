@@ -393,6 +393,24 @@ KV 的 JDBC 提供器是**单连接 + 单个串行执行线程**；上面的 `Jd
 - URL 里已显式写了 `connectTimeout` 时，保留调用方的设置。
 - 不使用 `DriverManager.setLoginTimeout(...)`：它是整个 JVM 的全局开关，会连带影响同一服务端里其他插件的 JDBC 连接。
 
+## PostgreSQL 业务库预设
+
+`klib-data-pool` 的 `PostgreSqlDatabase` 统一连接池、驱动属性、事务局部超时与 advisory 锁初始化。
+配置使用 `PostgreSqlDatabaseOptions`；凭据不出现在其文本表示中，驱动仍由宿主提供。
+
+```kotlin
+val database = PostgreSqlDatabase(scope,
+    PostgreSqlDatabaseOptions(url, user, password, "example"), javaClass.classLoader)
+database.migrate("example:schema", SqlWork { sql ->
+    sql.execute("CREATE TABLE IF NOT EXISTS example_data (id UUID PRIMARY KEY)")
+})
+val rows = database.read(SqlWork { sql -> sql.query("SELECT id FROM example_data") { it.uuid("id") } })
+```
+
+业务拥有表名、schema 内容与初始化顺序；`migrate` 只串行化事务，不自动猜测或重放迁移。
+`transaction` 使用 READ COMMITTED，按配置设置 `statement_timeout`、`lock_timeout` 和空闲事务超时；0 保留 PostgreSQL 的不限时语义。
+Schema 事务使用 60 秒语句、15 秒锁等待预算。只读入口复用受管执行器；通知监听继续使用下方独立 LISTEN 会话。
+
 ## PostgreSQL LISTEN 会话
 
 `PostgreSqlNotifications.listen(jdbcUrl, properties, channels, options, listener)` 使用独立物理连接，不借业务池；业务事务池与 LISTEN 直连地址分别配置。

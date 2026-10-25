@@ -113,15 +113,37 @@ internal class JdbcStorageSession(
     private fun connect(): Connection {
         val created = connectionFactory()
         try {
-            created.createStatement().use { statement ->
-                statement.execute(dialect.createKv())
-                statement.execute(dialect.createSchema())
-            }
+            initializeTables(created)
             return created
         } catch (error: SQLException) {
             try { created.close() } catch (closeError: SQLException) { error.addSuppressed(closeError) }
             throw error
         }
+    }
+
+    /** PostgreSQL 的 IF NOT EXISTS 不能串行化系统表写入；锁与两张表须在同一事务内。 */
+    private fun initializeTables(created: Connection) {
+        if (dialect != SqlDialect.POSTGRESQL) {
+            created.createStatement().use { statement ->
+                statement.execute(dialect.createKv())
+                statement.execute(dialect.createSchema())
+            }
+            return
+        }
+        val previousAutoCommit = created.autoCommit
+        created.autoCommit = false
+        try {
+            created.createStatement().use { statement ->
+                statement.execute("SELECT pg_advisory_xact_lock(hashtext('klib:jdbc:bootstrap'),hashtext(current_schema()))")
+                statement.execute(dialect.createKv())
+                statement.execute(dialect.createSchema())
+            }
+            created.commit()
+        } catch (error: SQLException) {
+            try { created.rollback() } catch (rollbackError: SQLException) { error.addSuppressed(rollbackError) }
+            throw error
+        }
+        created.autoCommit = previousAutoCommit
     }
 
     private fun resetConnection() { connection?.let(::closeQuietly); connection = null }

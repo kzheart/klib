@@ -110,6 +110,7 @@ PostgreSQL：
 - URL 形如 `jdbc:postgresql://host:5432/database`。
 - 字节值存为 `BYTEA`；事务和迁移与其他后端共用契约。
 - 账号需要创建和读写 `klib_kv`、`klib_schema` 的权限。
+- 内部表初始化在同一事务中按当前 schema 加数据库锁，独立提供器可同时首次连接空库；业务迁移仍由调用方自己的迁移协议管理。
 
 网络后端（MySQL、PostgreSQL）：
 

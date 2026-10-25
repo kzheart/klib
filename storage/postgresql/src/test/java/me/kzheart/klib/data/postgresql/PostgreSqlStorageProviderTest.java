@@ -10,6 +10,12 @@ import java.util.Properties;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
+import java.sql.DriverManager;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
@@ -18,6 +24,42 @@ class PostgreSqlStorageProviderTest {
     @Test void rejectsOtherBackendsBeforeOpening() {
         assertThrows(IllegalArgumentException.class, () -> new PostgreSqlStorageProvider("jdbc:mysql://localhost/db", "", ""));
         assertThrows(IllegalArgumentException.class, () -> new PostgreSqlStorageProvider(" ", "", ""));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    @EnabledIfEnvironmentVariable(named = "KLIB_POSTGRESQL_TEST_URL", matches = ".+")
+    void independentProvidersCanBootstrapTheSameEmptySchemaConcurrently(boolean external) throws Exception {
+        String base = System.getenv("KLIB_POSTGRESQL_TEST_URL");
+        String user = System.getenv("KLIB_POSTGRESQL_TEST_USER");
+        String password = System.getenv("KLIB_POSTGRESQL_TEST_PASSWORD");
+        String schema = "klib_bootstrap_" + UUID.randomUUID().toString().replace("-", "");
+        String url = base + (base.contains("?") ? "&" : "?") + "currentSchema=" + schema;
+        List<StorageProvider> providers = new ArrayList<>();
+        try (Connection admin = DriverManager.getConnection(base, user, password)) {
+            try (java.sql.Statement statement = admin.createStatement()) { statement.execute("CREATE SCHEMA " + schema); }
+            try {
+                CountDownLatch start = new CountDownLatch(1);
+                List<CompletableFuture<StorageSession>> opening = new ArrayList<>();
+                for (int i = 0; i < 8; i++) {
+                    StorageProvider provider = provider(url, user, password, external);
+                    providers.add(provider);
+                    opening.add(CompletableFuture.supplyAsync(() -> {
+                        try { start.await(); return provider.open().toCompletableFuture().get(15, TimeUnit.SECONDS); }
+                        catch (Exception error) { throw new java.util.concurrent.CompletionException(error); }
+                    }));
+                }
+                start.countDown();
+                CompletableFuture.allOf(opening.toArray(new CompletableFuture<?>[0])).get(20, TimeUnit.SECONDS);
+                for (int i = 0; i < opening.size(); i++)
+                    opening.get(i).get().put("bootstrap", "key-" + i, new byte[]{(byte) i}).toCompletableFuture().get();
+                assertEquals(8, opening.get(0).get().entries("bootstrap").toCompletableFuture().get().size());
+                assertEquals(Integer.valueOf(0), opening.get(0).get().transaction(tx -> tx.schemaVersion("bootstrap")).toCompletableFuture().get());
+            } finally {
+                for (StorageProvider provider : providers) provider.dispose();
+                try (java.sql.Statement statement = admin.createStatement()) { statement.execute("DROP SCHEMA " + schema + " CASCADE"); }
+            }
+        }
     }
 
     @ParameterizedTest

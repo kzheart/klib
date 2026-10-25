@@ -123,7 +123,7 @@ Paper 项目可用 `packaging { paper() }` 检查宿主边界，以 `api { archi
 | `klib-data-mysql` | MySQL；包含 MySQL Connector/J |
 | `klib-data-postgresql` | PostgreSQL；包含 pgJDBC、专用 LISTEN 会话（接收/回调线程防关闭自等待）与事务迁移 |
 
-JDBC KV 打开期间关闭提供器时，晚到连接清理完成后打开阶段才会失败；已接受的事务仍按队列排空。存储配置与使用方式见 [Data 文档](docs/modules/data.md)。
+JDBC KV 打开期间关闭提供器时，晚到连接清理完成后打开阶段才会失败；已接受的事务仍按队列排空。PostgreSQL 内部表通过数据库事务锁协调首次初始化，支持独立提供器并发连接空库。存储配置与使用方式见 [Data 文档](docs/modules/data.md)。
 
 </details>
 

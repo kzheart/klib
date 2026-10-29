@@ -25,8 +25,8 @@
   - `pluginManagement.repositories` 或 `dependencyResolutionManagement.repositories` 没配 `mavenCentral()`；
   - 或者把文档里的版本占位符当成了真实版本。
 - **修复**：
-  - 使用 Maven Central 上已发布的插件与库版本，版本记录见 CHANGELOG。
-  - 在 `pluginManagement` 和 `dependencyResolutionManagement` 中**分别**配置 `mavenCentral()`，不要依赖 `mavenLocal()`。见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
+  - 使用 Gradle Plugin Portal 已发布的插件与 Klib Maven 仓库已发布的库版本，版本记录见 CHANGELOG。
+  - 在 `pluginManagement` 配置 `gradlePluginPortal()`，在 `dependencyResolutionManagement.repositories` 配置 `maven("https://maven.kzheart.me/releases")` 与 `mavenCentral()`，不要依赖 `mavenLocal()`。见 [Klib Gradle 插件仓库](https://github.com/kzheart/klib-gradle-plugin)。
 
 ### `klib.main is not set`
 

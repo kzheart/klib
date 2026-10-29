@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           secure_tmp="$HOME/.klib-ci-tmp"
           install -d -m 700 "$secure_tmp"
-          ./gradlew clean check publishToMavenLocal centralDryRunBundle \
+          ./gradlew clean check publishToMavenLocal releaseDryRunBundle \
             -Djava.io.tmpdir="$secure_tmp" \
             --no-daemon --no-configuration-cache
 

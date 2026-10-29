@@ -33,7 +33,7 @@
 
 ```bash
 ./gradlew clean check publishToMavenLocal --no-configuration-cache
-./gradlew centralDryRunBundle --no-configuration-cache
+./gradlew releaseDryRunBundle --no-configuration-cache
 python3 -m unittest discover -s scripts/tests -v
 ```
 

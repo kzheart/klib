@@ -4,7 +4,7 @@
 说明完整 API 边界、生命周期、线程要求和版本约束。
 
 推荐使用独立的 [Klib Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 选择模块、生成
-`plugin.yml` 并打包重定位依赖。需要完全手工管理依赖时，可直接使用 Maven Central 上的
+`plugin.yml` 并打包重定位依赖。需要完全手工管理依赖时，可直接使用 [Klib Maven 仓库](https://maven.kzheart.me/releases)中的
 `me.kzheart.klib:klib-*:<klib-version>` 坐标。
 
 ## 模块文档

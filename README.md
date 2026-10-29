@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/kzheart/klib/actions/workflows/ci.yml"><img src="https://github.com/kzheart/klib/actions/workflows/ci.yml/badge.svg?branch=main" alt="持续集成状态"></a>
-  <a href="https://central.sonatype.com/namespace/me.kzheart.klib"><img src="https://img.shields.io/maven-central/v/me.kzheart.klib/klib-core?style=flat-square&label=Maven%20Central&color=2563eb" alt="Maven Central 最新版本"></a>
+  <a href="https://maven.kzheart.me/releases"><img src="https://img.shields.io/badge/Maven-maven.kzheart.me-2563eb?style=flat-square" alt="Klib Maven 仓库"></a>
   <img src="https://img.shields.io/badge/Java-8%2B-437291?style=flat-square" alt="Java 8 API 与字节码">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
@@ -53,7 +53,7 @@ public final class CoinCommands {
 ```
 
 - **兼容范围**：Bukkit / Spigot / Paper；公共制品为 Java 8 字节码，实际运行所需的 Java 版本由服务端决定。
-- **发布方式**：Maven Central，配套 [Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 负责选模块、生成 `plugin.yml` 和依赖重定位。
+- **发布方式**：[Klib Maven 仓库](https://maven.kzheart.me/releases)，配套 [Gradle 插件](https://github.com/kzheart/klib-gradle-plugin) 负责选模块、生成 `plugin.yml` 和依赖重定位。
 
 ## 快速接入
 
@@ -62,6 +62,11 @@ public final class CoinCommands {
 ```kotlin
 plugins {
     id("me.kzheart.klib") version "<gradle-plugin-version>"
+}
+
+repositories {
+    maven("https://maven.kzheart.me/releases") { content { includeGroup("me.kzheart.klib") } }
+    mavenCentral()
 }
 
 klib {

@@ -1,112 +1,68 @@
-# Maven Central 发布
+# Maven 仓库发布
 
-公共库的持续验证和正式发布使用两个独立工作流：
+公共模块发布到 `https://maven.kzheart.me/releases`，匿名下载、专用令牌上传。
+Gradle 插件仍通过 Gradle Plugin Portal 发布；历史 Maven Central 版本继续保留。
 
-- `.github/workflows/ci.yml` 在每次分支 push 和 pull request 上执行完整测试、本地 Maven 发布，并分别
-  构造普通 Klib 与 Guard API 的 unsigned Central bundle；它不读取发布 secret，也不调用 Central API；
-- `.github/workflows/release-central.yml` 只接受与组件版本精确匹配的正式 tag，完成同一套测试后构造
-  对应组件的 PGP 签名 bundle，通过 Central Portal Publisher API 上传，并选择 `AUTOMATIC` 发布。
+## 验证与发布
 
-普通 `main` push 不会进入发布工作流。普通模块和 Guard API 使用独立版本、tag 和 bundle，不会在升级
-普通 Klib 时重复上传不可覆盖的旧 Guard API 版本。
+- `.github/workflows/ci.yml` 在分支 push 和 pull request 上执行完整测试、本地 Maven 发布及
+  `releaseDryRunBundle`，不读取发布凭据。
+- `.github/workflows/release-maven.yml` 只接受与组件版本精确匹配的正式 tag，完成完整测试后生成
+  PGP 签名 ZIP，由 `scripts/publish-maven.py` 上传并逐文件回读比对完整字节。
 
-## 组件与 Tag
-
-| 组件 | 版本源 | 正式 tag | bundle |
+| 组件 | 版本源 | 正式 tag | ZIP 范围 |
 | --- | --- | --- | --- |
-| 普通 Klib 模块 | `klibVersion` | `klib-v<klibVersion>` | 只包含 21 个普通模块，不含 Guard API |
-| Guard API | `klibGuardApiVersion` | `guard-api-v<klibGuardApiVersion>` | 只包含 `klib-guard-api` |
+| 普通模块 | `klibVersion` | `klib-v<klib-version>` | 模块清单中除 Guard API 外的模块 |
+| Guard API | `klibGuardApiVersion` | `guard-api-v<guard-api-version>` | 只含 `klib-guard-api` |
 
-当前版本以 `gradle.properties` 中的 `klibVersion` 与 `klibGuardApiVersion` 为准。两个组件独立发布，不能在发布
-普通 Klib 时重复上传不可覆盖的 Guard API 版本。
+普通 `main` push 不发布。组件独立发布，升级普通模块不会重复上传旧 Guard API。
+更新对应组件版本和 CHANGELOG，提交并推送后再创建 tag：
 
-## GitHub Environment 与 Secrets
+```bash
+git tag -a klib-v<klib-version> -m "release: 发布 Klib <klib-version>"
+git push origin klib-v<klib-version>
+# Guard API 独立使用 guard-api-v<guard-api-version>
+```
 
-在 GitHub 仓库建立名为 `maven-central` 的 Environment，建议配置 required reviewer，并把以下四项
-设置为 Environment secrets：
+## 凭据与门禁
+
+发布 job 使用 `maven-repository` Environment；以下四项配置在仓库或该 Environment 的 Secrets 中：
 
 | Secret | 内容 |
 | --- | --- |
 | `MAVEN_SIGNING_KEY` | ASCII-armored PGP 私钥 |
 | `MAVEN_SIGNING_PASSWORD` | PGP 私钥密码 |
-| `MAVEN_CENTER_USERNAME` | Central Portal 生成的 user token username |
-| `MAVEN_CENTER_PASSWORD` | Central Portal 生成的 user token password |
+| `MAVEN_REPOSITORY_USERNAME` | 仅允许写入 Klib 命名空间的发布令牌名 |
+| `MAVEN_REPOSITORY_PASSWORD` | 发布令牌 secret |
 
-工作流只把 secret 注入确实需要它的门禁、签名和上传步骤，不会传给 checkout、JDK 设置、Gradle 设置或
-制品归档步骤，也不会输出其值。Central Publisher API 使用 `username:password` 的 Base64 结果作为
-Bearer credential；这里的 token 不是 Central 网站登录密码。
+凭据仅注入门禁、签名或上传步骤，不进入命令参数、Git、日志或归档。上传使用 HTTPS，拒绝重定向，
+不把 Authorization 发给其他站点。URL 可由 `MAVEN_REPOSITORY_URL` 指定；正式工作流固定为上述地址。
 
-## Tag 发布
+任何远端写入之前必须验证：tag 与组件版本精确匹配并指向 HEAD、checkout 干净、版本为三段非 SNAPSHOT、
+签名及发布凭据存在、ZIP 仅包含所选组件，且必需 JAR、POM、签名和校验文件完整。
 
-发布 Guard API：
+## 发布中断与不可覆盖
 
-```bash
-git tag guard-api-v<guard-api-version>
-git push origin guard-api-v<guard-api-version>
-```
+上传程序先核对整个 ZIP 的所有远端文件；发现不同字节立即停止，尚未执行任何写入。
+相同文件跳过，缺失文件依次上传，全部 payload 就绪后才上传 POM，并逐项回读，最后更新 Maven 版本元数据。发布 job 串行运行，避免元数据并发丢失。
+响应丢失时先核对远端字节，不盲目重放上传；相同 tag 可用于续传相同字节。
 
-发布普通 Klib：
+标准 Maven 文件上传不提供 Central 的整包原子可见性；中断可能留下尚无 POM 的文件。
+不能删除、覆盖或重建成不同字节；应使用原签名 ZIP 续传。已完成版本不得覆盖，修复须发新版本。
 
-```bash
-git tag -a klib-v<klib-version> -m "release: 发布 Klib <klib-version>"
-git push origin klib-v<klib-version>
-```
-
-发布工作流会在第一次 Central 网络请求之前检查：
-
-- ref 必须是 tag；
-- tag 必须精确等于所选组件的版本 tag 并指向当前 `HEAD`；
-- `klibVersion` 与 `klibGuardApiVersion` 必须是三段非 SNAPSHOT 版本；
-- checkout 必须干净；
-- 四个发布 secrets 必须全部存在；
-- 最终 ZIP 只能包含所选组件。
-
-任一条件不满足时不会调用 Central API。
-
-## 安全的手动重跑
-
-`workflow_dispatch` 只用于重跑同一个正式 tag。运行时必须：
-
-1. `release_tag` 填写已存在的正式 tag；工作流会明确 checkout 该 tag，而不是运行入口所在的默认分支；
-2. `component` 选择 `klib` 或 `guard-api`；
-3. `version` 填写与该组件版本源完全一致的版本；
-4. 勾选 `confirm_publish`；
-5. 如果 `maven-central` Environment 配置了审批规则，通过对应审批。
-
-手动输入不能绕过 ref、tag、组件、版本、签名或 secret 门禁。Maven Central 版本不可覆盖，已经成功上传
-相同版本时不要重跑；需要修复时必须升级对应组件版本并创建新 tag。
+手动重跑选择 `release-maven`，填写原 `release_tag`、匹配的 `component` / `version` 并勾选
+`confirm_publish`。工作流 checkout 原 tag，不绕过任何门禁；如原构建无法复现同一字节，
+下载原 workflow 保留的签名 ZIP，用上传脚本续传。制品默认保存 30 天。
 
 ## 本地验证
 
-不使用发布 secret 的完整验证会同时产生两个隔离的 unsigned bundle：
-
 ```bash
-./gradlew clean check publishToMavenLocal centralDryRunBundle --no-configuration-cache
+./gradlew clean check publishToMavenLocal releaseDryRunBundle --no-configuration-cache
+python3 -m unittest discover -s scripts/tests -v
 ```
 
-正式签名 bundle 任务还会执行 tag、组件、干净 checkout 和 secret 门禁：
+正式签名任务为 `prepareKlibReleaseBundle`、`prepareGuardApiReleaseBundle`，要求传入
+`-PreleaseComponent=klib|guard-api` 与 `-PreleaseTag=<对应正式tag>` 并满足全部门禁。
 
-```bash
-./gradlew prepareKlibCentralBundle \
-  -PreleaseComponent=klib \
-  -PreleaseTag=klib-v<klib-version> \
-  --no-configuration-cache
-
-./gradlew prepareGuardApiCentralBundle \
-  -PreleaseComponent=guard-api \
-  -PreleaseTag=guard-api-v<guard-api-version> \
-  --no-configuration-cache
-```
-
-上传实现遵循 Sonatype 的
-[Portal Publisher API](https://central.sonatype.org/publish/publish-portal-api/)：向
-`POST https://central.sonatype.com/api/v1/publisher/upload` 发送名为 `bundle` 的 multipart 文件，并使用
-`publishingType=AUTOMATIC`；随后通过 `POST /api/v1/publisher/status?id=<deploymentId>` 等待
-`PUBLISHED` 或报告 `FAILED`。
-
-## Linux CI 的安全临时目录
-
-Remote 磁盘队列会检查整条祖先目录链，拒绝位于 group/other 可写祖先下的敏感队列目录。GitHub Hosted
-Runner 的默认测试临时目录存在可写祖先，权限不满足这一约束。CI 因此在 `$HOME` 下创建
-`0700` 的 `.klib-ci-tmp` 并通过 `-Djava.io.tmpdir` 交给测试 JVM。安全检查和相关测试仍完整执行；没有
-禁用测试，也没有放宽生产目录的 owner-only 与抗替换语义。
+Linux CI 在 `$HOME/.klib-ci-tmp` 创建 `0700` 临时目录，以 `-Djava.io.tmpdir` 传给测试 JVM。
+Remote 队列仍执行 owner-only 与抗替换检查，不使用 runner 默认可写祖先，也不放宽生产检查。

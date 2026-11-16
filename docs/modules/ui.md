@@ -263,7 +263,7 @@ for (Listing listing : page.values()) {
 
 ## 接收玩家投放的物品
 
-在 `open(...)` 的会话配置回调中添加 `DropZoneController`。投放区持有收到物品的克隆，支持放置、shift 插入、拖拽和取回。
+在 `open(...)` 的会话配置回调中添加 `DropZoneController`。投放区持有收到物品的克隆，支持放置、shift 插入、拖拽、整叠交换和取回。
 
 ```java
 Set<Integer> inputSlots = new LinkedHashSet<Integer>(
@@ -278,6 +278,7 @@ menus.open(player, "recycle", model, session -> {
 ```
 
 - 菜单关闭、被其他菜单替换或插件作用域关闭时，会话排空投放区，把物品交给打开菜单时配置的归还目标。
+- `exchange(slot, offered)` 只在新物品通过准入且能整叠放下时交换，返回原槽物品；拒绝时两边都不改变。准入条件失效后，原有投放物仍可取回。
 - `MenuRenderer` 默认先归还玩家背包，溢出时掉落在玩家位置。
 - **不要把真实玩家物品作为普通 `MenuEntry` 展示**；可取回的物品放进投放区。
 

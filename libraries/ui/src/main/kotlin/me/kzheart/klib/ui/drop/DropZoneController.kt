@@ -24,6 +24,17 @@ class DropZoneController(slots: Set<Int?>, private val accepts: Predicate<ItemSt
             InventoryAction.Type.TAKE -> take(action.slot(), action.amount())
         }
     }
+    /** 整叠交换；拒绝新物品时不取走旧物品，原有物品不重新经过准入判断。 */
+    @Synchronized fun exchange(slot: Int, offered: ItemStack): DropResult {
+        check(!closed) { "drop zone is closed" }
+        requireSlot(slot)
+        val source = offered.clone()
+        val present = contents[slot] ?: return DropResult(0, null)
+        if (source.amount !in 1..source.maxStackSize || !accepts.test(source.clone())) return DropResult(0, null)
+        val result = DropResult(source.amount, present, mapOf(slot to source.amount))
+        contents[slot] = source
+        return result
+    }
     fun slots(): Set<Int> = slots
     @Synchronized fun snapshot(): Map<Int, ItemStack> = Collections.unmodifiableMap(contents.mapValuesTo(LinkedHashMap()) { it.value.clone() })
     @Synchronized fun closeAndDrain(): List<ItemStack> {

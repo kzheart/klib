@@ -98,6 +98,7 @@ final class MenuTestEnvironment implements AutoCloseable {
 
     Player player(UUID id) {
         final Player[] reference = new Player[1];
+        final ItemStack[] cursor = new ItemStack[1];
         PlayerInventory bag = proxy(PlayerInventory.class, (p, m, args) -> {
             if (m.getName().equals("addItem")) {
                 for (ItemStack item : (ItemStack[]) args[0]) returned.add(item.clone());
@@ -111,6 +112,8 @@ final class MenuTestEnvironment implements AutoCloseable {
                 case "getName": return "tester";
                 case "isOnline": return online.get(id) == p;
                 case "getInventory": return bag;
+                case "getItemOnCursor": return cloneItem(cursor[0]);
+                case "setItemOnCursor": cursor[0] = cloneItem((ItemStack) args[0]); return null;
                 case "getOpenInventory": return view(reference[0], current.get(p), bag);
                 case "openInventory":
                     Inventory before = current.get(p);

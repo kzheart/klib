@@ -242,13 +242,9 @@ class MenuRenderer private constructor(private val owner: Scope, private val plu
     }
     private fun swapWithCursor(zone: DropZoneController, slot: Int, event: InventoryClickEvent) {
         val cursor = event.cursor
-        val current = zone.snapshot()[slot]
-        if (InventoryItems.isAir(cursor) || current == null) return
-        val removed = zone.handle(InventoryAction.take(slot, current.amount))
-        val placed = zone.handle(InventoryAction.place(slot, cursor, cursor!!.amount))
-        if (placed.accepted() == cursor.amount) { setCursor(event, removed.removed().orElse(null)); return }
-        if (placed.accepted() > 0) zone.handle(InventoryAction.take(slot, placed.accepted()))
-        zone.handle(InventoryAction.place(slot, current, current.amount))
+        if (InventoryItems.isAir(cursor)) return
+        val result = zone.exchange(slot, cursor!!)
+        if (result.accepted() > 0) setCursor(event, result.removed().orElse(null))
     }
     private fun insertFromBottom(holder: MenuHolder, event: InventoryClickEvent) {
         val source = event.currentItem
